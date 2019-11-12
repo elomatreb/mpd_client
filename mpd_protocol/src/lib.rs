@@ -30,13 +30,15 @@ mod tests {
         let mut codec = Codec::new();
         let buf = &mut BytesMut::new();
 
-        let msg = "OK\nhello";
+        let msg = "OK\nOK\n";
         buf.reserve(msg.len());
         buf.put(msg);
 
-        assert_eq!(Response::Empty, codec.decode(buf).unwrap().unwrap(),);
+        assert_eq!(Response::Empty, codec.decode(buf).unwrap().unwrap());
         // Test if it leaves trailing data alone
-        assert_eq!(buf.len(), 5);
+        assert_eq!(buf.len(), 3);
+        // Test if it parses consecutive messages
+        assert_eq!(Response::Empty, codec.decode(buf).unwrap().unwrap());
     }
 
     #[test]
