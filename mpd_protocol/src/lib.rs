@@ -96,4 +96,13 @@ mod tests {
 
         assert_eq!(Response::Simple(map), codec.decode(buf).unwrap().unwrap());
     }
+
+    #[test]
+    fn decoder_gracefully_handles_unicode_errors() {
+        let mut codec = Codec::new();
+        // Invalid byte, newline, followed by "OK\n" terminator
+        let buf = &mut BytesMut::from(&[0x80, 0x0a, 0x4f, 0x4b, 0x0a][..]);
+
+        assert!(codec.decode(buf).is_err());
+    }
 }

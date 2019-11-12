@@ -93,7 +93,7 @@ fn parse_key_value_response(
     bytes: BytesMut,
 ) -> Result<HashMap<String, Vec<String>>, MpdCodecError> {
     let mut map = HashMap::new();
-    let string = str::from_utf8(&bytes).unwrap();
+    let string = str::from_utf8(&bytes)?;
 
     for line in string.split('\n') {
         let i = line.trim().find(':');
@@ -119,7 +119,7 @@ fn parse_error_line(bytes: BytesMut) -> Result<Response, MpdCodecError> {
         };
     }
 
-    if let Some(captures) = ERROR_REGEX.captures(str::from_utf8(&bytes).unwrap()) {
+    if let Some(captures) = ERROR_REGEX.captures(str::from_utf8(&bytes)?) {
         Ok(Response::Error {
             error_code: captures.get(1).unwrap().as_str().parse().unwrap(),
             command_list_index: captures.get(2).unwrap().as_str().parse().unwrap(),
@@ -140,6 +140,8 @@ pub enum MpdCodecError {
     InvalidKeyValueSequence,
     /// A line started like an error but wasn't correctly formatted
     InvalidErrorMessage,
+    /// A message contained invalid unicode
+    InvalidEncoding(str::Utf8Error)
 }
 
 impl fmt::Display for MpdCodecError {
@@ -151,6 +153,7 @@ impl fmt::Display for MpdCodecError {
             MpdCodecError::InvalidErrorMessage => {
                 write!(f, "response contained invalid error message")
             }
+            MpdCodecError::InvalidEncoding(e) => write!(f, "{}", e),
             MpdCodecError::Io(e) => write!(f, "{}", e),
         }
     }
@@ -159,6 +162,12 @@ impl fmt::Display for MpdCodecError {
 impl From<io::Error> for MpdCodecError {
     fn from(e: io::Error) -> Self {
         MpdCodecError::Io(e)
+    }
+}
+
+impl From<str::Utf8Error> for MpdCodecError {
+    fn from(e: str::Utf8Error) -> Self {
+        MpdCodecError::InvalidEncoding(e)
     }
 }
 
