@@ -81,4 +81,19 @@ mod tests {
             codec.decode(buf).unwrap().unwrap()
         );
     }
+
+    #[test]
+    fn decoder_terminator_in_values() {
+        let mut codec = Codec::new();
+        let buf = &mut BytesMut::new();
+
+        let msg = "foo: OK\nOK\n";
+        buf.reserve(msg.len());
+        buf.put(msg);
+
+        let mut map = HashMap::new();
+        map.insert(String::from("foo"), vec![String::from("OK")]);
+
+        assert_eq!(Response::Simple(map), codec.decode(buf).unwrap().unwrap());
+    }
 }

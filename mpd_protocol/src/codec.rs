@@ -29,7 +29,15 @@ impl Decoder for Codec {
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
         // Look through the unknown part of our buffer for message terminators
-        for window in src[self.examined_up_to..].windows(3) {
+        for window_start in self.examined_up_to..src.len() {
+            let window_end = if window_start + 3 <= src.len() {
+                window_start + 3
+            } else {
+                break;
+            };
+
+            let window = &src[window_start..window_end];
+
             if self.examined_up_to == 0 && window == b"ACK" {
                 // The following message is an error
                 self.parsing_error = true;
@@ -45,22 +53,27 @@ impl Decoder for Codec {
                 let err = parse_error_line(src.split_to(end))?;
                 return Ok(Some(err));
             } else if window == b"OK\n" {
-                // The message is complete
-
-                // Split the buffer after our complete message, not including
-                // the "OK\n" terminator
-                let mut msg = src.split_to(self.examined_up_to + 3);
+                // A message terminator was found
 
                 if self.examined_up_to == 0 {
                     // The message was just an OK, indicating an empty but successful
                     // response
+                    src.advance(3);
                     return Ok(Some(Response::Empty));
-                } else {
-                    // The message had contents, parse it as a series of key-value pairs
+                } else if src[window_start - 1] == b'\n' {
+                    // The terminator was preceded by a newline, this means the
+                    // message is actually complete, split it from buffer
+                    // including the terminator bytes
+                    let mut msg = src.split_to(window_end);
+
                     let kv = parse_key_value_response(msg.split_to(msg.len() - 4))?;
                     self.examined_up_to = 0;
                     return Ok(Some(Response::Simple(kv)));
                 }
+
+                // If the terminator was not at the start of a buffer or
+                // preceeded by a newline, it was part of the message, ignore
+                // it
             }
 
             // Count the windows we examined, so that a possible next call to
