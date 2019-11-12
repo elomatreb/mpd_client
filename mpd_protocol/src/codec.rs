@@ -1,4 +1,5 @@
 use bytes::BytesMut;
+use regex::Regex;
 use tokio::codec::Decoder;
 use tokio::io;
 
@@ -12,6 +13,7 @@ use crate::response::Response;
 #[derive(Debug, Default)]
 pub struct Codec {
     examined_up_to: usize,
+    parsing_error: bool,
 }
 
 impl Codec {
@@ -28,11 +30,16 @@ impl Decoder for Codec {
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
         for window in src[self.examined_up_to..].windows(3) {
             if self.examined_up_to == 0 && window == b"ACK" {
-                unimplemented!();
-            }
-
-            if window == b"OK\n" {
-                // Split the buffer after our complete message
+                // The following message is an error
+                self.parsing_error = true;
+            } else if self.parsing_error && &window[2..] == b"\n" {
+                // The error message is complete, parse it
+                let end = self.examined_up_to + 2;
+                self.examined_up_to = 0;
+                self.parsing_error = false;
+                let err = parse_error_line(src.split_to(end))?;
+                return Ok(Some(err));
+            } else if window == b"OK\n" {
                 let mut msg = src.split_to(self.examined_up_to + 3);
 
                 if self.examined_up_to == 0 {
@@ -76,6 +83,25 @@ fn parse_key_value_response(
     Ok(map)
 }
 
+fn parse_error_line(bytes: BytesMut) -> Result<Response, MpdCodecError> {
+    lazy_static::lazy_static! {
+        static ref ERROR_REGEX: Regex = {
+            Regex::new(r"^ACK \[(\d+)@(\d+)\] \{(\w+?)\} (.+)$").unwrap()
+        };
+    }
+
+    if let Some(captures) = ERROR_REGEX.captures(str::from_utf8(&bytes).unwrap()) {
+        Ok(Response::Error {
+            error_code: captures.get(1).unwrap().as_str().parse().unwrap(),
+            command_list_index: captures.get(2).unwrap().as_str().parse().unwrap(),
+            current_command: captures.get(3).unwrap().as_str().to_owned(),
+            message: captures.get(4).unwrap().as_str().to_owned(),
+        })
+    } else {
+        Err(MpdCodecError::InvalidErrorMessage)
+    }
+}
+
 /// An error occured in a response
 #[derive(Debug)]
 pub enum MpdCodecError {
@@ -83,6 +109,8 @@ pub enum MpdCodecError {
     Io(io::Error),
     /// A line wasn't a "key: value"
     InvalidKeyValueSequence,
+    /// A line started like an error but wasn't correctly formatted
+    InvalidErrorMessage,
 }
 
 impl fmt::Display for MpdCodecError {
@@ -90,6 +118,9 @@ impl fmt::Display for MpdCodecError {
         match self {
             MpdCodecError::InvalidKeyValueSequence => {
                 write!(f, "response contained invalid key-sequence")
+            }
+            MpdCodecError::InvalidErrorMessage => {
+                write!(f, "response contained invalid error message")
             }
             MpdCodecError::Io(e) => write!(f, "{}", e),
         }

@@ -65,7 +65,7 @@ mod tests {
         let buf = &mut BytesMut::new();
 
         // error message returned when trying to play a song not in the queue
-        let msg = "ACK [2@0] {play} Bad song index";
+        let msg = "ACK [2@0] {play} Bad song index\n";
         buf.reserve(msg.len());
         buf.put(msg);
 

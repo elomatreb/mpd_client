@@ -9,3 +9,5 @@ edition = "2018"
 [dependencies]
 bytes = "0.4.12"
 tokio = "0.2.0-alpha.6"
+regex = "1"
+lazy_static = "1.4.0"
