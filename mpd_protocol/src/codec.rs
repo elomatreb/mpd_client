@@ -28,33 +28,49 @@ impl Decoder for Codec {
     type Error = MpdCodecError;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
+        // Look through the unknown part of our buffer for message terminators
         for window in src[self.examined_up_to..].windows(3) {
             if self.examined_up_to == 0 && window == b"ACK" {
                 // The following message is an error
                 self.parsing_error = true;
             } else if self.parsing_error && &window[2..] == b"\n" {
                 // The error message is complete, parse it
+
+                // Our message ends two bytes into the current window
+                // Reset state
                 let end = self.examined_up_to + 2;
                 self.examined_up_to = 0;
                 self.parsing_error = false;
+
                 let err = parse_error_line(src.split_to(end))?;
                 return Ok(Some(err));
             } else if window == b"OK\n" {
+                // The message is complete
+
+                // Split the buffer after our complete message, not including
+                // the "OK\n" terminator
                 let mut msg = src.split_to(self.examined_up_to + 3);
 
                 if self.examined_up_to == 0 {
+                    // The message was just an OK, indicating an empty but successful
+                    // response
                     return Ok(Some(Response::Empty));
                 } else {
+                    // The message had contents, parse it as a series of key-value pairs
                     let kv = parse_key_value_response(msg.split_to(msg.len() - 4))?;
                     self.examined_up_to = 0;
                     return Ok(Some(Response::Simple(kv)));
                 }
             }
 
+            // Count the windows we examined, so that a possible next call to
+            // decode can avoid reexamining them
             self.examined_up_to += 1;
         }
 
         // Nothing was found
+        // Round down to nearest multiple of three in case our buffer was cut
+        // off in the middle of a terminator
         self.examined_up_to /= 3;
         Ok(None)
     }
