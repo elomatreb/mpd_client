@@ -80,6 +80,20 @@ mod tests {
             },
             codec.decode(buf).unwrap().unwrap()
         );
+
+        let msg = "ACK [5@0] {} unknown command \"asdf\"\n";
+        buf.reserve(msg.len());
+        buf.put(msg);
+
+        assert_eq!(
+            Response::Error {
+                error_code: 5,
+                command_list_index: 0,
+                current_command: String::new(),
+                message: String::from("unknown command \"asdf\""),
+            },
+            codec.decode(buf).unwrap().unwrap()
+        );
     }
 
     #[test]

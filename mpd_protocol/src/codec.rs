@@ -51,6 +51,7 @@ impl Decoder for Codec {
                 self.parsing_error = false;
 
                 let err = parse_error_line(src.split_to(end))?;
+                src.advance(1); // Skip the remaining newline
                 return Ok(Some(err));
             } else if window == b"OK\n" {
                 // A message terminator was found
@@ -115,7 +116,7 @@ fn parse_key_value_response(
 fn parse_error_line(bytes: BytesMut) -> Result<Response, MpdCodecError> {
     lazy_static::lazy_static! {
         static ref ERROR_REGEX: Regex = {
-            Regex::new(r"^ACK \[(\d+)@(\d+)\] \{(\w+?)\} (.+)$").unwrap()
+            Regex::new(r"^ACK \[(\d+)@(\d+)\] \{(\w*?)\} (.+)$").unwrap()
         };
     }
 
@@ -141,7 +142,7 @@ pub enum MpdCodecError {
     /// A line started like an error but wasn't correctly formatted
     InvalidErrorMessage,
     /// A message contained invalid unicode
-    InvalidEncoding(str::Utf8Error)
+    InvalidEncoding(str::Utf8Error),
 }
 
 impl fmt::Display for MpdCodecError {
