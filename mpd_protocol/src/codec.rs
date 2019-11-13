@@ -1,4 +1,5 @@
 use bytes::BytesMut;
+use lazy_static::lazy_static;
 use regex::Regex;
 use tokio::codec::Decoder;
 use tokio::io;
@@ -14,12 +15,21 @@ use crate::response::Response;
 pub struct Codec {
     examined_up_to: usize,
     parsing_error: bool,
+    greeted: bool,
 }
 
 impl Codec {
     /// Creates a new Codec
     pub fn new() -> Self {
         Codec::default()
+    }
+
+    /// Creates a new Codec that does not expect a server greeting
+    pub fn new_greeted() -> Self {
+        Self {
+            greeted: true,
+            ..Default::default()
+        }
     }
 }
 
@@ -28,6 +38,29 @@ impl Decoder for Codec {
     type Error = MpdCodecError;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
+        if !self.greeted {
+            // The server hasn't greeted us yet
+
+            if let Some(i) = src[self.examined_up_to..].iter().position(|b| *b == b'\n') {
+                let header = src.split_to(i + 1);
+                self.examined_up_to = 0;
+
+                // The format of the greeting messages is "OK MPD <protocol version>"
+                // but we don't actually use the protocol version
+                if i >= 6 && &header[..6] == b"OK MPD" {
+                    self.greeted = true;
+                } else {
+                    // The greeting was something we did not expect, might
+                    // happen if we connect to something that isn't MPD
+                    return Err(MpdCodecError::InvalidGreeting);
+                }
+            } else {
+                // Greeting is not completely received yet
+                self.examined_up_to = src.len();
+                return Ok(None);
+            }
+        }
+
         // Look through the unknown part of our buffer for message terminators
         for window_start in self.examined_up_to..src.len() {
             let window_end = if window_start + 3 <= src.len() {
@@ -114,10 +147,9 @@ fn parse_key_value_response(
 }
 
 fn parse_error_line(bytes: BytesMut) -> Result<Response, MpdCodecError> {
-    lazy_static::lazy_static! {
-        static ref ERROR_REGEX: Regex = {
-            Regex::new(r"^ACK \[(\d+)@(\d+)\] \{(\w*?)\} (.+)$").unwrap()
-        };
+    lazy_static! {
+        static ref ERROR_REGEX: Regex =
+            { Regex::new(r"^ACK \[(\d+)@(\d+)\] \{(\w*?)\} (.+)$").unwrap() };
     }
 
     if let Some(captures) = ERROR_REGEX.captures(str::from_utf8(&bytes)?) {
@@ -143,6 +175,8 @@ pub enum MpdCodecError {
     InvalidErrorMessage,
     /// A message contained invalid unicode
     InvalidEncoding(str::Utf8Error),
+    /// Did not get expected greeting as first message (`OK MPD <protocol version>`)
+    InvalidGreeting,
 }
 
 impl fmt::Display for MpdCodecError {
@@ -154,6 +188,7 @@ impl fmt::Display for MpdCodecError {
             MpdCodecError::InvalidErrorMessage => {
                 write!(f, "response contained invalid error message")
             }
+            MpdCodecError::InvalidGreeting => write!(f, "did not receive expected greeting"),
             MpdCodecError::InvalidEncoding(e) => write!(f, "{}", e),
             MpdCodecError::Io(e) => write!(f, "{}", e),
         }

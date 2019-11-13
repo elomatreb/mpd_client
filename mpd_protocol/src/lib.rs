@@ -14,8 +14,34 @@ mod tests {
     use super::*;
 
     #[test]
-    fn decoder_incomplete_response() {
+    fn decoder_handles_greeting() {
         let mut codec = Codec::new();
+        let buf = &mut BytesMut::new();
+
+        let msg = "OK MPD 0.21.11\n";
+        buf.reserve(msg.len());
+        buf.put(msg);
+
+        assert_eq!(None, codec.decode(buf).unwrap());
+        buf.extend_from_slice(&b"OK\n"[..]);
+        assert_eq!(Response::Empty, codec.decode(buf).unwrap().unwrap());
+    }
+
+    #[test]
+    fn decoder_invalid_greeting() {
+        let mut codec = Codec::new();
+        let buf = &mut BytesMut::new();
+
+        let msg = "ASDF\n";
+        buf.reserve(msg.len());
+        buf.put(msg);
+
+        assert!(codec.decode(buf).is_err());
+    }
+
+    #[test]
+    fn decoder_incomplete_response() {
+        let mut codec = Codec::new_greeted();
         let buf = &mut BytesMut::new();
 
         let msg = "hello: world\nOK"; // Note missing final newline
@@ -27,7 +53,7 @@ mod tests {
 
     #[test]
     fn decoder_empty_response() {
-        let mut codec = Codec::new();
+        let mut codec = Codec::new_greeted();
         let buf = &mut BytesMut::new();
 
         let msg = "OK\nOK\n";
@@ -43,7 +69,7 @@ mod tests {
 
     #[test]
     fn decoder_simple_response() {
-        let mut codec = Codec::new();
+        let mut codec = Codec::new_greeted();
         let buf = &mut BytesMut::new();
 
         let msg = "key: value\nfoo:   bar\nbaz: qux    \nbaz: qux2\nOK\n";
@@ -63,7 +89,7 @@ mod tests {
 
     #[test]
     fn decoder_error_response() {
-        let mut codec = Codec::new();
+        let mut codec = Codec::new_greeted();
         let buf = &mut BytesMut::new();
 
         // error message returned when trying to play a song not in the queue
@@ -98,7 +124,7 @@ mod tests {
 
     #[test]
     fn decoder_terminator_in_values() {
-        let mut codec = Codec::new();
+        let mut codec = Codec::new_greeted();
         let buf = &mut BytesMut::new();
 
         let msg = "foo: OK\nOK\n";
@@ -113,7 +139,7 @@ mod tests {
 
     #[test]
     fn decoder_gracefully_handles_unicode_errors() {
-        let mut codec = Codec::new();
+        let mut codec = Codec::new_greeted();
         // Invalid byte, newline, followed by "OK\n" terminator
         let buf = &mut BytesMut::from(&[0x80, 0x0a, 0x4f, 0x4b, 0x0a][..]);
 
