@@ -5,6 +5,7 @@ use tokio::codec::Decoder;
 use tokio::io;
 
 use std::collections::HashMap;
+use std::error::Error;
 use std::fmt;
 use std::str;
 
@@ -207,4 +208,12 @@ impl From<str::Utf8Error> for MpdCodecError {
     }
 }
 
-impl std::error::Error for MpdCodecError {}
+impl Error for MpdCodecError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            MpdCodecError::Io(e) => Some(e),
+            MpdCodecError::InvalidEncoding(e) => Some(e),
+            _ => None,
+        }
+    }
+}
