@@ -13,19 +13,19 @@ use crate::response::Response;
 
 /// Codec for MPD protocol.
 #[derive(Debug, Default)]
-pub struct Codec {
+pub struct MpdCodec {
     examined_up_to: usize,
     parsing_error: bool,
     greeted: bool,
 }
 
-impl Codec {
-    /// Creates a new Codec
+impl MpdCodec {
+    /// Creates a new MpdCodec
     pub fn new() -> Self {
-        Codec::default()
+        MpdCodec::default()
     }
 
-    /// Creates a new Codec that does not expect a server greeting
+    /// Creates a new MpdCodec that does not expect a server greeting
     pub fn new_greeted() -> Self {
         Self {
             greeted: true,
@@ -34,7 +34,7 @@ impl Codec {
     }
 }
 
-impl Decoder for Codec {
+impl Decoder for MpdCodec {
     type Item = Response;
     type Error = MpdCodecError;
 
