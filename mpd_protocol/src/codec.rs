@@ -1,12 +1,12 @@
 use bytes::BytesMut;
 use lazy_static::lazy_static;
 use regex::Regex;
-use tokio::codec::Decoder;
-use tokio::io;
+use tokio_util::codec::Decoder;
 
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt;
+use std::io;
 use std::str;
 
 use crate::response::Response;

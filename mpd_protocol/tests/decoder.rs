@@ -1,5 +1,5 @@
 use bytes::{BufMut, BytesMut};
-use tokio::codec::Decoder;
+use tokio_util::codec::Decoder;
 
 use std::collections::HashMap;
 
