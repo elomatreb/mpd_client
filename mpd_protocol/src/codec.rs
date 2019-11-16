@@ -1,9 +1,6 @@
 use bytes::BytesMut;
-use lazy_static::lazy_static;
-use regex::Regex;
 use tokio_util::codec::Decoder;
 
-use std::collections::HashMap;
 use std::error::Error;
 use std::fmt;
 use std::io;
@@ -84,7 +81,7 @@ impl Decoder for MpdCodec {
                 self.examined_up_to = 0;
                 self.parsing_error = false;
 
-                let err = parse_error_line(src.split_to(end))?;
+                let err = Response::parse_error(src.split_to(end))?;
                 src.advance(1); // Skip the remaining newline
                 return Ok(Some(err));
             } else if window == b"OK\n" {
@@ -101,9 +98,9 @@ impl Decoder for MpdCodec {
                     // including the terminator bytes
                     let mut msg = src.split_to(window_end);
 
-                    let kv = parse_key_value_response(msg.split_to(msg.len() - 4))?;
+                    let res = Response::parse_simple(msg.split_to(msg.len() - 4))?;
                     self.examined_up_to = 0;
-                    return Ok(Some(Response::Simple(kv)));
+                    return Ok(Some(res));
                 }
 
                 // If the terminator was not at the start of a buffer or
@@ -121,47 +118,6 @@ impl Decoder for MpdCodec {
         // off in the middle of a terminator
         self.examined_up_to /= 3;
         Ok(None)
-    }
-}
-
-fn parse_key_value_response(
-    bytes: BytesMut,
-) -> Result<HashMap<String, Vec<String>>, MpdCodecError> {
-    let mut map = HashMap::new();
-    let string = str::from_utf8(&bytes)?;
-
-    for line in string.split('\n') {
-        let i = line.trim().find(':');
-        if i.is_none() || i == Some(line.len() - 1) {
-            return Err(MpdCodecError::InvalidKeyValueSequence);
-        }
-
-        let (key, value) = line.split_at(i.unwrap());
-        let value = value[1..].trim();
-
-        map.entry(key.to_owned())
-            .or_insert_with(Vec::new)
-            .push(value.to_owned());
-    }
-
-    Ok(map)
-}
-
-fn parse_error_line(bytes: BytesMut) -> Result<Response, MpdCodecError> {
-    lazy_static! {
-        static ref ERROR_REGEX: Regex =
-            { Regex::new(r"^ACK \[(\d+)@(\d+)\] \{(\w*?)\} (.+)$").unwrap() };
-    }
-
-    if let Some(captures) = ERROR_REGEX.captures(str::from_utf8(&bytes)?) {
-        Ok(Response::Error {
-            error_code: captures.get(1).unwrap().as_str().parse().unwrap(),
-            command_list_index: captures.get(2).unwrap().as_str().parse().unwrap(),
-            current_command: captures.get(3).unwrap().as_str().to_owned(),
-            message: captures.get(4).unwrap().as_str().to_owned(),
-        })
-    } else {
-        Err(MpdCodecError::InvalidErrorMessage)
     }
 }
 
