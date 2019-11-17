@@ -32,20 +32,31 @@ impl Response {
     /// Parse a "simple" response (not an error or just a simple OK response)
     pub(crate) fn parse_simple(bytes: BytesMut) -> Result<Self, MpdCodecError> {
         let mut map = HashMap::new();
-        let string = str::from_utf8(&bytes)?;
+        let mut examined = 0;
 
-        for line in string.split('\n') {
-            let i = line.trim().find(':');
-            if i.is_none() || i == Some(line.len() - 1) {
-                return Err(MpdCodecError::InvalidKeyValueSequence);
-            }
+        loop {
+            // Look for next newline
+            let newline = bytes[examined..]
+                .iter()
+                .position(|b| *b == b'\n')
+                // If no newline was found, look until end of buffer
+                .unwrap_or_else(|| bytes.len() - examined);
 
-            let (key, value) = line.split_at(i.unwrap());
-            let value = value[1..].trim();
+            let line = &bytes[examined..examined + newline];
+            let (key, value) = parse_line(line)?;
 
+            // Insert results into map
             map.entry(key.to_owned())
                 .or_insert_with(Vec::new)
                 .push(value.to_owned());
+
+            // Start with the remaining buffer next time
+            examined += newline + 1;
+
+            if examined >= bytes.len() - 1 {
+                // We examined the entire buffer
+                break;
+            }
         }
 
         Ok(Response::Simple(map))
@@ -69,4 +80,25 @@ impl Response {
             Err(MpdCodecError::InvalidErrorMessage)
         }
     }
+}
+
+fn parse_line(line: &[u8]) -> Result<(&str, &str), MpdCodecError> {
+    // A key-value line has to be valid Unicode
+    let line = str::from_utf8(line)?;
+
+    // Find ':' separator
+    let separator = line.find(':');
+
+    // Return error if the line doesn't contain a separator or the separator is
+    // the last character
+    if separator.is_none() || separator == Some(line.len() - 1) {
+        return Err(MpdCodecError::InvalidKeyValueSequence);
+    }
+
+    // The line has the form "<key>: <value>"
+    let (key, value) = line.split_at(separator.unwrap());
+    // Remove the separator and the leading space from the value
+    let value = &value[2..];
+
+    Ok((key, value))
 }

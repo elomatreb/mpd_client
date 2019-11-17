@@ -70,10 +70,11 @@ fn decoder_simple_response() {
 
     let mut map = HashMap::new();
     map.insert(String::from("key"), vec![String::from("value")]);
-    map.insert(String::from("foo"), vec![String::from("bar")]);
+    // Values can contain leading or trailing spaces
+    map.insert(String::from("foo"), vec![String::from("  bar")]);
     map.insert(
         String::from("baz"),
-        vec![String::from("qux"), String::from("qux2")],
+        vec![String::from("qux    "), String::from("qux2")],
     );
 
     assert_eq!(Response::Simple(map), codec.decode(buf).unwrap().unwrap());
