@@ -1,4 +1,4 @@
-use bytes::{BufMut, BytesMut};
+use bytes::{BufMut, Bytes, BytesMut};
 use tokio_util::codec::Decoder;
 
 use std::collections::HashMap;
@@ -137,4 +137,28 @@ fn decoder_gracefully_handles_unicode_errors() {
     let buf = &mut BytesMut::from(&[0x80, 0x0a, 0x4f, 0x4b, 0x0a][..]);
 
     assert!(codec.decode(buf).is_err());
+}
+
+#[test]
+fn decoder_binary_response() {
+    let mut codec = MpdCodec::new_greeted();
+    let buf = &mut BytesMut::new();
+
+    let binary = &include_bytes!("demo.png")[..];
+    let msg = format!("hello: world\nbinary: {}\n", binary.len());
+    buf.reserve(msg.len() + binary.len() + 4);
+    buf.put(msg);
+    buf.put(binary);
+    buf.put("\nOK\n");
+
+    let mut values = HashMap::new();
+    values.insert(String::from("hello"), vec![String::from("world")]);
+
+    assert_eq!(
+        Response::Binary {
+            values,
+            binary: Bytes::from(binary),
+        },
+        codec.decode(buf).unwrap().unwrap()
+    );
 }

@@ -1,4 +1,4 @@
-use bytes::BytesMut;
+use bytes::{Bytes, BytesMut};
 use lazy_static::lazy_static;
 use regex::Regex;
 
@@ -14,6 +14,14 @@ pub enum Response {
     Empty,
     /// Simple (key-value) response
     Simple(HashMap<String, Vec<String>>),
+    /// Response consisting of a potentially empty key-value section and a
+    /// binary attachment
+    Binary {
+        /// The key-value pairs
+        values: HashMap<String, Vec<String>>,
+        /// The binary attachment
+        binary: Bytes,
+    },
     /// Error response
     Error {
         /// MPD error code, defined in `src/protocol/Ack.hxx`
@@ -29,12 +37,17 @@ pub enum Response {
 }
 
 impl Response {
-    /// Parse a "simple" response (not an error or just a simple OK response)
-    pub(crate) fn parse_simple(bytes: BytesMut) -> Result<Self, MpdCodecError> {
-        let mut map = HashMap::new();
+    /// Parse a Simple or Binary response (not an error or just a simple OK response)
+    pub(crate) fn parse_simple(mut bytes: BytesMut) -> Result<Self, MpdCodecError> {
+        let mut values = HashMap::new();
         let mut examined = 0;
+        let mut binary = None;
 
         loop {
+            if bytes.is_empty() {
+                break;
+            }
+
             // Look for next newline
             let newline = bytes[examined..]
                 .iter()
@@ -45,10 +58,29 @@ impl Response {
             let line = &bytes[examined..examined + newline];
             let (key, value) = parse_line(line)?;
 
-            // Insert results into map
-            map.entry(key.to_owned())
-                .or_insert_with(Vec::new)
-                .push(value.to_owned());
+            if key == "binary" {
+                let len = value.parse::<usize>().expect("Invalid binary length");
+
+                // Drop the buffer leading up to our binary blob
+                bytes.advance(examined + newline + 1);
+
+                // Split off the indicated length of buffer
+                binary.replace(bytes.split_to(len).freeze());
+
+                if bytes.len() > 0 {
+                    bytes.advance(1); // Drop trailing newline
+                }
+
+                // Reset loop state
+                examined = 0;
+                continue;
+            } else {
+                // Insert results into map
+                values
+                    .entry(key.to_owned())
+                    .or_insert_with(Vec::new)
+                    .push(value.to_owned());
+            }
 
             // Start with the remaining buffer next time
             examined += newline + 1;
@@ -59,7 +91,11 @@ impl Response {
             }
         }
 
-        Ok(Response::Simple(map))
+        if let Some(binary) = binary {
+            Ok(Response::Binary { binary, values })
+        } else {
+            Ok(Response::Simple(values))
+        }
     }
 
     /// Parse an error response
