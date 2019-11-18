@@ -67,7 +67,7 @@ impl Response {
                 // Split off the indicated length of buffer
                 binary.replace(bytes.split_to(len).freeze());
 
-                if bytes.len() > 0 {
+                if !bytes.is_empty() {
                     bytes.advance(1); // Drop trailing newline
                 }
 
