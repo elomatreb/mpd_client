@@ -1,5 +1,5 @@
-use bytes::BytesMut;
-use tokio_util::codec::Decoder;
+use bytes::{BufMut, BytesMut};
+use tokio_util::codec::{Decoder, Encoder};
 
 use std::error::Error;
 use std::fmt;
@@ -28,6 +28,24 @@ impl MpdCodec {
             greeted: true,
             ..Default::default()
         }
+    }
+}
+
+impl Encoder for MpdCodec {
+    type Item = String;
+    type Error = MpdCodecError;
+
+    fn encode(&mut self, command: Self::Item, buf: &mut BytesMut) -> Result<(), Self::Error> {
+        if command.is_empty() || command.contains('\n') {
+            return Err(MpdCodecError::InvalidCommand(command));
+        }
+
+        // Commands are simply delimited by a newline
+        buf.reserve(command.len() + 1);
+        buf.put(command);
+        buf.put("\n");
+
+        Ok(())
     }
 }
 
@@ -121,7 +139,7 @@ impl Decoder for MpdCodec {
     }
 }
 
-/// An error occured in a response
+/// Errors which can occur during operation
 #[derive(Debug)]
 pub enum MpdCodecError {
     /// IO error occured
@@ -134,6 +152,8 @@ pub enum MpdCodecError {
     InvalidEncoding(str::Utf8Error),
     /// Did not get expected greeting as first message (`OK MPD <protocol version>`)
     InvalidGreeting,
+    /// A command string passed to the encoder was invalid (empty or contained a newline)
+    InvalidCommand(String),
 }
 
 impl fmt::Display for MpdCodecError {
@@ -145,6 +165,7 @@ impl fmt::Display for MpdCodecError {
             MpdCodecError::InvalidErrorMessage => {
                 write!(f, "response contained invalid error message")
             }
+            MpdCodecError::InvalidCommand(command) => write!(f, "invalid command: {:?}", command),
             MpdCodecError::InvalidGreeting => write!(f, "did not receive expected greeting"),
             MpdCodecError::InvalidEncoding(e) => write!(f, "{}", e),
             MpdCodecError::Io(e) => write!(f, "{}", e),
