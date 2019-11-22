@@ -42,8 +42,8 @@ impl Encoder for MpdCodec {
 
         // Commands are simply delimited by a newline
         buf.reserve(command.len() + 1);
-        buf.put(command);
-        buf.put("\n");
+        buf.put(command.as_bytes());
+        buf.put_u8(b'\n');
 
         Ok(())
     }
