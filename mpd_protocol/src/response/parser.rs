@@ -205,84 +205,6 @@ mod test {
     }
 
     #[test]
-    fn empty_response() {
-        assert_eq!(
-            super::response(b"OK\n"),
-            Ok((
-                EMPTY,
-                vec![Response::Success {
-                    fields: Vec::new(),
-                    binary: None
-                }]
-            ))
-        );
-    }
-
-    #[test]
-    fn simple_response() {
-        assert_eq!(
-            super::response(b"foo: bar\nfoo: baz\nmep: asdf\nOK\n"),
-            Ok((
-                EMPTY,
-                vec![Response::Success {
-                    fields: vec![("foo", "bar"), ("foo", "baz"), ("mep", "asdf")],
-                    binary: None,
-                }],
-            ))
-        );
-    }
-
-    #[test]
-    fn binary_response() {
-        assert_eq!(
-            super::response(b"foo: bar\nbinary: 14\nBINARY_OK\n_MEP\nOK\n"),
-            Ok((
-                EMPTY,
-                vec![Response::Success {
-                    fields: vec![("foo", "bar")],
-                    binary: Some(b"BINARY_OK\n_MEP"),
-                }],
-            ))
-        );
-    }
-
-    #[test]
-    fn error_response() {
-        assert_eq!(
-            super::response(b"ACK [5@0] {} unknown command \"foo\"\n"),
-            Ok((
-                EMPTY,
-                vec![Response::Error {
-                    code: 5,
-                    command_index: 0,
-                    current_command: None,
-                    message: "unknown command \"foo\""
-                }]
-            ))
-        );
-    }
-
-    #[test]
-    fn successful_command_list() {
-        assert_eq!(
-            super::response(b"hello: world\nlist_OK\nlist_OK\nOK\n"),
-            Ok((
-                EMPTY,
-                vec![
-                    Response::Success {
-                        fields: vec![("hello", "world")],
-                        binary: None,
-                    },
-                    Response::Success {
-                        fields: Vec::new(),
-                        binary: None,
-                    }
-                ]
-            ))
-        );
-    }
-
-    #[test]
     fn error() {
         let no_command = "ACK [5@0] {} unknown command \"foo\"\n";
         let with_command = "ACK [2@0] {random} Boolean (0/1) expected: foo\n";
@@ -312,27 +234,5 @@ mod test {
                 }
             ))
         );
-    }
-
-    #[test]
-    fn incomplete_simple_response() {
-        let msg = "foo: bar\nOK".as_bytes(); // Note missing final newline
-        assert!(super::response(msg).unwrap_err().is_incomplete());
-    }
-
-    #[test]
-    fn incomplete_binary_response() {
-        let msg = "binary: 100\nfoo: bar\n".as_bytes();
-        let r = super::response(msg);
-
-        assert!(r.unwrap_err().is_incomplete());
-    }
-
-    #[test]
-    fn incomplete_complete_response() {
-        let msg = "foo: bar\nlist_OK\n".as_bytes();
-        let r = super::response(msg);
-
-        assert!(r.unwrap_err().is_incomplete());
     }
 }
