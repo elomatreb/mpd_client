@@ -1,3 +1,4 @@
+pub mod parser;
 
 use bytes::Bytes;
 

@@ -9,5 +9,4 @@ edition = "2018"
 [dependencies]
 bytes = { git = "https://github.com/tokio-rs/bytes" }
 tokio-util = { git = "https://github.com/tokio-rs/tokio" }
-regex = "1"
-lazy_static = "1.4.0"
+nom = "5"
