@@ -1,4 +1,4 @@
-use mpd_protocol::response::parser::{Response, response};
+use mpd_protocol::response::parser::{response, Response};
 
 static EMPTY: &[u8] = &[];
 
@@ -53,6 +53,20 @@ fn simple_response() {
 }
 
 #[test]
+fn simple_response_with_terminator_in_values() {
+    assert_eq!(
+        response(b"hello: world\nfoo: OK\nbar: 1234\nOK\n"),
+        Ok((
+            EMPTY,
+            vec![Response::Success {
+                fields: vec![("hello", "world"), ("foo", "OK"), ("bar", "1234")],
+                binary: None,
+            }],
+        ))
+    );
+}
+
+#[test]
 fn binary_response() {
     assert_eq!(
         response(b"foo: bar\nbinary: 14\nBINARY_OK\n_MEP\nOK\n"),
@@ -96,6 +110,28 @@ fn successful_command_list() {
                 Response::Success {
                     fields: Vec::new(),
                     binary: None,
+                }
+            ]
+        ))
+    );
+}
+
+#[test]
+fn command_list_with_error() {
+    assert_eq!(
+        response(b"foo: bar\nlist_OK\nACK [5@0] {} unknown command \"foo\"\n"),
+        Ok((
+            EMPTY,
+            vec![
+                Response::Success {
+                    fields: vec![("foo", "bar")],
+                    binary: None,
+                },
+                Response::Error {
+                    code: 5,
+                    command_index: 0,
+                    current_command: None,
+                    message: "unknown command \"foo\"",
                 }
             ]
         ))
