@@ -1,3 +1,11 @@
+//! [Codec](https://docs.rs/tokio-util/0.2.0/tokio_util/codec/index.html) for MPD protocol.
+//!
+//! The codec accepts sending arbitrary (single) messages, it is up to you to make sure they are
+//! valid.
+//!
+//! See the notes on the [`parser`](../parser/index.html) module about what responses the codec
+//! supports.
+
 use bytes::{BufMut, Bytes, BytesMut};
 use tokio_util::codec::{Decoder, Encoder};
 
@@ -8,20 +16,20 @@ use std::io;
 use crate::parser;
 use crate::response::{Error as ResponseError, Frame, Response};
 
-/// Codec for MPD protocol.
-#[derive(Debug, Default)]
+/// [Codec](https://docs.rs/tokio-util/0.2.0/tokio_util/codec/index.html) for MPD protocol.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub struct MpdCodec {
     cursor: usize,
     protocol_version: Option<String>,
 }
 
 impl MpdCodec {
-    /// Creates a new MpdCodec
+    /// Creates a new `MpdCodec`.
     pub fn new() -> Self {
         MpdCodec::default()
     }
 
-    /// Returns the protocol version the server is speaking, if this decoder instance already
+    /// Returns the protocol version the server is speaking if this decoder instance already
     /// received a greeting, `None` otherwise.
     pub fn protocol_version(&self) -> Option<&str> {
         self.protocol_version.as_ref().map(String::as_str)
@@ -102,7 +110,7 @@ impl Decoder for MpdCodec {
 }
 
 /// Convert the raw parsed response to one with owned data
-fn convert_raw_response(res: &[parser::Response]) -> Response {
+fn convert_raw_response(res: &[parser::Response<'_>]) -> Response {
     let mut frames = Vec::with_capacity(res.len());
     let mut error = None;
 
@@ -142,7 +150,7 @@ fn convert_raw_response(res: &[parser::Response]) -> Response {
     Response::new(frames, error)
 }
 
-/// Errors which can occur during operation
+/// Errors which can occur during [`MpdCodec`](struct.MpdCodec.html) operation.
 #[derive(Debug)]
 pub enum MpdCodecError {
     /// IO error occured

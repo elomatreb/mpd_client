@@ -1,3 +1,5 @@
+//! Complete responses.
+
 use bytes::Bytes;
 
 /// Response to a command, consisting of an abitrary amount of frames, which are responses to
