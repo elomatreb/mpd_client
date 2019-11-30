@@ -29,9 +29,9 @@ pub struct Error {
     /// Error code. See [the MPD
     /// source](https://github.com/MusicPlayerDaemon/MPD/blob/master/src/protocol/Ack.hxx#L30) for
     /// a list of of possible values.
-    pub code: usize,
+    pub code: u64,
     /// Index of command in a command list that caused this error. 0 when not in a command list.
-    pub command_index: usize,
+    pub command_index: u64,
     /// Command that returned the error, if applicable.
     pub current_command: Option<String>,
     /// Message describing the error.
@@ -67,6 +67,20 @@ impl Response {
         );
 
         Self { frames, error }
+    }
+
+    /// Construct a new "empty" response. This is the simplest possible succesful response,
+    /// consisting of a single empty frame.
+    ///
+    /// ```
+    /// use mpd_protocol::response::Response;
+    ///
+    /// let r = Response::empty();
+    /// assert_eq!(1, r.frames.len());
+    /// assert_eq!(None, r.error);
+    /// ```
+    pub fn empty() -> Self {
+        Self::new(vec![Default::default()], None)
     }
 
     /// Returns `true` if the response resulted in an error.

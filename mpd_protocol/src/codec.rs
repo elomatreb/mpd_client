@@ -1,19 +1,17 @@
-use bytes::{BufMut, BytesMut};
+use bytes::{BufMut, Bytes, BytesMut};
 use tokio_util::codec::{Decoder, Encoder};
 
 use std::error::Error;
 use std::fmt;
 use std::io;
-use std::str;
 
-use crate::response::Response;
+use crate::response::{parser, Error as ResponseError, Frame, Response};
 
 /// Codec for MPD protocol.
 #[derive(Debug, Default)]
 pub struct MpdCodec {
-    examined_up_to: usize,
-    parsing_error: bool,
-    greeted: bool,
+    cursor: usize,
+    protocol_version: Option<String>,
 }
 
 impl MpdCodec {
@@ -22,12 +20,10 @@ impl MpdCodec {
         MpdCodec::default()
     }
 
-    /// Creates a new MpdCodec that does not expect a server greeting
-    pub fn new_greeted() -> Self {
-        Self {
-            greeted: true,
-            ..Default::default()
-        }
+    /// Returns the protocol version the server is speaking, if this decoder instance already
+    /// received a greeting, `None` otherwise.
+    pub fn protocol_version(&self) -> Option<&str> {
+        self.protocol_version.as_ref().map(String::as_str)
     }
 }
 
@@ -54,8 +50,96 @@ impl Decoder for MpdCodec {
     type Error = MpdCodecError;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
-        unimplemented!()
+        if self.protocol_version.is_none() {
+            match parser::greeting(src) {
+                Ok((rem, greeting)) => {
+                    self.protocol_version = Some(greeting.version.to_owned());
+
+                    // Drop the part of the buffer containing the greeting
+                    let new_start = src.len() - rem.len();
+                    src.split_to(new_start);
+                }
+                Err(e) => {
+                    if e.is_incomplete() {
+                        return Ok(None);
+                    } else {
+                        // We got a malformed greeting
+                        return Err(MpdCodecError::InvalidGreeting(src.split().freeze()));
+                    }
+                }
+            }
+        }
+
+        for (terminator, _) in src[self.cursor..]
+            .windows(3)
+            .enumerate()
+            .filter(|(_, w)| w == b"OK\n")
+        {
+            let msg_end = self.cursor + terminator + 3;
+
+            match parser::response(&src[..msg_end]) {
+                Ok((_remainder, response)) => {
+                    let r = convert_raw_response(&response);
+                    src.split_to(msg_end);
+                    return Ok(Some(r));
+                }
+                Err(e) => {
+                    if !e.is_incomplete() {
+                        dbg!(e);
+                        return Err(MpdCodecError::InvalidResponse(src.split().freeze()));
+                    }
+                }
+            }
+        }
+
+        // We didn't find a terminator
+
+        // Subtract two in case the terminator was already partially in the buffer
+        self.cursor = src.len().saturating_sub(2);
+
+        Ok(None)
     }
+}
+
+/// Convert the raw parsed response to one with owned data
+fn convert_raw_response(res: &[parser::Response]) -> Response {
+    let mut frames = Vec::with_capacity(res.len());
+    let mut error = None;
+
+    for r in res {
+        match r {
+            parser::Response::Success { fields, binary } => {
+                let values = fields
+                    .iter()
+                    .map(|(k, v)| (String::from(*k), String::from(*v)))
+                    .collect();
+
+                let binary = binary.map(|bin| Bytes::copy_from_slice(bin));
+
+                frames.push(Frame { values, binary });
+            }
+            parser::Response::Error {
+                code,
+                command_index,
+                current_command,
+                message,
+            } => {
+                assert!(
+                    error.is_none(),
+                    "response contained more than a single error"
+                );
+
+                error = Some(ResponseError {
+                    code: *code,
+                    command_index: *command_index,
+                    current_command: current_command.map(String::from),
+                    message: String::from(*message),
+                });
+            }
+        }
+    }
+
+    Response::new(frames, error)
 }
 
 /// Errors which can occur during operation
@@ -63,14 +147,10 @@ impl Decoder for MpdCodec {
 pub enum MpdCodecError {
     /// IO error occured
     Io(io::Error),
-    /// A line wasn't a "key: value"
-    InvalidKeyValueSequence,
-    /// A line started like an error but wasn't correctly formatted
-    InvalidErrorMessage,
-    /// A message contained invalid unicode
-    InvalidEncoding(str::Utf8Error),
     /// Did not get expected greeting as first message (`OK MPD <protocol version>`)
-    InvalidGreeting,
+    InvalidGreeting(Bytes),
+    /// A message could not be parsed succesfully.
+    InvalidResponse(Bytes),
     /// A command string passed to the encoder was invalid (empty or contained a newline)
     InvalidCommand(String),
 }
@@ -78,16 +158,14 @@ pub enum MpdCodecError {
 impl fmt::Display for MpdCodecError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            MpdCodecError::InvalidKeyValueSequence => {
-                write!(f, "response contained invalid key-sequence")
+            MpdCodecError::Io(e) => write!(f, "{}", e),
+            MpdCodecError::InvalidGreeting(greeting) => {
+                write!(f, "invalid greeting: {:?}", greeting)
             }
-            MpdCodecError::InvalidErrorMessage => {
-                write!(f, "response contained invalid error message")
+            MpdCodecError::InvalidResponse(response) => {
+                write!(f, "invalid response: {:?}", response)
             }
             MpdCodecError::InvalidCommand(command) => write!(f, "invalid command: {:?}", command),
-            MpdCodecError::InvalidGreeting => write!(f, "did not receive expected greeting"),
-            MpdCodecError::InvalidEncoding(e) => write!(f, "{}", e),
-            MpdCodecError::Io(e) => write!(f, "{}", e),
         }
     }
 }
@@ -98,17 +176,10 @@ impl From<io::Error> for MpdCodecError {
     }
 }
 
-impl From<str::Utf8Error> for MpdCodecError {
-    fn from(e: str::Utf8Error) -> Self {
-        MpdCodecError::InvalidEncoding(e)
-    }
-}
-
 impl Error for MpdCodecError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
             MpdCodecError::Io(e) => Some(e),
-            MpdCodecError::InvalidEncoding(e) => Some(e),
             _ => None,
         }
     }
