@@ -85,7 +85,6 @@ impl Decoder for MpdCodec {
                 }
                 Err(e) => {
                     if !e.is_incomplete() {
-                        dbg!(e);
                         return Err(MpdCodecError::InvalidResponse(src.split().freeze()));
                     }
                 }
