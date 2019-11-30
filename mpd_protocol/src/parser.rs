@@ -45,7 +45,7 @@ pub enum Response<'a> {
 /// Parse a [`Greeting`](struct.Greeting.html) line.
 ///
 /// ```
-/// use mpd_protocol::response::parser::{Greeting, greeting};
+/// use mpd_protocol::parser::{Greeting, greeting};
 ///
 /// let g = Greeting { version: "0.21.11" };
 /// assert_eq!(greeting(b"OK MPD 0.21.11\n"), Ok((&b""[..], g)));
@@ -60,7 +60,7 @@ pub fn greeting(i: &[u8]) -> IResult<&[u8], Greeting> {
 /// Parse a complete response, resulting in one or more frames if succesful.
 ///
 /// ```
-/// use mpd_protocol::response::parser::{Response, response};
+/// use mpd_protocol::parser::{Response, response};
 ///
 /// assert_eq!(
 ///     response(b"foo: bar\nOK\n"),

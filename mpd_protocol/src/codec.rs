@@ -5,7 +5,8 @@ use std::error::Error;
 use std::fmt;
 use std::io;
 
-use crate::response::{parser, Error as ResponseError, Frame, Response};
+use crate::parser;
+use crate::response::{Error as ResponseError, Frame, Response};
 
 /// Codec for MPD protocol.
 #[derive(Debug, Default)]

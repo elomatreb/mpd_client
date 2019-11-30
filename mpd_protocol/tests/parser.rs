@@ -1,4 +1,4 @@
-use mpd_protocol::response::parser::{response, Response};
+use mpd_protocol::parser::{response, Response};
 
 static EMPTY: &[u8] = &[];
 

@@ -4,9 +4,8 @@ Implementation of the client protocol for [MPD][mpd].
 Supports binary responses and command lists, provided they are initiated with the
 `command_list_ok_begin` command.
 
-Consists of a parser for MPD responses (`response::parser` module), and an implementation of
-[Tokio][tokio]'s [`codec`][tokio-codec] subsystem to facilitate asynchronous clients (`codec`
-module).
+Consists of a parser for MPD responses (`parser` module), and an implementation of [Tokio][tokio]'s
+[`codec`][tokio-codec] subsystem to facilitate asynchronous clients (`codec` module).
 
 ## Installation:
 
