@@ -138,3 +138,16 @@ fn decoder_multiple_messages() {
     );
     assert!(buf.is_empty());
 }
+
+#[test]
+fn decoder_cursor_reset() {
+    let codec = &mut MpdCodec::new();
+    let buf = &mut init_buffer(b"hello: world\nOK");
+
+    assert_eq!(None, codec.decode(buf).unwrap());
+
+    buf.extend_from_slice(b"\na: b\nOK\n");
+
+    assert!(codec.decode(buf).unwrap().is_some());
+    assert!(codec.decode(buf).unwrap().is_some());
+}

@@ -90,6 +90,7 @@ impl Decoder for MpdCodec {
                 Ok((_remainder, response)) => {
                     let r = convert_raw_response(&response);
                     src.split_to(msg_end);
+                    self.cursor = 0;
                     return Ok(Some(r));
                 }
                 Err(e) => {
