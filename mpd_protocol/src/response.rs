@@ -2,6 +2,8 @@
 
 use bytes::Bytes;
 
+use std::collections::HashMap;
+
 /// Response to a command, consisting of an abitrary amount of frames, which are responses to
 /// individual commands, and optionally a single error.
 ///
@@ -105,5 +107,41 @@ impl Response {
     /// ```
     pub fn is_success(&self) -> bool {
         !self.is_error()
+    }
+}
+
+impl Frame {
+    /// Collect the key-value pairs in this resposne into a `HashMap`.
+    ///
+    /// Beware that this loses the order relationship between different keys. Values for a given
+    /// key are ordered like they appear in the response.
+    ///
+    /// ```
+    /// use mpd_protocol::response::Frame;
+    ///
+    /// let f = Frame {
+    ///     values: vec![
+    ///         (String::from("foo"), String::from("bar")),
+    ///         (String::from("hello"), String::from("world")),
+    ///         (String::from("foo"), String::from("baz")),
+    ///     ],
+    ///     ..Default::default()
+    /// };
+    ///
+    /// let map = f.values_as_map();
+    ///
+    /// assert_eq!(map.get("foo"), Some(&vec!["bar", "baz"]));
+    /// assert_eq!(map.get("hello"), Some(&vec!["world"]));
+    /// ```
+    pub fn values_as_map(&self) -> HashMap<&str, Vec<&str>> {
+        let mut map = HashMap::new();
+
+        for (k, v) in self.values.iter() {
+            map.entry(k.as_str())
+                .or_insert_with(Vec::new)
+                .push(v.as_str());
+        }
+
+        map
     }
 }
