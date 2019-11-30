@@ -8,5 +8,5 @@ edition = "2018"
 
 [dependencies]
 bytes = "0.5"
-tokio-util = { version = "0.2", features = ["full"] }
+tokio-util = { version = "0.2", features = ["codec"] }
 nom = "5"
