@@ -7,6 +7,7 @@
 //! supports.
 
 use bytes::{BufMut, Bytes, BytesMut};
+use log::{debug, info, trace};
 use tokio_util::codec::{Decoder, Encoder};
 
 use std::error::Error;
@@ -41,6 +42,8 @@ impl Encoder for MpdCodec {
     type Error = MpdCodecError;
 
     fn encode(&mut self, command: Self::Item, buf: &mut BytesMut) -> Result<(), Self::Error> {
+        trace!("encode: Command {:?}", command);
+
         if command.is_empty() || command.contains('\n') {
             return Err(MpdCodecError::InvalidCommand(command));
         }
@@ -59,17 +62,27 @@ impl Decoder for MpdCodec {
     type Error = MpdCodecError;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
+        trace!("decode: {} bytes of buffer", src.len());
+
         if self.protocol_version.is_none() {
             match parser::greeting(src) {
                 Ok((rem, greeting)) => {
+                    info!("decode: Greeted by server, version {:?}", greeting.version);
+
                     self.protocol_version = Some(greeting.version.to_owned());
 
                     // Drop the part of the buffer containing the greeting
                     let new_start = src.len() - rem.len();
                     src.split_to(new_start);
+                    debug!(
+                        "decode: Dropping {} bytes of greeting, remaining length: {}",
+                        new_start,
+                        src.len()
+                    );
                 }
                 Err(e) => {
                     if e.is_incomplete() {
+                        trace!("decode: Greeting incomplete");
                         return Ok(None);
                     } else {
                         // We got a malformed greeting
@@ -85,18 +98,26 @@ impl Decoder for MpdCodec {
             .filter(|(_, w)| w == b"OK\n")
         {
             let msg_end = self.cursor + terminator + 3;
+            trace!("decode: Message potentially ends at index {}", msg_end);
 
             match parser::response(&src[..msg_end]) {
                 Ok((_remainder, response)) => {
                     let r = convert_raw_response(&response);
+
                     src.split_to(msg_end);
                     self.cursor = 0;
+
+                    debug!(
+                        "decoder: Response complete, {} bytes of buffer remaining",
+                        src.len()
+                    );
                     return Ok(Some(r));
                 }
                 Err(e) => {
                     if !e.is_incomplete() {
                         return Err(MpdCodecError::InvalidResponse(src.split().freeze()));
                     }
+                    trace!("decode: Message incomplete");
                 }
             }
         }
@@ -105,6 +126,10 @@ impl Decoder for MpdCodec {
 
         // Subtract two in case the terminator was already partially in the buffer
         self.cursor = src.len().saturating_sub(2);
+        trace!(
+            "decode: Starting next search for message terminator at index {}",
+            self.cursor
+        );
 
         Ok(None)
     }

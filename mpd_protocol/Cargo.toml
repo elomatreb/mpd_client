@@ -16,3 +16,4 @@ categories = ["network-programming"]
 bytes = "0.5"
 tokio-util = { version = "0.2", features = ["codec"] }
 nom = "5"
+log = "0.4"
