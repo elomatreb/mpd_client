@@ -6,7 +6,7 @@
 //! See the notes on the [`parser`](../parser/index.html) module about what responses the codec
 //! supports.
 
-use bytes::{BufMut, Bytes, BytesMut};
+use bytes::{Buf, BufMut, Bytes, BytesMut};
 use log::{debug, info, trace};
 use tokio_util::codec::{Decoder, Encoder};
 
@@ -73,7 +73,7 @@ impl Decoder for MpdCodec {
 
                     // Drop the part of the buffer containing the greeting
                     let new_start = src.len() - rem.len();
-                    src.split_to(new_start);
+                    src.advance(new_start);
                     debug!(
                         "decode: Dropping {} bytes of greeting, remaining length: {}",
                         new_start,
@@ -104,7 +104,7 @@ impl Decoder for MpdCodec {
                 Ok((_remainder, response)) => {
                     let r = convert_raw_response(&response);
 
-                    src.split_to(msg_end);
+                    src.advance(msg_end);
                     self.cursor = 0;
 
                     debug!(
