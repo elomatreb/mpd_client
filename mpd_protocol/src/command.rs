@@ -44,6 +44,23 @@ impl Command {
     /// Create a new command, but panic instead of returning a `Result` when the conversion fails.
     ///
     /// This may be useful in cases where you supply known-good commands for simplicity.
+    ///
+    /// ```
+    /// use mpd_protocol::Command;
+    ///
+    /// let command = Command::new("status");
+    ///
+    /// assert_eq!(command.render(), "status\n");
+    /// ```
+    ///
+    /// Panics on invalid values:
+    ///
+    /// ```should_panic
+    /// use mpd_protocol::Command;
+    ///
+    /// // This panics
+    /// Command::new("invalid\ncommand");
+    /// ```
     pub fn new<C>(c: C) -> Self
     where
         C: TryInto<Self>,
