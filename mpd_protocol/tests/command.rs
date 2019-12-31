@@ -41,32 +41,16 @@ fn single() {
     );
 
     assert_eq!(
+        Command::try_from("hello\nworld").unwrap_err(),
+        CommandError {
+            reason: InvalidCommandReason::InvalidCharacter(5, '\n'),
+            list_at: None,
+        }
+    );
+
+    assert_eq!(
         // this is OK because it's not nesting
         Command::try_from("command_list_ok_begin").unwrap().render(),
         "command_list_ok_begin\n",
-    );
-}
-
-#[test]
-fn command_list_string() {
-    assert_eq!(
-        Command::try_from("hello\nworld").unwrap().render(),
-        "command_list_ok_begin\nhello\nworld\ncommand_list_end\n"
-    );
-
-    assert_eq!(
-        Command::try_from("hello\na$b").unwrap_err(),
-        CommandError {
-            reason: InvalidCommandReason::InvalidCharacter(1, '$'),
-            list_at: Some(1),
-        }
-    );
-
-    assert_eq!(
-        Command::try_from("hello\ncommand_list_begin\nstatus").unwrap_err(),
-        CommandError {
-            reason: InvalidCommandReason::NestedCommandList,
-            list_at: Some(1),
-        }
     );
 }

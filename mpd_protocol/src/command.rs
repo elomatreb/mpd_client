@@ -16,13 +16,7 @@ static COMMAND_LIST_END: &str = "command_list_end\n";
 /// The primary way to create `Commands` is to use the various `TryFrom` implementations, or the
 /// [`new`](#method.new) function (which panics instead of returning results).
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Command(CommandType);
-
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-enum CommandType {
-    Single(String),
-    List(Vec<String>),
-}
+pub struct Command(Vec<String>);
 
 /// The command was invalid.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -61,31 +55,37 @@ impl Command {
     /// Render the command to the wire representation. Commands are automatically wrapped in
     /// command lists if necessary.
     pub fn render(self) -> String {
-        match self.0 {
-            CommandType::Single(mut c) => {
-                c.push('\n');
-                c
+        let mut out;
+
+        if self.0.len() == 1 {
+            let c = self.0.first().unwrap();
+
+            out = String::with_capacity(c.len() + 1);
+
+            out.push_str(c);
+            out.push('\n');
+        } else {
+            assert!(self.0.len() > 1);
+
+            // A command list consists of a beginning, the list of commands, and an ending, all
+            // terminated by newlines
+            out = String::with_capacity(
+                COMMAND_LIST_BEGIN.len()
+                    + self.0.iter().fold(0, |acc, c| acc + c.len() + 1)
+                    + COMMAND_LIST_END.len(),
+            );
+
+            out.push_str(COMMAND_LIST_BEGIN);
+
+            for c in self.0 {
+                out.push_str(&c);
+                out.push('\n');
             }
-            CommandType::List(c) => {
-                let mut out = String::with_capacity(
-                    COMMAND_LIST_BEGIN.len()
-                        + COMMAND_LIST_END.len()
-                        + c.iter().fold(0, |acc, c| acc + c.len() + 1),
-                );
 
-                out.push_str(COMMAND_LIST_BEGIN);
-
-                for command in c {
-                    // Each command is simply followed by a newline
-                    out.push_str(command.as_str());
-                    out.push('\n');
-                }
-
-                out.push_str(COMMAND_LIST_END);
-
-                out
-            }
+            out.push_str(COMMAND_LIST_END);
         }
+
+        out
     }
 }
 
@@ -93,54 +93,13 @@ impl TryFrom<&str> for Command {
     type Error = CommandError;
 
     fn try_from(c: &str) -> Result<Self, Self::Error> {
-        let cs = c.split('\n').collect::<Vec<_>>();
-
-        if cs.is_empty() {
-            Err(CommandError {
-                reason: InvalidCommandReason::Empty,
-                list_at: None,
-            })
-        } else if cs.len() == 1 {
-            let mut c = validate_single_command(cs.first().unwrap())?.to_owned();
-            canonicalize_command(&mut c);
-            Ok(Self(CommandType::Single(c)))
-        } else {
-            cs.iter().enumerate().try_for_each(|(index, c)| {
-                if c.is_empty() {
-                    Err(CommandError {
-                        reason: InvalidCommandReason::Empty,
-                        list_at: Some(index),
-                    })
-                } else {
-                    validate_single_command(c).map_err(|mut e| {
-                        e.list_at = Some(index);
-                        e
-                    })?;
-
-                    Ok(())
-                }
-            })?;
-
-            let mut cs = cs.into_iter().map(|s| s.to_owned()).collect::<Vec<_>>();
-
-            cs.iter_mut().enumerate().try_for_each(|(i, c)| {
-                canonicalize_command(c);
-
-                if c.starts_with("command_list_") {
-                    Err(CommandError {
-                        reason: InvalidCommandReason::NestedCommandList,
-                        list_at: Some(i),
-                    })
-                } else {
-                    Ok(())
-                }
-            })?;
-
-            Ok(Self(CommandType::List(cs)))
-        }
+        let mut c = validate_single_command(c)?.to_owned();
+        canonicalize_command(&mut c);
+        Ok(Self(vec![c]))
     }
 }
 
+/// Validate that a single command string is well-formed
 fn validate_single_command(command: &str) -> Result<&str, CommandError> {
     if command.is_empty() {
         return Err(CommandError {
@@ -161,7 +120,7 @@ fn validate_single_command(command: &str) -> Result<&str, CommandError> {
 
     if let Some((index, c)) = command
         .char_indices()
-        .find(|(_, c)| !(is_valid_command_char(*c) || c.is_whitespace()))
+        .find(|(_, c)| !(is_valid_command_char(*c) || (c.is_whitespace() && *c != '\n')))
     {
         return Err(CommandError {
             reason: InvalidCommandReason::InvalidCharacter(index, c),
@@ -172,6 +131,7 @@ fn validate_single_command(command: &str) -> Result<&str, CommandError> {
     Ok(command)
 }
 
+/// Canonicalize (lowercase) the leading command section of the command string
 fn canonicalize_command(command: &mut str) {
     let command_end = command
         .char_indices()
@@ -182,6 +142,7 @@ fn canonicalize_command(command: &mut str) {
     command[..command_end].make_ascii_lowercase();
 }
 
+/// Commands can consist of alphabetic chars and underscores
 fn is_valid_command_char(c: char) -> bool {
     c.is_alphabetic() || c == '_'
 }
