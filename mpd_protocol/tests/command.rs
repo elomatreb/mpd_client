@@ -7,12 +7,12 @@ fn single() {
     assert_eq!(Command::try_from("status").unwrap().render(), "status\n");
 
     assert_eq!(
-        Command::try_from("HELLO WORLD").unwrap().render(),
+        Command::new("HELLO WORLD").render(),
         "hello WORLD\n"
     );
 
     assert_eq!(
-        Command::try_from("hello_world").unwrap().render(),
+        Command::new("hello_world").render(),
         "hello_world\n"
     );
 
@@ -50,7 +50,7 @@ fn single() {
 
     assert_eq!(
         // this is OK because it's not nesting
-        Command::try_from("command_list_ok_begin").unwrap().render(),
+        Command::new("command_list_ok_begin").render(),
         "command_list_ok_begin\n",
     );
 }
