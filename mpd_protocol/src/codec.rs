@@ -6,7 +6,7 @@
 //! See the notes on the [`parser`](../parser/index.html) module about what responses the codec
 //! supports.
 
-use bytes::{Buf, BufMut, Bytes, BytesMut};
+use bytes::{Buf, Bytes, BytesMut};
 use log::{debug, info, trace};
 use tokio_util::codec::{Decoder, Encoder};
 
@@ -15,6 +15,7 @@ use std::fmt;
 use std::io;
 
 use crate::parser;
+use crate::command::Command;
 use crate::response::{Error as ResponseError, Frame, Response};
 
 /// [Codec](https://docs.rs/tokio-util/0.2.0/tokio_util/codec/index.html) for MPD protocol.
@@ -38,20 +39,13 @@ impl MpdCodec {
 }
 
 impl Encoder for MpdCodec {
-    type Item = String;
+    type Item = Command;
     type Error = MpdCodecError;
 
     fn encode(&mut self, command: Self::Item, buf: &mut BytesMut) -> Result<(), Self::Error> {
         trace!("encode: Command {:?}", command);
 
-        if command.is_empty() || command.contains('\n') {
-            return Err(MpdCodecError::InvalidCommand(command));
-        }
-
-        // Commands are simply delimited by a newline
-        buf.reserve(command.len() + 1);
-        buf.put(command.as_bytes());
-        buf.put_u8(b'\n');
+        buf.extend_from_slice(command.render().as_bytes());
 
         Ok(())
     }
