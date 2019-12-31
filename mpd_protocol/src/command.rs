@@ -16,7 +16,9 @@ static COMMAND_LIST_END: &str = "command_list_end\n";
 /// The primary way to create `Commands` is to use the various `TryFrom` implementations, or the
 /// [`new`](#method.new) function (which panics instead of returning results).
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Command(Vec<String>);
+pub struct Command {
+    commands: Vec<String>,
+}
 
 /// The command was invalid.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -30,13 +32,13 @@ pub struct CommandError {
 /// Ways in which a command may be invalid.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum InvalidCommandReason {
-    /// The was empty.
+    /// The command was empty (either an empty command or an empty list commands).
     Empty,
     /// The command string
     InvalidCharacter(usize, char),
     /// The contained trailing or leading whitespace (whitespace in the middle of commands is used to separate arguments).
     UnncessaryWhitespace,
-    /// Attempted to start a nested command list, which are not supported.
+    /// Attempted to start or close a command list while already in one.
     NestedCommandList,
 }
 
@@ -74,27 +76,27 @@ impl Command {
     pub fn render(self) -> String {
         let mut out;
 
-        if self.0.len() == 1 {
-            let c = self.0.first().unwrap();
+        if self.commands.len() == 1 {
+            let c = self.commands.first().unwrap();
 
             out = String::with_capacity(c.len() + 1);
 
             out.push_str(c);
             out.push('\n');
         } else {
-            assert!(self.0.len() > 1);
+            assert!(self.commands.len() > 1);
 
             // A command list consists of a beginning, the list of commands, and an ending, all
             // terminated by newlines
             out = String::with_capacity(
                 COMMAND_LIST_BEGIN.len()
-                    + self.0.iter().fold(0, |acc, c| acc + c.len() + 1)
+                    + self.commands.iter().fold(0, |acc, c| acc + c.len() + 1)
                     + COMMAND_LIST_END.len(),
             );
 
             out.push_str(COMMAND_LIST_BEGIN);
 
-            for c in self.0 {
+            for c in self.commands {
                 out.push_str(&c);
                 out.push('\n');
             }
@@ -112,7 +114,45 @@ impl TryFrom<&str> for Command {
     fn try_from(c: &str) -> Result<Self, Self::Error> {
         let mut c = validate_single_command(c)?.to_owned();
         canonicalize_command(&mut c);
-        Ok(Self(vec![c]))
+
+        Ok(Self { commands: vec![c] })
+    }
+}
+
+impl TryFrom<&[&str]> for Command {
+    type Error = CommandError;
+
+    fn try_from(commands: &[&str]) -> Result<Self, Self::Error> {
+        if commands.is_empty() {
+            return Err(CommandError {
+                reason: InvalidCommandReason::Empty,
+                list_at: None,
+            });
+        }
+
+        let mut out = Vec::with_capacity(commands.len());
+
+        for (index, c) in commands.iter().enumerate() {
+            let mut c = validate_single_command(c)
+                .map_err(|mut e| {
+                    e.list_at = Some(index);
+                    e
+                })?
+                .to_owned();
+
+            canonicalize_command(&mut c);
+
+            if c.starts_with("command_list_") {
+                return Err(CommandError {
+                    reason: InvalidCommandReason::NestedCommandList,
+                    list_at: Some(index),
+                });
+            } else {
+                out.push(c.to_owned());
+            }
+        }
+
+        Ok(Self { commands: out })
     }
 }
 
@@ -169,7 +209,7 @@ impl Error for CommandError {}
 impl fmt::Display for CommandError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.reason {
-            InvalidCommandReason::Empty => write!(f, "Command was empty"),
+            InvalidCommandReason::Empty => write!(f, "Command or command list was empty"),
             InvalidCommandReason::InvalidCharacter(i, c) => write!(
                 f,
                 "Command contained an invalid character: {:?} at position {}",
@@ -180,7 +220,7 @@ impl fmt::Display for CommandError {
             }
             InvalidCommandReason::NestedCommandList => write!(
                 f,
-                "Command attempted to open a command list while already in one"
+                "Command attempted to open or close a command list while already in one"
             ),
         }?;
 

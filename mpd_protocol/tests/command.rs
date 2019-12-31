@@ -51,6 +51,38 @@ fn single() {
     assert_eq!(
         // this is OK because it's not nesting
         Command::new("command_list_ok_begin").render(),
-        "command_list_ok_begin\n",
+        "command_list_ok_begin\n"
+    );
+}
+
+#[test]
+fn command_list() {
+    assert_eq!(
+        Command::new(&["status", "hello world"][..]).render(),
+        "command_list_ok_begin\nstatus\nhello world\ncommand_list_end\n"
+    );
+
+    assert_eq!(
+        Command::try_from(&[][..]).unwrap_err(),
+        CommandError {
+            reason: InvalidCommandReason::Empty,
+            list_at: None,
+        }
+    );
+
+    assert_eq!(
+        Command::try_from(&["hello", ""][..]).unwrap_err(),
+        CommandError {
+            reason: InvalidCommandReason::Empty,
+            list_at: Some(1),
+        }
+    );
+
+    assert_eq!(
+        Command::try_from(&["hello", "command_list_begin", "mep mep"][..]).unwrap_err(),
+        CommandError {
+            reason: InvalidCommandReason::NestedCommandList,
+            list_at: Some(1),
+        }
     );
 }
