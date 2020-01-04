@@ -71,6 +71,63 @@ impl Command {
         c.try_into().expect("invalid command")
     }
 
+    /// Create a command from the given base command and a list of arguments.
+    ///
+    /// The arguments will be joined into a single command, and quoted and escaped if necessary.
+    ///
+    /// ```
+    /// use mpd_protocol::Command;
+    ///
+    /// assert_eq!(
+    ///     Command::from_parts("hello", &["foo", "bar baz", "Foo's Bar"][..]).unwrap().render(),
+    ///     "hello foo \"bar baz\" \"Foo\\'s Bar\"\n"
+    /// );
+    /// ```
+    pub fn from_parts(command: &str, arguments: &[&str]) -> Result<Self, CommandError> {
+        let mut command = command.to_owned();
+
+        for arg in arguments {
+            if arg.is_empty() {
+                continue;
+            }
+
+            let escape_chars = arg.chars().filter(|c| should_escape(*c)).count();
+            let need_quotes = match arg.chars().find(|c| *c == ' ') {
+                Some(_) => true,
+                None => false,
+            };
+
+            let mut additional = 1 + arg.len() + escape_chars;
+            if need_quotes {
+                additional += 2;
+            }
+
+            command.reserve(additional);
+            command.push(' ');
+
+            if need_quotes {
+                command.push('"');
+            }
+
+            if escape_chars == 0 {
+                command.push_str(arg);
+            } else {
+                escape_single_argument(&mut command, arg);
+            }
+
+            if need_quotes {
+                command.push('"');
+            }
+        }
+
+        // Validate command with arguments assembled
+        validate_single_command(&command)?;
+
+        Ok(Self {
+            commands: vec![command],
+        })
+    }
+
     /// Render the command to the wire representation. Commands are automatically wrapped in
     /// command lists if necessary.
     pub fn render(self) -> String {
@@ -154,6 +211,22 @@ impl TryFrom<&[&str]> for Command {
 
         Ok(Self { commands: out })
     }
+}
+
+/// Escape a single argument, prefixing necessary characters with backslashes
+fn escape_single_argument(buf: &mut String, argument: &str) {
+    for c in argument.chars() {
+        if should_escape(c) {
+            buf.push('\\');
+        }
+
+        buf.push(c);
+    }
+}
+
+/// If the given character needs to be escaped
+fn should_escape(c: char) -> bool {
+    c == '\\' || c == '"' || c == '\''
 }
 
 /// Validate that a single command string is well-formed

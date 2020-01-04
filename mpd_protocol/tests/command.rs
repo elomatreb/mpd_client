@@ -102,3 +102,33 @@ fn command_list() {
         }
     );
 }
+
+#[test]
+fn from_parts() {
+    assert_eq!(
+        Command::from_parts("hello", &[][..]).unwrap().render(),
+        "hello\n"
+    );
+
+    assert_eq!(
+        Command::from_parts("hello", &[r#"(foo == "foo\'s bar")"#, "foo"][..]).unwrap().render(),
+        r#"hello "(foo == \"foo\\\'s bar\")" foo
+"#
+    );
+
+    assert_eq!(
+        Command::from_parts("", &[][..]),
+        Err(CommandError {
+            reason: InvalidCommandReason::Empty,
+            list_at: None,
+        })
+    );
+
+    assert_eq!(
+        Command::from_parts("hello", &["mep\nmep"][..]),
+        Err(CommandError {
+            reason: InvalidCommandReason::InvalidCharacter(9, '\n'),
+            list_at: None,
+        })
+    );
+}
