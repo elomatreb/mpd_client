@@ -175,10 +175,25 @@ fn validate_single_command(command: &str) -> Result<&str, CommandError> {
         });
     }
 
-    if let Some((index, c)) = command
-        .char_indices()
-        .find(|(_, c)| !(is_valid_command_char(*c) || (c.is_whitespace() && *c != '\n')))
-    {
+    let mut in_command_part = true;
+    if let Some((index, c)) = command.char_indices().find(|(index, c)| {
+        if in_command_part {
+            if is_valid_command_char(*c) {
+                false
+            } else {
+                // The "command" part of the command string is terminated with a space
+                if *index != 0 && *c == ' ' {
+                    in_command_part = false;
+                    false
+                } else {
+                    true
+                }
+            }
+        } else {
+            // The argument part of a command can contain anything except a newline
+            *c == '\n'
+        }
+    }) {
         return Err(CommandError {
             reason: InvalidCommandReason::InvalidCharacter(index, c),
             list_at: None,

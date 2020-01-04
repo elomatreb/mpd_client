@@ -6,15 +6,9 @@ use mpd_protocol::command::{Command, CommandError, InvalidCommandReason};
 fn single() {
     assert_eq!(Command::try_from("status").unwrap().render(), "status\n");
 
-    assert_eq!(
-        Command::new("HELLO WORLD").render(),
-        "hello WORLD\n"
-    );
+    assert_eq!(Command::new("HELLO WORLD").render(), "hello WORLD\n");
 
-    assert_eq!(
-        Command::new("hello_world").render(),
-        "hello_world\n"
-    );
+    assert_eq!(Command::new("hello_world").render(), "hello_world\n");
 
     assert_eq!(
         Command::try_from("").unwrap_err(),
@@ -52,6 +46,13 @@ fn single() {
         // this is OK because it's not nesting
         Command::new("command_list_ok_begin").render(),
         "command_list_ok_begin\n"
+    );
+
+    assert_eq!(
+        Command::new(r#"find "(Artist == \"foo\\'bar\\\"\")""#).render(),
+        // The weird indentation below is because you can't use \n in a raw string literal
+        r#"find "(Artist == \"foo\\'bar\\\"\")"
+"#
     );
 }
 
