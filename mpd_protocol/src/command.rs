@@ -166,8 +166,8 @@ fn validate_single_command(command: &str) -> Result<&str, CommandError> {
     }
 
     // If either the first or last character are whitespace we have leading or trailing whitespace
-    if command.chars().nth(0).unwrap().is_whitespace()
-        || command.chars().last().unwrap().is_whitespace()
+    if command.chars().nth(0).unwrap().is_ascii_whitespace()
+        || command.chars().last().unwrap().is_ascii_whitespace()
     {
         return Err(CommandError {
             reason: InvalidCommandReason::UnncessaryWhitespace,
@@ -216,7 +216,7 @@ fn canonicalize_command(command: &mut str) {
 
 /// Commands can consist of alphabetic chars and underscores
 fn is_valid_command_char(c: char) -> bool {
-    c.is_alphabetic() || c == '_'
+    c.is_ascii_alphabetic() || c == '_'
 }
 
 impl Error for CommandError {}

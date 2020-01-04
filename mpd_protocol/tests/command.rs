@@ -54,6 +54,21 @@ fn single() {
         r#"find "(Artist == \"foo\\'bar\\\"\")"
 "#
     );
+
+    // Unicode is not allowed in the command part
+    assert_eq!(
+        Command::try_from("stätus").unwrap_err(),
+        CommandError {
+            reason: InvalidCommandReason::InvalidCharacter(2, 'ä'),
+            list_at: None,
+        }
+    );
+
+    // ... but in the arguments it is
+    assert_eq!(
+        Command::new("hello wörld").render(),
+        "hello wörld\n"
+    );
 }
 
 #[test]
