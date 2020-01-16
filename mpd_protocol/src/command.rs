@@ -1,5 +1,6 @@
 //! This module contains utilities for constructing MPD commands.
 
+use std::borrow::Cow;
 use std::convert::{TryFrom, TryInto};
 use std::error::Error;
 use std::fmt::{self, Debug};
@@ -91,31 +92,19 @@ impl Command {
                 continue;
             }
 
-            let escape_chars = arg.chars().filter(|c| should_escape(*c)).count();
-            let need_quotes = match arg.chars().find(|c| *c == ' ') {
-                Some(_) => true,
-                None => false,
-            };
+            let escaped = escape_argument(arg);
+            let needs_quotes = escaped.chars().any(|c| c == ' ');
 
-            let mut additional = 1 + arg.len() + escape_chars;
-            if need_quotes {
-                additional += 2;
-            }
-
-            command.reserve(additional);
+            command.reserve(1 + escaped.len() + if needs_quotes { 2 } else { 0 });
             command.push(' ');
 
-            if need_quotes {
+            if needs_quotes {
                 command.push('"');
             }
 
-            if escape_chars == 0 {
-                command.push_str(arg);
-            } else {
-                escape_single_argument(&mut command, arg);
-            }
+            command.push_str(&escaped);
 
-            if need_quotes {
+            if needs_quotes {
                 command.push('"');
             }
         }
@@ -214,14 +203,25 @@ impl TryFrom<&[&str]> for Command {
 }
 
 /// Escape a single argument, prefixing necessary characters with backslashes
-fn escape_single_argument(buf: &mut String, argument: &str) {
+fn escape_argument(argument: &str) -> Cow<'_, str> {
+    let escape_count = argument.chars().filter(|c| should_escape(*c)).count();
+
+    if escape_count == 0 {
+        // The argument does not need to be quoted or escaped, return back an unmodified reference
+        return Cow::Borrowed(argument);
+    }
+
+    let mut out = String::with_capacity(argument.len() + escape_count);
+
     for c in argument.chars() {
         if should_escape(c) {
-            buf.push('\\');
+            out.push('\\');
         }
 
-        buf.push(c);
+        out.push(c);
     }
+
+    Cow::Owned(out)
 }
 
 /// If the given character needs to be escaped
