@@ -202,8 +202,17 @@ impl TryFrom<&[&str]> for Command {
     }
 }
 
-/// Escape a single argument, prefixing necessary characters with backslashes
-fn escape_argument(argument: &str) -> Cow<'_, str> {
+/// Escape a single argument, prefixing necessary characters (quotes and backslashes) with
+/// backslashes.
+///
+/// Returns a borrowed `Cow` if the argument did not require escaping.
+///
+/// ```
+/// use mpd_protocol::command::escape_argument;
+///
+/// assert_eq!(escape_argument("foo'bar\""), "foo\\'bar\\\"");
+/// ```
+pub fn escape_argument(argument: &str) -> Cow<'_, str> {
     let escape_count = argument.chars().filter(|c| should_escape(*c)).count();
 
     if escape_count == 0 {
