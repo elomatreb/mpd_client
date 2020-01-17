@@ -73,7 +73,7 @@ fn decoder_command_list() {
     assert_eq!(
         Some(Response::new(
             vec![
-                Frame::default(),
+                Frame::empty(),
                 Frame {
                     values: vec![(String::from("foo"), String::from("bar"))],
                     binary: None,
