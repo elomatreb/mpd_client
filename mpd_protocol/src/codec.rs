@@ -14,8 +14,8 @@ use std::error::Error;
 use std::fmt;
 use std::io;
 
-use crate::parser;
 use crate::command::Command;
+use crate::parser;
 use crate::response::{Error as ResponseError, Frame, Response};
 
 /// [Codec](https://docs.rs/tokio-util/0.2.0/tokio_util/codec/index.html) for MPD protocol.

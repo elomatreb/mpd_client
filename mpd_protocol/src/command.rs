@@ -84,10 +84,18 @@ impl Command {
     ///     "hello foo \"bar baz\" \"Foo\\'s Bar\"\n"
     /// );
     /// ```
-    pub fn from_parts(command: &str, arguments: &[&str]) -> Result<Self, CommandError> {
+    pub fn from_parts<T>(
+        command: &str,
+        arguments: impl IntoIterator<Item = T>,
+    ) -> Result<Self, CommandError>
+    where
+        T: AsRef<str>,
+    {
         let mut command = command.to_owned();
 
-        for arg in arguments {
+        for arg in arguments.into_iter() {
+            let arg = arg.as_ref();
+
             if arg.is_empty() {
                 continue;
             }

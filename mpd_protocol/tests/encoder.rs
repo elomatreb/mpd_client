@@ -1,8 +1,8 @@
 use bytes::BytesMut;
 use tokio_util::codec::Encoder;
 
-use mpd_protocol::MpdCodec;
 use mpd_protocol::Command;
+use mpd_protocol::MpdCodec;
 
 #[test]
 fn encoder() {

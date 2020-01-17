@@ -65,10 +65,7 @@ fn single() {
     );
 
     // ... but in the arguments it is
-    assert_eq!(
-        Command::new("hello wörld").render(),
-        "hello wörld\n"
-    );
+    assert_eq!(Command::new("hello wörld").render(), "hello wörld\n");
 }
 
 #[test]
@@ -105,19 +102,22 @@ fn command_list() {
 
 #[test]
 fn from_parts() {
+    let empty: &[&str] = &[];
     assert_eq!(
-        Command::from_parts("hello", &[][..]).unwrap().render(),
+        Command::from_parts("hello", empty).unwrap().render(),
         "hello\n"
     );
 
     assert_eq!(
-        Command::from_parts("hello", &[r#"(foo == "foo\'s bar")"#, "foo"][..]).unwrap().render(),
+        Command::from_parts("hello", &[r#"(foo == "foo\'s bar")"#, "foo"][..])
+            .unwrap()
+            .render(),
         r#"hello "(foo == \"foo\\\'s bar\")" foo
 "#
     );
 
     assert_eq!(
-        Command::from_parts("", &[][..]),
+        Command::from_parts("", empty),
         Err(CommandError {
             reason: InvalidCommandReason::Empty,
             list_at: None,
