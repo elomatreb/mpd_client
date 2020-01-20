@@ -144,7 +144,11 @@ impl CommandBuilder {
                     if is_command_list_command(&c) {
                         return Err(CommandError {
                             reason: InvalidCommandReason::CommandList,
-                            list_at: if is_list { Some(command_index - 1) } else { None },
+                            list_at: if is_list {
+                                Some(command_index - 1)
+                            } else {
+                                None
+                            },
                         });
                     }
 

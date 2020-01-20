@@ -6,9 +6,15 @@ use mpd_protocol::command::{Command, CommandError, InvalidCommandReason};
 fn try_from() {
     assert_eq!(Command::try_from("status").unwrap().render(), "status\n");
 
-    assert_eq!(Command::try_from("HELLO WORLD").unwrap().render(), "hello WORLD\n");
+    assert_eq!(
+        Command::try_from("HELLO WORLD").unwrap().render(),
+        "hello WORLD\n"
+    );
 
-    assert_eq!(Command::try_from("hello_world").unwrap().render(), "hello_world\n");
+    assert_eq!(
+        Command::try_from("hello_world").unwrap().render(),
+        "hello_world\n"
+    );
 
     assert_eq!(
         Command::try_from("").unwrap_err(),
@@ -43,7 +49,9 @@ fn try_from() {
     );
 
     assert_eq!(
-        Command::try_from(r#"find "(Artist == \"foo\\'bar\\\"\")""#).unwrap().render(),
+        Command::try_from(r#"find "(Artist == \"foo\\'bar\\\"\")""#)
+            .unwrap()
+            .render(),
         // The weird indentation below is because you can't use \n in a raw string literal
         r#"find "(Artist == \"foo\\'bar\\\"\")"
 "#
@@ -59,15 +67,15 @@ fn try_from() {
     );
 
     // ... but in the arguments it is
-    assert_eq!(Command::try_from("hello wörld").unwrap().render(), "hello wörld\n");
+    assert_eq!(
+        Command::try_from("hello wörld").unwrap().render(),
+        "hello wörld\n"
+    );
 }
 
 #[test]
 fn builder() {
-    assert_eq!(
-        Command::build("status").unwrap().render(),
-        "status\n"
-    );
+    assert_eq!(Command::build("status").unwrap().render(), "status\n");
 
     assert_eq!(
         Command::build("pause").argument("1").unwrap().render(),
@@ -75,17 +83,26 @@ fn builder() {
     );
 
     assert_eq!(
-        Command::build("hello").argument("foo bar").unwrap().render(),
+        Command::build("hello")
+            .argument("foo bar")
+            .unwrap()
+            .render(),
         "hello \"foo bar\"\n"
     );
 
     assert_eq!(
-        Command::build("hello").argument("foo's bar\"").unwrap().render(),
+        Command::build("hello")
+            .argument("foo's bar\"")
+            .unwrap()
+            .render(),
         "hello \"foo\\'s bar\\\"\"\n"
     );
 
     assert_eq!(
-        Command::build("status").command("currentsong").unwrap().render(),
+        Command::build("status")
+            .command("currentsong")
+            .unwrap()
+            .render(),
         "command_list_ok_begin\nstatus\ncurrentsong\ncommand_list_end\n"
     );
 
@@ -98,7 +115,10 @@ fn builder() {
     );
 
     assert_eq!(
-        Command::build("status").command(" currentsong").finish().unwrap_err(),
+        Command::build("status")
+            .command(" currentsong")
+            .finish()
+            .unwrap_err(),
         CommandError {
             reason: InvalidCommandReason::UnncessaryWhitespace,
             list_at: Some(1),
