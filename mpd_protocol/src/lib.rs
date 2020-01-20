@@ -5,6 +5,7 @@
     unreachable_pub
 )]
 #![deny(intra_doc_link_resolution_failure)]
+#![forbid(unsafe_code)]
 
 //! Implementation of the client protocol for [MPD](https://musicpd.org). Supports binary responses
 //! and command lists, provided they are initiated with the `command_list_ok_begin` command.

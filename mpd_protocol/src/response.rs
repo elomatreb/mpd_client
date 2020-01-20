@@ -40,6 +40,7 @@ pub struct Error {
     pub message: String,
 }
 
+#[allow(clippy::len_without_is_empty)]
 impl Response {
     /// Construct a new response.
     ///
