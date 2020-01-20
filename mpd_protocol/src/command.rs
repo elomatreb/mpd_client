@@ -25,7 +25,7 @@ static COMMAND_LIST_END: &str = "command_list_end\n";
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Command(Vec<String>);
 
-/// Builder for `Command`s.
+/// Builder for [`Command`](struct.Command.html)s.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct CommandBuilder(Vec<CommandPart>, bool);
 
@@ -35,7 +35,7 @@ enum CommandPart {
     Argument(String),
 }
 
-/// The command was invalid.
+/// Error returned when attempting to construct an invalid command.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct CommandError {
     /// Reason the command was invalid.
@@ -49,9 +49,11 @@ pub struct CommandError {
 pub enum InvalidCommandReason {
     /// The command was empty (either an empty command or an empty list commands).
     Empty,
-    /// The command string
+    /// The command string contained an invalid character at the contained position. This is
+    /// context-dependent, as some characters are only invalid in certain sections of a command.
     InvalidCharacter(usize, char),
-    /// The contained trailing or leading whitespace (whitespace in the middle of commands is used to separate arguments).
+    /// The element contained trailing or leading whitespace (whitespace in the middle of commands
+    /// is used to separate arguments).
     UnncessaryWhitespace,
     /// Attempted to start or close a command list without using the provided methods.
     CommandList,
@@ -97,6 +99,10 @@ impl Command {
 
 impl CommandBuilder {
     /// Add an argument to the last command.
+    ///
+    /// The argument is automatically escaped and quoted if necessary, but you if you want to
+    /// include nested data containing special characters (e.g. filter expressions), you may need
+    /// to pre-escape them using [`escape_argument`](fn.escape_argument.html).
     pub fn argument(mut self, argument: impl Into<String>) -> Self {
         self.0.push(CommandPart::Argument(argument.into()));
         self
