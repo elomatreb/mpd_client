@@ -9,7 +9,7 @@ fn encoder() {
     let mut codec = MpdCodec::new();
     let buf = &mut BytesMut::new();
 
-    let command = Command::new("status");
+    let command = Command::build("status").unwrap();
 
     codec.encode(command.clone(), buf).unwrap();
 

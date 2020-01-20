@@ -3,12 +3,12 @@ use std::convert::TryFrom;
 use mpd_protocol::command::{Command, CommandError, InvalidCommandReason};
 
 #[test]
-fn single() {
+fn try_from() {
     assert_eq!(Command::try_from("status").unwrap().render(), "status\n");
 
-    assert_eq!(Command::new("HELLO WORLD").render(), "hello WORLD\n");
+    assert_eq!(Command::try_from("HELLO WORLD").unwrap().render(), "hello WORLD\n");
 
-    assert_eq!(Command::new("hello_world").render(), "hello_world\n");
+    assert_eq!(Command::try_from("hello_world").unwrap().render(), "hello_world\n");
 
     assert_eq!(
         Command::try_from("").unwrap_err(),
@@ -43,13 +43,7 @@ fn single() {
     );
 
     assert_eq!(
-        // this is OK because it's not nesting
-        Command::new("command_list_ok_begin").render(),
-        "command_list_ok_begin\n"
-    );
-
-    assert_eq!(
-        Command::new(r#"find "(Artist == \"foo\\'bar\\\"\")""#).render(),
+        Command::try_from(r#"find "(Artist == \"foo\\'bar\\\"\")""#).unwrap().render(),
         // The weird indentation below is because you can't use \n in a raw string literal
         r#"find "(Artist == \"foo\\'bar\\\"\")"
 "#
@@ -65,70 +59,49 @@ fn single() {
     );
 
     // ... but in the arguments it is
-    assert_eq!(Command::new("hello wörld").render(), "hello wörld\n");
+    assert_eq!(Command::try_from("hello wörld").unwrap().render(), "hello wörld\n");
 }
 
 #[test]
-fn command_list() {
+fn builder() {
     assert_eq!(
-        Command::new(&["status", "hello world"][..]).render(),
-        "command_list_ok_begin\nstatus\nhello world\ncommand_list_end\n"
+        Command::build("status").unwrap().render(),
+        "status\n"
     );
 
     assert_eq!(
-        Command::try_from(&[][..]).unwrap_err(),
+        Command::build("pause").argument("1").unwrap().render(),
+        "pause 1\n"
+    );
+
+    assert_eq!(
+        Command::build("hello").argument("foo bar").unwrap().render(),
+        "hello \"foo bar\"\n"
+    );
+
+    assert_eq!(
+        Command::build("hello").argument("foo's bar\"").unwrap().render(),
+        "hello \"foo\\'s bar\\\"\"\n"
+    );
+
+    assert_eq!(
+        Command::build("status").command("currentsong").unwrap().render(),
+        "command_list_ok_begin\nstatus\ncurrentsong\ncommand_list_end\n"
+    );
+
+    assert_eq!(
+        Command::build(" hello").finish().unwrap_err(),
         CommandError {
-            reason: InvalidCommandReason::Empty,
+            reason: InvalidCommandReason::UnncessaryWhitespace,
             list_at: None,
         }
     );
 
     assert_eq!(
-        Command::try_from(&["hello", ""][..]).unwrap_err(),
+        Command::build("status").command(" currentsong").finish().unwrap_err(),
         CommandError {
-            reason: InvalidCommandReason::Empty,
+            reason: InvalidCommandReason::UnncessaryWhitespace,
             list_at: Some(1),
         }
-    );
-
-    assert_eq!(
-        Command::try_from(&["hello", "command_list_begin", "mep mep"][..]).unwrap_err(),
-        CommandError {
-            reason: InvalidCommandReason::NestedCommandList,
-            list_at: Some(1),
-        }
-    );
-}
-
-#[test]
-fn from_parts() {
-    let empty: &[&str] = &[];
-    assert_eq!(
-        Command::from_parts("hello", empty).unwrap().render(),
-        "hello\n"
-    );
-
-    assert_eq!(
-        Command::from_parts("hello", &[r#"(foo == "foo\'s bar")"#, "foo"][..])
-            .unwrap()
-            .render(),
-        r#"hello "(foo == \"foo\\\'s bar\")" foo
-"#
-    );
-
-    assert_eq!(
-        Command::from_parts("", empty),
-        Err(CommandError {
-            reason: InvalidCommandReason::Empty,
-            list_at: None,
-        })
-    );
-
-    assert_eq!(
-        Command::from_parts("hello", &["mep\nmep"][..]),
-        Err(CommandError {
-            reason: InvalidCommandReason::InvalidCharacter(9, '\n'),
-            list_at: None,
-        })
     );
 }
