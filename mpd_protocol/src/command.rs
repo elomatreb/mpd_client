@@ -104,15 +104,29 @@ impl CommandBuilder {
     /// include nested data containing special characters (e.g. filter expressions), you may need
     /// to pre-escape them using [`escape_argument`](fn.escape_argument.html).
     pub fn argument(mut self, argument: impl Into<String>) -> Self {
-        self.0.push(CommandPart::Argument(argument.into()));
+        self.add_argument(argument);
         self
     }
 
     /// Add another command, starting a command list.
     pub fn command(mut self, command: impl Into<String>) -> Self {
+        self.add_command(command);
+        self
+    }
+
+    /// Add an argument to the last command.
+    ///
+    /// Like [`argument`](#method.argument), but doesn't take `self` so it can be called in a loop.
+    pub fn add_argument(&mut self, argument: impl Into<String>) {
+        self.0.push(CommandPart::Argument(argument.into()));
+    }
+
+    /// Add another command, starting a command list.
+    ///
+    /// Like [`command`](#method.command), but doesn't take `self` so it can be called in a loop.
+    pub fn add_command(&mut self, command: impl Into<String>) {
         self.0.push(CommandPart::Command(command.into()));
         self.1 = true;
-        self
     }
 
     /// Complete the command, validating all entered components.
