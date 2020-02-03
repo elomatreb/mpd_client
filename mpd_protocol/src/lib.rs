@@ -17,10 +17,12 @@
 
 pub mod codec;
 pub mod command;
+pub mod filter;
 pub mod parser;
 pub mod response;
 
 pub use codec::{MpdCodec, MpdCodecError};
 pub use command::Command;
+pub use filter::Filter;
 pub use parser::{greeting as parse_greeting, response as parse_response};
 pub use response::Response;
