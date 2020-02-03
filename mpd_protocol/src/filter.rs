@@ -61,6 +61,19 @@ impl Filter {
     ///
     /// An error is returned when the given `tag` is empty, but `value` may be empty (which results
     /// in the filter only matching if the `tag` is **not** present).
+    ///
+    /// ```
+    /// use mpd_protocol::filter::{FilterError, Filter, Operator};
+    ///
+    /// assert_eq!(
+    ///     Filter::tag_checked("artist", Operator::Equal, "foo\'s bar\"").unwrap().render(),
+    ///     "(artist == \"foo\\\'s bar\\\"\")"
+    /// );
+    /// assert_eq!(
+    ///     Filter::tag_checked("", Operator::Equal, "").unwrap_err(),
+    ///     FilterError::EmptyTag
+    /// );
+    /// ```
     pub fn tag_checked(
         tag: impl Into<String>,
         operator: Operator,
@@ -82,6 +95,15 @@ impl Filter {
     ///
     /// Similar to [`tag_checked`](#method.tag_checked), but always checks for equality and panics
     /// when invalid.
+    ///
+    /// ```
+    /// use mpd_protocol::Filter;
+    ///
+    /// assert_eq!(
+    ///     Filter::tag("artist", "hello world").render(),
+    ///     "(artist == \"hello world\")"
+    /// );
+    /// ```
     pub fn tag(tag: impl Into<String>, value: impl Into<String>) -> Self {
         Filter::tag_checked(tag, Operator::Equal, value).expect("Invalid filter expression")
     }
@@ -89,11 +111,29 @@ impl Filter {
     /// Negate the given filter.
     ///
     /// Like [`negate`](#method.negate), but can be used at the start of constructing a filter.
+    ///
+    /// ```
+    /// use mpd_protocol::Filter;
+    ///
+    /// assert_eq!(
+    ///     Filter::not(Filter::tag("artist", "foo")),
+    ///     Filter::tag("artist", "foo").negate()
+    /// );
+    /// ```
     pub fn not(other: Self) -> Self {
         other.negate()
     }
 
     /// Negate the filter.
+    ///
+    /// ```
+    /// use mpd_protocol::Filter;
+    ///
+    /// assert_eq!(
+    ///     Filter::tag("artist", "hello").negate().render(),
+    ///     "(!(artist == \"hello\"))"
+    /// );
+    /// ```
     pub fn negate(mut self) -> Self {
         self.0 = FilterType::Not(Box::new(self.0));
         self
@@ -102,6 +142,15 @@ impl Filter {
     /// Chain the given filter onto this one with an `AND`.
     ///
     /// Automatically flattens nested `AND` conditions.
+    ///
+    /// ```
+    /// use mpd_protocol::Filter;
+    ///
+    /// assert_eq!(
+    ///     Filter::tag("artist", "foo").and(Filter::tag("album", "bar")).render(),
+    ///     "((artist == \"foo\") AND (album == \"bar\"))"
+    /// );
+    /// ```
     pub fn and(self, other: Self) -> Self {
         let mut out = match self.0 {
             FilterType::And(inner) => inner,
