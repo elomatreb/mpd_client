@@ -61,7 +61,7 @@ impl Filter {
     ///
     /// An error is returned when the given `tag` is empty, but `value` may be empty (which results
     /// in the filter only matching if the `tag` is **not** present).
-    pub fn tag(
+    pub fn tag_checked(
         tag: impl Into<String>,
         operator: Operator,
         value: impl Into<String>,
@@ -76,6 +76,14 @@ impl Filter {
                 value: value.into(),
             }))
         }
+    }
+
+    /// Create a filter which checks where the given `tag` is equal to the given `value`.
+    ///
+    /// Similar to [`tag_checked`](#method.tag_checked), but always checks for equality and panics
+    /// when invalid.
+    pub fn tag(tag: impl Into<String>, value: impl Into<String>) -> Self {
+        Filter::tag_checked(tag, Operator::Equal, value).expect("Invalid filter expression")
     }
 
     /// Negate the given filter.
@@ -189,8 +197,7 @@ mod tests {
     #[test]
     fn filter_simple_equal() {
         assert_eq!(
-            Filter::tag("artist", Operator::Equal, "foo\'s bar\"")
-                .unwrap()
+            Filter::tag("artist", "foo\'s bar\"")
                 .render(),
             "(artist == \"foo\\\'s bar\\\"\")"
         );
@@ -199,7 +206,7 @@ mod tests {
     #[test]
     fn filter_other_operator() {
         assert_eq!(
-            Filter::tag("artist", Operator::Contain, "mep mep")
+            Filter::tag_checked("artist", Operator::Contain, "mep mep")
                 .unwrap()
                 .render(),
             "(artist contains \"mep mep\")"
@@ -209,7 +216,7 @@ mod tests {
     #[test]
     fn filter_empty_value() {
         assert_eq!(
-            Filter::tag("", Operator::Equal, "mep mep").unwrap_err(),
+            Filter::tag_checked("", Operator::Equal, "mep mep").unwrap_err(),
             FilterError::EmptyTag,
         );
     }
@@ -217,8 +224,7 @@ mod tests {
     #[test]
     fn filter_not() {
         assert_eq!(
-            Filter::tag("artist", Operator::Equal, "hello")
-                .unwrap()
+            Filter::tag("artist", "hello")
                 .negate()
                 .render(),
             "(!(artist == \"hello\"))"
@@ -227,8 +233,8 @@ mod tests {
 
     #[test]
     fn filter_and() {
-        let first = Filter::tag("artist", Operator::Equal, "hello").unwrap();
-        let second = Filter::tag("album", Operator::Equal, "world").unwrap();
+        let first = Filter::tag("artist", "hello");
+        let second = Filter::tag("album", "world");
 
         assert_eq!(
             first.and(second).render(),
@@ -238,9 +244,9 @@ mod tests {
 
     #[test]
     fn filter_and_multiple() {
-        let first = Filter::tag("artist", Operator::Equal, "hello").unwrap();
-        let second = Filter::tag("album", Operator::Equal, "world").unwrap();
-        let third = Filter::tag("title", Operator::Equal, "foo").unwrap();
+        let first = Filter::tag("artist", "hello");
+        let second = Filter::tag("album", "world");
+        let third = Filter::tag("title", "foo");
 
         assert_eq!(
             first.and(second).and(third).render(),
