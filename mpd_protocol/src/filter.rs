@@ -120,6 +120,7 @@ impl Filter {
     ///     Filter::tag("artist", "foo").negate()
     /// );
     /// ```
+    #[allow(clippy::should_implement_trait)]
     pub fn not(other: Self) -> Self {
         other.negate()
     }
@@ -180,7 +181,7 @@ impl Filter {
 }
 
 impl Operator {
-    fn to_str(&self) -> &'static str {
+    fn to_str(self) -> &'static str {
         match self {
             Operator::Equal => "==",
             Operator::NotEqual => "!=",
@@ -246,8 +247,7 @@ mod tests {
     #[test]
     fn filter_simple_equal() {
         assert_eq!(
-            Filter::tag("artist", "foo\'s bar\"")
-                .render(),
+            Filter::tag("artist", "foo\'s bar\"").render(),
             "(artist == \"foo\\\'s bar\\\"\")"
         );
     }
@@ -273,9 +273,7 @@ mod tests {
     #[test]
     fn filter_not() {
         assert_eq!(
-            Filter::tag("artist", "hello")
-                .negate()
-                .render(),
+            Filter::tag("artist", "hello").negate().render(),
             "(!(artist == \"hello\"))"
         );
     }
