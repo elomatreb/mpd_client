@@ -7,7 +7,7 @@ use std::fmt;
 
 use crate::command::escape_argument;
 
-/// A filter expression.
+/// A [filter expression](https://www.musicpd.org/doc/html/protocol.html#filters).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Filter(FilterType);
 

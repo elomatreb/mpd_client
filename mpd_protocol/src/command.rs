@@ -5,6 +5,8 @@ use std::convert::TryFrom;
 use std::error::Error;
 use std::fmt::{self, Debug};
 
+use crate::filter::Filter;
+
 /// Start a command list, separated with list terminators. Our parser can't separate messages when
 /// the form of command list without terminators is used.
 static COMMAND_LIST_BEGIN: &str = "command_list_ok_begin\n";
@@ -114,11 +116,24 @@ impl CommandBuilder {
         self
     }
 
+    /// Add a filter expression as an argument to the last command.
+    pub fn filter(mut self, filter: Filter) -> Self {
+        self.add_filter(filter);
+        self
+    }
+
     /// Add an argument to the last command.
     ///
     /// Like [`argument`](#method.argument), but doesn't take `self` so it can be called in a loop.
     pub fn add_argument(&mut self, argument: impl Into<String>) {
         self.0.push(CommandPart::Argument(argument.into()));
+    }
+
+    /// Add a filter expresion as an argument to the last command.
+    ///
+    /// Like [`filter`](#method.filter), but doesn't take `self` so it can be called in a a loop.
+    pub fn add_filter(&mut self, filter: Filter) {
+        self.0.push(CommandPart::Argument(filter.render()));
     }
 
     /// Add another command, starting a command list.

@@ -1,6 +1,7 @@
 use std::convert::TryFrom;
 
 use mpd_protocol::command::{Command, CommandError, InvalidCommandReason};
+use mpd_protocol::Filter;
 
 #[test]
 fn try_from() {
@@ -123,5 +124,16 @@ fn builder() {
             reason: InvalidCommandReason::UnncessaryWhitespace,
             list_at: Some(1),
         }
+    );
+}
+
+#[test]
+fn filter() {
+    assert_eq!(
+        Command::build("find")
+            .filter(Filter::tag("album", "hello world"))
+            .unwrap()
+            .render(),
+        "find \"(album == \\\"hello world\\\")\"\n"
     );
 }
