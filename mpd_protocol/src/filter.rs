@@ -79,15 +79,15 @@ impl Filter {
     /// use mpd_protocol::filter::{FilterError, Filter, Operator};
     ///
     /// assert_eq!(
-    ///     Filter::tag_checked("artist", Operator::Equal, "foo\'s bar\"").unwrap().render(),
+    ///     Filter::tag("artist", Operator::Equal, "foo\'s bar\"").unwrap().render(),
     ///     "(artist == \"foo\\\'s bar\\\"\")"
     /// );
     /// assert_eq!(
-    ///     Filter::tag_checked("", Operator::Equal, "").unwrap_err(),
+    ///     Filter::tag("", Operator::Equal, "").unwrap_err(),
     ///     FilterError::EmptyTag
     /// );
     /// ```
-    pub fn tag_checked(
+    pub fn tag(
         tag: impl Into<String>,
         operator: Operator,
         value: impl Into<String>,
@@ -106,19 +106,19 @@ impl Filter {
 
     /// Create a filter which checks where the given `tag` is equal to the given `value`.
     ///
-    /// Similar to [`tag_checked`](#method.tag_checked), but always checks for equality and panics
-    /// when invalid.
+    /// Similar to [`tag`](#method.tag), but always checks for equality and panics when the given
+    /// `tag` is invalid.
     ///
     /// ```
     /// use mpd_protocol::Filter;
     ///
     /// assert_eq!(
-    ///     Filter::tag("artist", "hello world").render(),
+    ///     Filter::equal("artist", "hello world").render(),
     ///     "(artist == \"hello world\")"
     /// );
     /// ```
-    pub fn tag(tag: impl Into<String>, value: impl Into<String>) -> Self {
-        Filter::tag_checked(tag, Operator::Equal, value).expect("Invalid filter expression")
+    pub fn equal(tag: impl Into<String>, value: impl Into<String>) -> Self {
+        Filter::tag(tag, Operator::Equal, value).expect("Invalid filter expression")
     }
 
     /// Negate the given filter.
@@ -129,8 +129,8 @@ impl Filter {
     /// use mpd_protocol::Filter;
     ///
     /// assert_eq!(
-    ///     Filter::not(Filter::tag("artist", "foo")),
-    ///     Filter::tag("artist", "foo").negate()
+    ///     Filter::not(Filter::equal("artist", "foo")),
+    ///     Filter::equal("artist", "foo").negate()
     /// );
     /// ```
     #[allow(clippy::should_implement_trait)]
@@ -144,7 +144,7 @@ impl Filter {
     /// use mpd_protocol::Filter;
     ///
     /// assert_eq!(
-    ///     Filter::tag("artist", "hello").negate().render(),
+    ///     Filter::equal("artist", "hello").negate().render(),
     ///     "(!(artist == \"hello\"))"
     /// );
     /// ```
@@ -161,7 +161,7 @@ impl Filter {
     /// use mpd_protocol::Filter;
     ///
     /// assert_eq!(
-    ///     Filter::tag("artist", "foo").and(Filter::tag("album", "bar")).render(),
+    ///     Filter::equal("artist", "foo").and(Filter::equal("album", "bar")).render(),
     ///     "((artist == \"foo\") AND (album == \"bar\"))"
     /// );
     /// ```
@@ -260,7 +260,7 @@ mod tests {
     #[test]
     fn filter_simple_equal() {
         assert_eq!(
-            Filter::tag("artist", "foo\'s bar\"").render(),
+            Filter::equal("artist", "foo\'s bar\"").render(),
             "(artist == \"foo\\\'s bar\\\"\")"
         );
     }
@@ -268,7 +268,7 @@ mod tests {
     #[test]
     fn filter_other_operator() {
         assert_eq!(
-            Filter::tag_checked("artist", Operator::Contain, "mep mep")
+            Filter::tag("artist", Operator::Contain, "mep mep")
                 .unwrap()
                 .render(),
             "(artist contains \"mep mep\")"
@@ -278,7 +278,7 @@ mod tests {
     #[test]
     fn filter_empty_value() {
         assert_eq!(
-            Filter::tag_checked("", Operator::Equal, "mep mep").unwrap_err(),
+            Filter::tag("", Operator::Equal, "mep mep").unwrap_err(),
             FilterError::EmptyTag,
         );
     }
@@ -286,15 +286,15 @@ mod tests {
     #[test]
     fn filter_not() {
         assert_eq!(
-            Filter::tag("artist", "hello").negate().render(),
+            Filter::equal("artist", "hello").negate().render(),
             "(!(artist == \"hello\"))"
         );
     }
 
     #[test]
     fn filter_and() {
-        let first = Filter::tag("artist", "hello");
-        let second = Filter::tag("album", "world");
+        let first = Filter::equal("artist", "hello");
+        let second = Filter::equal("album", "world");
 
         assert_eq!(
             first.and(second).render(),
@@ -304,9 +304,9 @@ mod tests {
 
     #[test]
     fn filter_and_multiple() {
-        let first = Filter::tag("artist", "hello");
-        let second = Filter::tag("album", "world");
-        let third = Filter::tag("title", "foo");
+        let first = Filter::equal("artist", "hello");
+        let second = Filter::equal("album", "world");
+        let third = Filter::equal("title", "foo");
 
         assert_eq!(
             first.and(second).and(third).render(),

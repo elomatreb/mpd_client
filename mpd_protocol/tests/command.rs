@@ -131,7 +131,7 @@ fn builder() {
 fn filter() {
     assert_eq!(
         Command::build("find")
-            .filter(Filter::tag("album", "hello world"))
+            .filter(Filter::equal("album", "hello world"))
             .unwrap()
             .render(),
         "find \"(album == \\\"hello world\\\")\"\n"
