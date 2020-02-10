@@ -7,6 +7,16 @@ use std::fmt;
 
 use crate::command::escape_argument;
 
+/// Special tag which checks *all* tag types.
+///
+/// Provided here to avoid typos.
+pub static ANY: &str = "any";
+
+/// Magic value which checks for the absence of the tag with which it is used.
+///
+/// Provided here to have more apparent meaning than a simple empty string literal.
+pub static IS_ABSENT: &str = "";
+
 /// A [filter expression](https://www.musicpd.org/doc/html/protocol.html#filters).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Filter(FilterType);
@@ -60,7 +70,10 @@ impl Filter {
     /// [`operator`](enum.Operator.html), for the given `value`.
     ///
     /// An error is returned when the given `tag` is empty, but `value` may be empty (which results
-    /// in the filter only matching if the `tag` is **not** present).
+    /// in the filter only matching if the `tag` is **not** present, see also
+    /// [`IS_ABSENT`](static.IS_ABSENT.html)).
+    ///
+    /// The magic value [`any`](static.ANY.html) checks for the value in any tag.
     ///
     /// ```
     /// use mpd_protocol::filter::{FilterError, Filter, Operator};
