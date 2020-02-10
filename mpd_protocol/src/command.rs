@@ -1,4 +1,10 @@
-//! This module contains utilities for constructing MPD commands.
+//! Tools for constructing MPD commands.
+//!
+//! For an overview of available commands, see [the MPD
+//! documentation](https://www.musicpd.org/doc/html/protocol.html#command-reference).
+//!
+//! This does not perform any validations on commands beyond checking they appear well-formed, so
+//! it should not be tied to any particular protocol version.
 
 use std::borrow::Cow;
 use std::convert::TryFrom;

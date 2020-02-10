@@ -14,6 +14,9 @@
 //! of [Tokio](https://tokio.rs)'s
 //! [codec](https://docs.rs/tokio-util/0.2.0/tokio_util/codec/index.html) subsystem to facilitate
 //! asynchronous clients ([`codec`](codec/index.html)).
+//!
+//! Also provided are utilities for constructing [commands](command/index.html) and [filter
+//! expressions](filter/index.html), as a special case of argument to commands.
 
 pub mod codec;
 pub mod command;
