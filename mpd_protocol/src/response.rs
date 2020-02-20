@@ -8,7 +8,7 @@ use std::collections::HashMap;
 /// individual commands, and optionally a single error.
 ///
 /// Since an error terminates a command list, there can only be one error in a response.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Response {
     /// The sucessful responses.
     frames: Vec<Frame>,
@@ -17,7 +17,7 @@ pub struct Response {
 }
 
 /// Data in a succesful response.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Frame {
     /// Key-value pairs. Keys can repeat arbitrarily often.
     pub values: Vec<(String, String)>,
@@ -26,7 +26,7 @@ pub struct Frame {
 }
 
 /// Data in an error.
-#[derive(Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Error {
     /// Error code. See [the MPD
     /// source](https://github.com/MusicPlayerDaemon/MPD/blob/master/src/protocol/Ack.hxx#L30) for
