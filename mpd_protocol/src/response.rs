@@ -3,6 +3,7 @@
 use bytes::Bytes;
 
 use std::collections::HashMap;
+use std::iter::FusedIterator;
 
 /// Response to a command, consisting of an abitrary amount of frames, which are responses to
 /// individual commands, and optionally a single error.
@@ -128,36 +129,6 @@ impl Response {
         self.frames.len()
     }
 
-    /// Get the next frame or error from the response as a `Result`.
-    ///
-    /// Includes the remaining portion of the response. A possible error always occurs as the last
-    /// element, since it terminates command lists.
-    ///
-    /// ```
-    /// use mpd_protocol::response::{Response, Frame};
-    ///
-    /// let r = Response::new(vec![Frame::empty(), Frame::empty()], None);
-    /// let res = r.next_frame().unwrap();
-    /// assert_eq!(Frame::empty(), res.0);
-    ///
-    /// assert_eq!(Ok((Frame::empty(), None)), res.1.unwrap().next_frame());
-    /// ```
-    pub fn next_frame(mut self) -> Result<(Frame, Option<Self>), Error> {
-        match self.frames.pop() {
-            Some(frame) => {
-                let remaining = if !self.frames.is_empty() || self.error.is_some() {
-                    Some(self)
-                } else {
-                    None
-                };
-
-                Ok((frame, remaining))
-            }
-
-            None => Err(self.error.unwrap()),
-        }
-    }
-
     /// Treat the response as consisting of a single frame or error.
     ///
     /// Frames or errors beyond the first, if they exist, are silently discarded.
@@ -169,7 +140,8 @@ impl Response {
     /// assert_eq!(Ok(Frame::empty()), r.single_frame());
     /// ```
     pub fn single_frame(self) -> Result<Frame, Error> {
-        self.next_frame().map(|(f, _)| f)
+        // There is always at least one frame
+        self.into_frames().next().unwrap()
     }
 
     /// Creates an iterator over all frames and errors in the response.
@@ -187,7 +159,7 @@ impl Response {
     /// }, Frame {
     ///     values: second.clone(),
     ///     binary: None,
-    /// }], None).frames();
+    /// }], None).into_frames();
     ///
     /// assert_eq!(Some(Ok(Frame {
     ///     values: first,
@@ -201,29 +173,39 @@ impl Response {
     ///
     /// assert_eq!(None, iter.next());
     /// ```
-    pub fn frames(self) -> impl Iterator<Item = Result<Frame, Error>> {
-        Frames(Some(self))
+    pub fn into_frames(self) -> Frames {
+        Frames(self)
     }
 }
 
-struct Frames(Option<Response>);
+/// Iterator over frames in a response, as returned by
+/// [`into_frames()`](struct.Response.html#method.into_frames).
+#[derive(Clone, Debug)]
+pub struct Frames(Response);
 
 impl Iterator for Frames {
     type Item = Result<Frame, Error>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        match self.0.take() {
-            None => None,
-            Some(r) => Some(match r.next_frame() {
-                Err(e) => Err(e),
-                Ok((value, remaining)) => {
-                    self.0 = remaining;
-                    Ok(value)
-                }
-            }),
+        if let Some(frame) = self.0.frames.pop() {
+            Some(Ok(frame))
+        } else if let Some(error) = self.0.error.take() {
+            Some(Err(error))
+        } else {
+            None
         }
     }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        // .len() returns the number of succesful frames, add 1 if there is also an error
+        let len = self.0.len() + if self.0.is_error() { 1 } else { 0 };
+
+        (len, Some(len))
+    }
 }
+
+impl FusedIterator for Frames {}
+impl ExactSizeIterator for Frames {}
 
 impl Frame {
     /// Create an empty frame (0 key-value pairs).
