@@ -333,3 +333,56 @@ impl Frame {
         map
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn owned_frames_iter() {
+        let r = Response::new(
+            vec![Frame::empty(), Frame::empty(), Frame::empty()],
+            Some(Error::default()),
+        );
+
+        let mut iter = r.into_frames();
+
+        assert_eq!((4, Some(4)), iter.size_hint());
+        assert_eq!(Some(Ok(Frame::empty())), iter.next());
+
+        assert_eq!((3, Some(3)), iter.size_hint());
+        assert_eq!(Some(Ok(Frame::empty())), iter.next());
+
+        assert_eq!((2, Some(2)), iter.size_hint());
+        assert_eq!(Some(Ok(Frame::empty())), iter.next());
+
+        assert_eq!((1, Some(1)), iter.size_hint());
+        assert_eq!(Some(Err(Error::default())), iter.next());
+
+        assert_eq!((0, Some(0)), iter.size_hint());
+    }
+
+    #[test]
+    fn borrowed_frames_iter() {
+        let r = Response::new(
+            vec![Frame::empty(), Frame::empty(), Frame::empty()],
+            Some(Error::default()),
+        );
+
+        let mut iter = r.frames();
+
+        assert_eq!((4, Some(4)), iter.size_hint());
+        assert_eq!(Some(Ok(&Frame::empty())), iter.next());
+
+        assert_eq!((3, Some(3)), iter.size_hint());
+        assert_eq!(Some(Ok(&Frame::empty())), iter.next());
+
+        assert_eq!((2, Some(2)), iter.size_hint());
+        assert_eq!(Some(Ok(&Frame::empty())), iter.next());
+
+        assert_eq!((1, Some(1)), iter.size_hint());
+        assert_eq!(Some(Err(&Error::default())), iter.next());
+
+        assert_eq!((0, Some(0)), iter.size_hint());
+    }
+}
