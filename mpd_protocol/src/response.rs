@@ -129,6 +129,24 @@ impl Response {
         self.frames.len()
     }
 
+    /// Create an iterator over references to the frames in the response.
+    ///
+    /// ```
+    /// use mpd_protocol::response::{Frame, Response};
+    ///
+    /// let r = Response::empty();
+    /// let mut iter = r.frames();
+    ///
+    /// assert_eq!(Some(Ok(&Frame::empty())), iter.next());
+    /// ```
+    pub fn frames(&self) -> FramesRef<'_> {
+        FramesRef {
+            response: self,
+            frames_cursor: 0,
+            error_consumed: false,
+        }
+    }
+
     /// Treat the response as consisting of a single frame or error.
     ///
     /// Frames or errors beyond the first, if they exist, are silently discarded.
@@ -177,6 +195,45 @@ impl Response {
         Frames(self)
     }
 }
+
+/// Iterator over frames in a response, as returned by
+/// [`frames()`](struct.Response.html#method.frames).
+#[derive(Copy, Clone, Debug)]
+pub struct FramesRef<'a> {
+    response: &'a Response,
+    frames_cursor: usize,
+    error_consumed: bool,
+}
+
+impl<'a> Iterator for FramesRef<'a> {
+    type Item = Result<&'a Frame, &'a Error>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.frames_cursor < self.response.frames.len() {
+            let frame = self.response.frames.get(self.frames_cursor).unwrap();
+            self.frames_cursor += 1;
+            Some(Ok(frame))
+        } else if !self.error_consumed {
+            self.error_consumed = true;
+            self.response.error.as_ref().map(Err)
+        } else {
+            None
+        }
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let mut len = self.response.frames.len() - self.frames_cursor;
+
+        if !self.error_consumed && self.response.is_error() {
+            len += 1;
+        }
+
+        (len, Some(len))
+    }
+}
+
+impl<'a> FusedIterator for FramesRef<'a> {}
+impl<'a> ExactSizeIterator for FramesRef<'a> {}
 
 /// Iterator over frames in a response, as returned by
 /// [`into_frames()`](struct.Response.html#method.into_frames).
