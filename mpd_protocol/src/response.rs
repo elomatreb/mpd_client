@@ -235,6 +235,15 @@ impl<'a> Iterator for FramesRef<'a> {
 impl<'a> FusedIterator for FramesRef<'a> {}
 impl<'a> ExactSizeIterator for FramesRef<'a> {}
 
+impl<'a> IntoIterator for &'a Response {
+    type Item = Result<&'a Frame, &'a Error>;
+    type IntoIter = FramesRef<'a>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.frames()
+    }
+}
+
 /// Iterator over frames in a response, as returned by
 /// [`into_frames()`](struct.Response.html#method.into_frames).
 #[derive(Clone, Debug)]
@@ -263,6 +272,15 @@ impl Iterator for Frames {
 
 impl FusedIterator for Frames {}
 impl ExactSizeIterator for Frames {}
+
+impl IntoIterator for Response {
+    type Item = Result<Frame, Error>;
+    type IntoIter = Frames;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.into_frames()
+    }
+}
 
 impl Frame {
     /// Create an empty frame (0 key-value pairs).
