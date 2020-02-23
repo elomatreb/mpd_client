@@ -32,6 +32,10 @@ impl Client {
     ///
     /// Since this is generic over the connection type, you can use it with both TCP and Unix
     /// socket connections.
+    ///
+    /// # Panics
+    ///
+    /// Since this spawns a task internally, this will panic when called outside a tokio runtime.
     pub fn connect<C>(connection: C) -> (Self, impl Stream<Item = Subsystem>)
     where
         C: AsyncRead + AsyncWrite + Send + 'static,
@@ -73,6 +77,9 @@ async fn run_loop<C>(
 
     let mut current_command_responder: Option<oneshot::Sender<Response>> = None;
     let mut command_queue = VecDeque::new();
+
+    // Immediately send an idle command, to prevent timeouts
+    begin_idle(&mut write).await;
 
     loop {
         tokio::select! {
