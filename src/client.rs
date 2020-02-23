@@ -1,3 +1,5 @@
+//! The client implementation.
+
 use futures::sink::{Sink, SinkExt};
 use mpd_protocol::{Command, MpdCodec, Response};
 use tokio::{
@@ -12,6 +14,8 @@ use tokio_util::codec::{FramedRead, FramedWrite};
 
 use std::collections::VecDeque;
 use std::fmt::Debug;
+
+use crate::util::Subsystem;
 
 static IDLE: &str = "idle";
 static CANCEL_IDLE: &str = "noidle";
@@ -28,7 +32,7 @@ impl Client {
     ///
     /// Since this is generic over the connection type, you can use it with both TCP and Unix
     /// socket connections.
-    pub fn connect<C>(connection: C) -> (Self, impl Stream<Item = ()>)
+    pub fn connect<C>(connection: C) -> (Self, impl Stream<Item = Subsystem>)
     where
         C: AsyncRead + AsyncWrite + Send + 'static,
     {
@@ -47,7 +51,11 @@ impl Client {
     /// Send the given command, and return the response to it.
     pub async fn command(&self, command: Command) -> Response {
         let (tx, rx) = oneshot::channel();
-        self.0.lock().await.send((command, tx)).expect("Sending command");
+        self.0
+            .lock()
+            .await
+            .send((command, tx))
+            .expect("Sending command");
         rx.await.expect("Receiving command reply")
     }
 }
@@ -55,7 +63,7 @@ impl Client {
 async fn run_loop<C>(
     connection: C,
     mut commands: UnboundedReceiver<(Command, oneshot::Sender<Response>)>,
-    state_changes: UnboundedSender<()>,
+    state_changes: UnboundedSender<Subsystem>,
 ) where
     C: AsyncRead + AsyncWrite,
 {
@@ -96,8 +104,11 @@ async fn run_loop<C>(
                 } else {
                     // If not responder is available, the message is a state change notification.
 
-                    // Just like above, the state change notification channel may be dropped.
-                    let _ = state_changes.send(());
+                    // The notification may be empty if no changes occured.
+                    if let Some(subsystem) = response_to_subsystem(msg) {
+                        // Just like above, the state change notification channel may be dropped.
+                        let _ = state_changes.send(subsystem);
+                    }
                 }
 
                 // Get the next command to send
@@ -137,4 +148,21 @@ where
     <D as Sink<Command>>::Error: Debug,
 {
     dest.send(command).await.expect("sending command");
+}
+
+fn response_to_subsystem(res: Response) -> Option<Subsystem> {
+    let mut values = res
+        .single_frame()
+        .expect("error in status change message")
+        .values;
+
+    match values.len() {
+        0 => None, // The response is empty if no changes occured (when the idle is cancelled)
+        1 => {
+            let (key, value) = values.pop().unwrap();
+            assert_eq!("changed", key, "status change message contained wrong key");
+            Some(Subsystem::from(value))
+        }
+        len => panic!("status change message contained too many values: {}", len),
+    }
 }
