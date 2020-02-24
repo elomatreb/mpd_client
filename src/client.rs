@@ -81,12 +81,17 @@ async fn run_loop<C>(
     // Immediately send an idle command, to prevent timeouts
     begin_idle(&mut write).await;
 
-    loop {
+    let mut channel_open = true;
+
+    while channel_open || current_command_responder.is_some() || !command_queue.is_empty() {
         tokio::select! {
-            command = commands.next() => {
+            command = commands.next(), if channel_open => {
                 let command = match command {
                     Some(c) => c,
-                    None => break, // The commands channel has been closed, exit cleanly.
+                    None => {
+                        channel_open = false;
+                        continue;
+                    }
                 };
 
                 // Add the command to the queue to be processed during a later iteration of this
