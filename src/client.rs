@@ -1,18 +1,21 @@
 //! The client implementation.
 
 use futures::sink::{Sink, SinkExt};
-use mpd_protocol::{Command, MpdCodec, Response};
+use mpd_protocol::{Command, MpdCodec, MpdCodecError, Response};
 use tokio::{
     io::{split, AsyncRead, AsyncWrite},
     stream::{Stream, StreamExt},
     sync::{
-        mpsc::{self, UnboundedReceiver, UnboundedSender},
-        oneshot, Mutex,
+        mpsc::{self, error::SendError as MpscSendError, UnboundedReceiver, UnboundedSender},
+        oneshot::{self, error::RecvError as OneshotRecvError},
+        Mutex,
     },
 };
 use tokio_util::codec::{FramedRead, FramedWrite};
 
 use std::collections::VecDeque;
+use std::error::Error;
+use std::fmt;
 use std::fmt::Debug;
 
 use crate::util::Subsystem;
@@ -20,9 +23,11 @@ use crate::util::Subsystem;
 static IDLE: &str = "idle";
 static CANCEL_IDLE: &str = "noidle";
 
+type CommandResponder = oneshot::Sender<Result<Response, CommandError>>;
+
 /// Client for MPD.
 #[derive(Debug)]
-pub struct Client(Mutex<UnboundedSender<(Command, oneshot::Sender<Response>)>>);
+pub struct Client(Mutex<UnboundedSender<(Command, CommandResponder)>>);
 
 impl Client {
     /// Connect to the MPD server using the given connection.
@@ -53,20 +58,62 @@ impl Client {
     }
 
     /// Send the given command, and return the response to it.
-    pub async fn command(&self, command: Command) -> Response {
+    pub async fn command(&self, command: Command) -> Result<Response, CommandError> {
         let (tx, rx) = oneshot::channel();
-        self.0
-            .lock()
-            .await
-            .send((command, tx))
-            .expect("Sending command");
-        rx.await.expect("Receiving command reply")
+        self.0.lock().await.send((command, tx))?;
+
+        rx.await?
+    }
+}
+
+/// Errors which can occur when issuing a command.
+#[derive(Debug)]
+pub enum CommandError {
+    /// The connection to MPD is closed
+    ConnectionClosed,
+    /// Received or attempted to send an invalid message
+    InvalidMessage(MpdCodecError),
+}
+
+impl fmt::Display for CommandError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            CommandError::ConnectionClosed => write!(f, "The connection is closed"),
+            CommandError::InvalidMessage(_) => write!(f, "Invalid message"),
+        }
+    }
+}
+
+impl Error for CommandError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            CommandError::InvalidMessage(e) => Some(e),
+            _ => None,
+        }
+    }
+}
+
+impl From<MpdCodecError> for CommandError {
+    fn from(e: MpdCodecError) -> Self {
+        CommandError::InvalidMessage(e)
+    }
+}
+
+impl<T> From<MpscSendError<T>> for CommandError {
+    fn from(_: MpscSendError<T>) -> Self {
+        CommandError::ConnectionClosed
+    }
+}
+
+impl From<OneshotRecvError> for CommandError {
+    fn from(_: OneshotRecvError) -> Self {
+        CommandError::ConnectionClosed
     }
 }
 
 async fn run_loop<C>(
     connection: C,
-    mut commands: UnboundedReceiver<(Command, oneshot::Sender<Response>)>,
+    mut commands: UnboundedReceiver<(Command, CommandResponder)>,
     state_changes: UnboundedSender<Subsystem>,
 ) where
     C: AsyncRead + AsyncWrite,
@@ -75,21 +122,22 @@ async fn run_loop<C>(
     let mut read = FramedRead::new(read, MpdCodec::new());
     let mut write = FramedWrite::new(write, MpdCodec::new());
 
-    let mut current_command_responder: Option<oneshot::Sender<Response>> = None;
+    let mut current_command_responder: Option<CommandResponder> = None;
     let mut command_queue = VecDeque::new();
 
     // Immediately send an idle command, to prevent timeouts
     begin_idle(&mut write).await;
 
-    let mut channel_open = true;
+    let mut commands_channel_open = true;
 
-    while channel_open || current_command_responder.is_some() || !command_queue.is_empty() {
+    while commands_channel_open || current_command_responder.is_some() || !command_queue.is_empty()
+    {
         tokio::select! {
-            command = commands.next(), if channel_open => {
+            command = commands.next(), if commands_channel_open => {
                 let command = match command {
                     Some(c) => c,
                     None => {
-                        channel_open = false;
+                        commands_channel_open = false;
                         continue;
                     }
                 };
@@ -100,11 +148,20 @@ async fn run_loop<C>(
 
                 if current_command_responder.is_none() {
                     // If there is no current responder, we are currently idling, so cancel that.
-                    cancel_idle(&mut write).await;
+                    if let Err(e) = send_command(&mut write, Command::build(CANCEL_IDLE).unwrap()).await {
+                        // Get back the responder (and command) we just pushed
+                        let (_, responder) = command_queue.pop_back().unwrap();
+                        let _ = responder.send(Err(e.into()));
+                    }
                 }
             }
             msg = read.next() => {
-                let msg = msg.expect("MPD connection closed").expect("Invalid MPD response");
+                let msg = match msg {
+                    Some(m) => m,
+                    // If the connection is closed, exit the loop. This will drop all remaining
+                    // responders, which signals error conditions.
+                    None => break,
+                };
 
                 // If there is a current responder set, the message we just received was a reply to
                 // an explicit command.
@@ -112,12 +169,12 @@ async fn run_loop<C>(
                     // The response channel may have already been dropped if the future
                     // representing the command request was cancelled dropped, but there's nothing
                     // we can do about it.
-                    let _ = responder.send(msg);
+                    let _ = responder.send(msg.map_err(Into::into));
                 } else {
                     // If not responder is available, the message is a state change notification.
 
                     // The notification may be empty if no changes occured.
-                    if let Some(subsystem) = response_to_subsystem(msg) {
+                    if let Some(subsystem) = response_to_subsystem(msg.unwrap()) {
                         // Just like above, the state change notification channel may be dropped.
                         let _ = state_changes.send(subsystem);
                     }
@@ -128,7 +185,7 @@ async fn run_loop<C>(
                     // If there is a command in the queue, send it immediately and store the
                     // responder
                     current_command_responder = Some(responder);
-                    send_command(&mut write, command).await;
+                    send_command_old(&mut write, command).await;
                 } else {
                     // If there is no command in the queue, start idling
                     begin_idle(&mut write).await;
@@ -138,12 +195,11 @@ async fn run_loop<C>(
     }
 }
 
-async fn cancel_idle<D>(dest: D)
+async fn send_command<D>(mut dest: D, command: Command) -> Result<(), MpdCodecError>
 where
-    D: Sink<Command> + Unpin,
-    <D as Sink<Command>>::Error: Debug,
+    D: Sink<Command, Error = MpdCodecError> + Unpin,
 {
-    send_command(dest, Command::build(CANCEL_IDLE).unwrap()).await;
+    dest.send(command).await
 }
 
 async fn begin_idle<D>(dest: D)
@@ -151,10 +207,10 @@ where
     D: Sink<Command> + Unpin,
     <D as Sink<Command>>::Error: Debug,
 {
-    send_command(dest, Command::build(IDLE).unwrap()).await;
+    send_command_old(dest, Command::build(IDLE).unwrap()).await;
 }
 
-async fn send_command<D>(mut dest: D, command: Command)
+async fn send_command_old<D>(mut dest: D, command: Command)
 where
     D: Sink<Command> + Unpin,
     <D as Sink<Command>>::Error: Debug,
