@@ -1,7 +1,7 @@
 //! The client implementation.
 
-use futures::sink::{Sink, SinkExt};
-use mpd_protocol::{Command, MpdCodec, MpdCodecError, Response};
+use futures::sink::SinkExt;
+use mpd_protocol::{response::Error as ErrorResponse, Command, MpdCodec, MpdCodecError, Response};
 use tokio::{
     io::{split, AsyncRead, AsyncWrite},
     stream::{Stream, StreamExt},
@@ -41,7 +41,12 @@ impl Client {
     /// # Panics
     ///
     /// Since this spawns a task internally, this will panic when called outside a tokio runtime.
-    pub fn connect<C>(connection: C) -> (Self, impl Stream<Item = Subsystem>)
+    pub fn connect<C>(
+        connection: C,
+    ) -> (
+        Self,
+        impl Stream<Item = Result<Subsystem, StateChangeError>>,
+    )
     where
         C: AsyncRead + AsyncWrite + Send + 'static,
     {
@@ -111,10 +116,59 @@ impl From<OneshotRecvError> for CommandError {
     }
 }
 
+/// Errors which may occur while listening for state change events.
+#[derive(Debug)]
+pub enum StateChangeError {
+    /// The connection to MPD is closed
+    ConnectionClosed,
+    /// The message was invalid
+    InvalidMessage(MpdCodecError),
+    /// The state change message contained an error frame
+    ErrorMessage(ErrorResponse),
+    /// The state message wasn't empty, but did not contain the expected `changed` key
+    MissingChangedKey,
+}
+
+impl fmt::Display for StateChangeError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            StateChangeError::ConnectionClosed => write!(f, "The connection was closed"),
+            StateChangeError::InvalidMessage(_) => write!(f, "Invalid message"),
+            StateChangeError::ErrorMessage(ErrorResponse { code, message, .. }) => write!(
+                f,
+                "Message contained an error frame (code {} - {:?})",
+                code, message
+            ),
+            StateChangeError::MissingChangedKey => write!(f, "Message was missing 'changed' key"),
+        }
+    }
+}
+
+impl Error for StateChangeError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            StateChangeError::InvalidMessage(e) => Some(e),
+            _ => None,
+        }
+    }
+}
+
+impl From<ErrorResponse> for StateChangeError {
+    fn from(r: ErrorResponse) -> Self {
+        StateChangeError::ErrorMessage(r)
+    }
+}
+
+impl From<MpdCodecError> for StateChangeError {
+    fn from(e: MpdCodecError) -> Self {
+        StateChangeError::InvalidMessage(e)
+    }
+}
+
 async fn run_loop<C>(
     connection: C,
     mut commands: UnboundedReceiver<(Command, CommandResponder)>,
-    state_changes: UnboundedSender<Subsystem>,
+    state_changes: UnboundedSender<Result<Subsystem, StateChangeError>>,
 ) where
     C: AsyncRead + AsyncWrite,
 {
@@ -126,7 +180,10 @@ async fn run_loop<C>(
     let mut command_queue = VecDeque::new();
 
     // Immediately send an idle command, to prevent timeouts
-    begin_idle(&mut write).await;
+    if let Err(e) = write.send(Command::build(IDLE).unwrap()).await {
+        let _ = state_changes.send(Err(e.into()));
+        return; // If the initial command fails, we can't do anything
+    }
 
     let mut commands_channel_open = true;
 
@@ -148,7 +205,7 @@ async fn run_loop<C>(
 
                 if current_command_responder.is_none() {
                     // If there is no current responder, we are currently idling, so cancel that.
-                    if let Err(e) = send_command(&mut write, Command::build(CANCEL_IDLE).unwrap()).await {
+                    if let Err(e) = write.send(Command::build(CANCEL_IDLE).unwrap()).await {
                         // Get back the responder (and command) we just pushed
                         let (_, responder) = command_queue.pop_back().unwrap();
                         let _ = responder.send(Err(e.into()));
@@ -172,11 +229,12 @@ async fn run_loop<C>(
                     let _ = responder.send(msg.map_err(Into::into));
                 } else {
                     // If not responder is available, the message is a state change notification.
+                    let msg = msg.map_err(Into::into).and_then(|res| response_to_subsystem(res));
 
                     // The notification may be empty if no changes occured.
-                    if let Some(subsystem) = response_to_subsystem(msg.unwrap()) {
+                    if let Some(msg) = msg.transpose() {
                         // Just like above, the state change notification channel may be dropped.
-                        let _ = state_changes.send(subsystem);
+                        let _ = state_changes.send(msg);
                     }
                 }
 
@@ -185,52 +243,34 @@ async fn run_loop<C>(
                     // If there is a command in the queue, send it immediately and store the
                     // responder
                     current_command_responder = Some(responder);
-                    send_command_old(&mut write, command).await;
+
+                    if let Err(e) = write.send(command).await {
+                        let responder = current_command_responder.take().unwrap();
+                        let _ = responder.send(Err(e.into()));
+                    }
                 } else {
                     // If there is no command in the queue, start idling
-                    begin_idle(&mut write).await;
+                    if let Err(e) = write.send(Command::build(IDLE).unwrap()).await {
+                        let _ = state_changes.send(Err(e.into()));
+                    }
                 }
             }
         }
     }
 }
 
-async fn send_command<D>(mut dest: D, command: Command) -> Result<(), MpdCodecError>
-where
-    D: Sink<Command, Error = MpdCodecError> + Unpin,
-{
-    dest.send(command).await
-}
+fn response_to_subsystem(res: Response) -> Result<Option<Subsystem>, StateChangeError> {
+    let values = res.single_frame()?.values;
 
-async fn begin_idle<D>(dest: D)
-where
-    D: Sink<Command> + Unpin,
-    <D as Sink<Command>>::Error: Debug,
-{
-    send_command_old(dest, Command::build(IDLE).unwrap()).await;
-}
+    if values.is_empty() {
+        Ok(None)
+    } else {
+        let raw = values
+            .into_iter()
+            .find(|(k, _)| k == "changed")
+            .ok_or(StateChangeError::MissingChangedKey)?
+            .1;
 
-async fn send_command_old<D>(mut dest: D, command: Command)
-where
-    D: Sink<Command> + Unpin,
-    <D as Sink<Command>>::Error: Debug,
-{
-    dest.send(command).await.expect("sending command");
-}
-
-fn response_to_subsystem(res: Response) -> Option<Subsystem> {
-    let mut values = res
-        .single_frame()
-        .expect("error in status change message")
-        .values;
-
-    match values.len() {
-        0 => None, // The response is empty if no changes occured (when the idle is cancelled)
-        1 => {
-            let (key, value) = values.pop().unwrap();
-            assert_eq!("changed", key, "status change message contained wrong key");
-            Some(Subsystem::from(value))
-        }
-        len => panic!("status change message contained too many values: {}", len),
+        Ok(Some(Subsystem::from(raw)))
     }
 }
