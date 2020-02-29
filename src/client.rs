@@ -98,18 +98,21 @@ impl Error for CommandError {
     }
 }
 
+#[doc(hidden)]
 impl From<MpdCodecError> for CommandError {
     fn from(e: MpdCodecError) -> Self {
         CommandError::InvalidMessage(e)
     }
 }
 
+#[doc(hidden)]
 impl<T> From<MpscSendError<T>> for CommandError {
     fn from(_: MpscSendError<T>) -> Self {
         CommandError::ConnectionClosed
     }
 }
 
+#[doc(hidden)]
 impl From<OneshotRecvError> for CommandError {
     fn from(_: OneshotRecvError) -> Self {
         CommandError::ConnectionClosed
@@ -153,12 +156,14 @@ impl Error for StateChangeError {
     }
 }
 
+#[doc(hidden)]
 impl From<ErrorResponse> for StateChangeError {
     fn from(r: ErrorResponse) -> Self {
         StateChangeError::ErrorMessage(r)
     }
 }
 
+#[doc(hidden)]
 impl From<MpdCodecError> for StateChangeError {
     fn from(e: MpdCodecError) -> Self {
         StateChangeError::InvalidMessage(e)
