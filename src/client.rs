@@ -3,7 +3,7 @@
 use futures::sink::SinkExt;
 use mpd_protocol::{response::Error as ErrorResponse, Command, MpdCodec, MpdCodecError, Response};
 use tokio::{
-    io::{split, AsyncRead, AsyncWrite},
+    io::{self, split, AsyncRead, AsyncWrite},
     stream::{Stream, StreamExt},
     sync::{
         mpsc::{self, error::SendError as MpscSendError, UnboundedReceiver, UnboundedSender},
@@ -41,17 +41,22 @@ impl Client {
     /// # Panics
     ///
     /// Since this spawns a task internally, this will panic when called outside a tokio runtime.
-    pub fn connect<C>(
+    pub async fn connect<C>(
         connection: C,
-    ) -> (
-        Self,
-        impl Stream<Item = Result<Subsystem, StateChangeError>>,
-    )
+    ) -> Result<
+        (
+            Self,
+            impl Stream<Item = Result<Subsystem, StateChangeError>>,
+        ),
+        MpdCodecError,
+    >
     where
         C: AsyncRead + AsyncWrite + Send + 'static,
     {
         let (state_changes_sender, state_changes) = mpsc::unbounded_channel();
         let (commands, commands_receiver) = mpsc::unbounded_channel();
+
+        let connection = connect(connection).await?;
 
         tokio::spawn(run_loop(
             connection,
@@ -59,7 +64,7 @@ impl Client {
             state_changes_sender,
         ));
 
-        (Self(Mutex::new(commands)), state_changes)
+        Ok((Self(Mutex::new(commands)), state_changes))
     }
 
     /// Send the given command, and return the response to it.
@@ -170,25 +175,36 @@ impl From<MpdCodecError> for StateChangeError {
     }
 }
 
+struct Connection<C: AsyncRead + AsyncWrite> {
+    read: FramedRead<io::ReadHalf<C>, MpdCodec>,
+    write: FramedWrite<io::WriteHalf<C>, MpdCodec>,
+}
+
+async fn connect<C: AsyncRead + AsyncWrite>(connection: C) -> Result<Connection<C>, MpdCodecError> {
+    let (read, write) = split(connection);
+    let read = FramedRead::new(read, MpdCodec::new());
+    let mut write = FramedWrite::new(write, MpdCodec::new());
+
+    // Immediately send an idle command, to prevent the connection from timing out
+    write.send(Command::build(IDLE).unwrap()).await?;
+
+    Ok(Connection { read, write })
+}
+
 async fn run_loop<C>(
-    connection: C,
+    connection: Connection<C>,
     mut commands: UnboundedReceiver<(Command, CommandResponder)>,
     state_changes: UnboundedSender<Result<Subsystem, StateChangeError>>,
 ) where
     C: AsyncRead + AsyncWrite,
 {
-    let (read, write) = split(connection);
-    let mut read = FramedRead::new(read, MpdCodec::new());
-    let mut write = FramedWrite::new(write, MpdCodec::new());
+    let Connection {
+        mut read,
+        mut write,
+    } = connection;
 
     let mut current_command_responder: Option<CommandResponder> = None;
     let mut command_queue = VecDeque::new();
-
-    // Immediately send an idle command, to prevent timeouts
-    if let Err(e) = write.send(Command::build(IDLE).unwrap()).await {
-        let _ = state_changes.send(Err(e.into()));
-        return; // If the initial command fails, we can't do anything
-    }
 
     let mut commands_channel_open = true;
 
