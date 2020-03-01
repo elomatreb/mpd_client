@@ -1,8 +1,13 @@
 [package]
 name = "mpd_client"
-version = "0.0.1"
+version = "0.1.0"
 authors = ["Ole Bertram <git@bertr.am>"]
 edition = "2018"
+description = "Prototype of a user-friendly async MPD client"
+repository = "https://github.com/elomatreb/mpd_client"
+keywords = ["mpd", "async", "client"]
+categories = ["network-programming"]
+license = "GPL-3.0-or-later"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
