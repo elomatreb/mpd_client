@@ -1,11 +1,11 @@
 [package]
 name = "mpd_protocol"
-version = "0.4.0"
+version = "0.4.1"
 authors = ["Ole Bertram <git@bertr.am>"]
 edition = "2018"
 license = "GPL-3.0-or-later"
 description = "Implementation of MPD client protocol"
-repository = "https://git.bertr.am/elomatreb/mpd_protocol"
+repository = "https://github.com/elomatreb/mpd_protocol"
 readme = "README.md"
 keywords = ["mpd", "protocol", "client"]
 categories = ["network-programming"]
