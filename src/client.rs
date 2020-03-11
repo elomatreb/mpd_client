@@ -1,7 +1,7 @@
 //! The client implementation.
 
 use futures::sink::SinkExt;
-use mpd_protocol::{response::Error as ErrorResponse, Command, MpdCodec, MpdCodecError, Response};
+use mpd_protocol::{response::Error as ErrorResponse, Command, CommandList, MpdCodec, MpdCodecError, Response};
 use tokio::{
     io::{self, split, AsyncRead, AsyncWrite},
     stream::{Stream, StreamExt},
@@ -27,7 +27,7 @@ type CommandResponder = oneshot::Sender<Result<Response, CommandError>>;
 
 /// Client for MPD.
 #[derive(Debug)]
-pub struct Client(Mutex<UnboundedSender<(Command, CommandResponder)>>);
+pub struct Client(Mutex<UnboundedSender<(CommandList, CommandResponder)>>);
 
 impl Client {
     /// Connect to the MPD server using the given connection.
@@ -70,7 +70,7 @@ impl Client {
     /// Send the given command, and return the response to it.
     pub async fn command(&self, command: Command) -> Result<Response, CommandError> {
         let (tx, rx) = oneshot::channel();
-        self.0.lock().await.send((command, tx))?;
+        self.0.lock().await.send((CommandList::new(command), tx))?;
 
         rx.await?
     }
@@ -186,14 +186,14 @@ async fn connect<C: AsyncRead + AsyncWrite>(connection: C) -> Result<Connection<
     let mut write = FramedWrite::new(write, MpdCodec::new());
 
     // Immediately send an idle command, to prevent the connection from timing out
-    write.send(Command::build(IDLE).unwrap()).await?;
+    write.send(CommandList::new(Command::new(IDLE))).await?;
 
     Ok(Connection { read, write })
 }
 
 async fn run_loop<C>(
     connection: Connection<C>,
-    mut commands: UnboundedReceiver<(Command, CommandResponder)>,
+    mut commands: UnboundedReceiver<(CommandList, CommandResponder)>,
     state_changes: UnboundedSender<Result<Subsystem, StateChangeError>>,
 ) where
     C: AsyncRead + AsyncWrite,
@@ -226,7 +226,7 @@ async fn run_loop<C>(
 
                 if current_command_responder.is_none() {
                     // If there is no current responder, we are currently idling, so cancel that.
-                    if let Err(e) = write.send(Command::build(CANCEL_IDLE).unwrap()).await {
+                    if let Err(e) = write.send(CommandList::new(Command::new(CANCEL_IDLE))).await {
                         // Get back the responder (and command) we just pushed
                         let (_, responder) = command_queue.pop_back().unwrap();
                         let _ = responder.send(Err(e.into()));
@@ -250,7 +250,7 @@ async fn run_loop<C>(
                     let _ = responder.send(msg.map_err(Into::into));
                 } else {
                     // If not responder is available, the message is a state change notification.
-                    let msg = msg.map_err(Into::into).and_then(|res| response_to_subsystem(res));
+                    let msg = msg.map_err(Into::into).and_then(response_to_subsystem);
 
                     // The notification may be empty if no changes occured.
                     if let Some(msg) = msg.transpose() {
@@ -271,7 +271,7 @@ async fn run_loop<C>(
                     }
                 } else {
                     // If there is no command in the queue, start idling
-                    if let Err(e) = write.send(Command::build(IDLE).unwrap()).await {
+                    if let Err(e) = write.send(CommandList::new(Command::new(IDLE))).await {
                         let _ = state_changes.send(Err(e.into()));
                     }
                 }
