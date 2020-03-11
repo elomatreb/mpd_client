@@ -5,7 +5,7 @@
 use std::error::Error;
 use std::fmt;
 
-use crate::command::escape_argument;
+use crate::command::{escape_argument, Argument};
 
 /// Special tag which checks *all* tag types.
 ///
@@ -76,6 +76,7 @@ impl Filter {
     /// The magic value [`any`](static.ANY.html) checks for the value in any tag.
     ///
     /// ```
+    /// use mpd_protocol::command::Argument;
     /// use mpd_protocol::filter::{FilterError, Filter, Operator};
     ///
     /// assert_eq!(
@@ -110,7 +111,7 @@ impl Filter {
     /// `tag` is invalid.
     ///
     /// ```
-    /// use mpd_protocol::Filter;
+    /// use mpd_protocol::{Filter, command::Argument};
     ///
     /// assert_eq!(
     ///     Filter::equal("artist", "hello world").render(),
@@ -126,7 +127,7 @@ impl Filter {
     /// Like [`negate`](#method.negate), but can be used at the start of constructing a filter.
     ///
     /// ```
-    /// use mpd_protocol::Filter;
+    /// use mpd_protocol::{Filter, command::Argument};
     ///
     /// assert_eq!(
     ///     Filter::not(Filter::equal("artist", "foo")),
@@ -141,7 +142,7 @@ impl Filter {
     /// Negate the filter.
     ///
     /// ```
-    /// use mpd_protocol::Filter;
+    /// use mpd_protocol::{Filter, command::Argument};
     ///
     /// assert_eq!(
     ///     Filter::equal("artist", "hello").negate().render(),
@@ -158,7 +159,7 @@ impl Filter {
     /// Automatically flattens nested `AND` conditions.
     ///
     /// ```
-    /// use mpd_protocol::Filter;
+    /// use mpd_protocol::{Filter, command::Argument};
     ///
     /// assert_eq!(
     ///     Filter::equal("artist", "foo").and(Filter::equal("album", "bar")).render(),
@@ -186,9 +187,10 @@ impl Filter {
 
         Self(FilterType::And(out))
     }
+}
 
-    /// Render this filter expression to a string ready to be used in a `Command`.
-    pub fn render(self) -> String {
+impl Argument for Filter {
+    fn render(self) -> String {
         self.0.render()
     }
 }
@@ -255,7 +257,7 @@ impl FilterType {
 
 #[cfg(test)]
 mod tests {
-    use super::{Filter, FilterError, Operator};
+    use super::{Argument, Filter, FilterError, Operator};
 
     #[test]
     fn filter_simple_equal() {

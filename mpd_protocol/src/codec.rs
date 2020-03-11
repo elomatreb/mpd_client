@@ -14,11 +14,17 @@ use std::error::Error;
 use std::fmt;
 use std::io;
 
-use crate::command::Command;
+use crate::command::CommandList;
 use crate::parser;
 use crate::response::{Error as ResponseError, Frame, Response};
 
-/// [Codec](https://docs.rs/tokio-util/0.2.0/tokio_util/codec/index.html) for MPD protocol.
+/// [Codec] for MPD protocol.
+///
+/// The `Encoder` implemention consumes [`CommandList`]s, but single commands can trivially be
+/// converted into lists and won't needlessly be wrapped.
+///
+/// [Codec]: https://docs.rs/tokio-util/0.2.0/tokio_util/codec/index.html
+/// [`CommandList`]: ../command/struct.CommandList.html
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub struct MpdCodec {
     cursor: usize,
@@ -39,7 +45,7 @@ impl MpdCodec {
 }
 
 impl Encoder for MpdCodec {
-    type Item = Command;
+    type Item = CommandList;
     type Error = MpdCodecError;
 
     fn encode(&mut self, command: Self::Item, buf: &mut BytesMut) -> Result<(), Self::Error> {
