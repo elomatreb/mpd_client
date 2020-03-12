@@ -5,6 +5,7 @@
 use std::borrow::Cow;
 use std::error::Error;
 use std::fmt;
+use std::ops::Not;
 
 use crate::command::{escape_argument, Argument};
 
@@ -123,24 +124,10 @@ impl Filter {
         Filter::tag(tag, Operator::Equal, value).expect("Invalid filter expression")
     }
 
-    /// Negate the given filter.
-    ///
-    /// Like [`negate`](#method.negate), but can be used at the start of constructing a filter.
-    ///
-    /// ```
-    /// use mpd_protocol::{Filter, command::Argument};
-    ///
-    /// assert_eq!(
-    ///     Filter::not(Filter::equal("artist", "foo")),
-    ///     Filter::equal("artist", "foo").negate()
-    /// );
-    /// ```
-    #[allow(clippy::should_implement_trait)]
-    pub fn not(other: Self) -> Self {
-        other.negate()
-    }
-
     /// Negate the filter.
+    ///
+    /// You can also use the negation operator (`!`) if you prefer to negate at the start of an
+    /// expression.
     ///
     /// ```
     /// use mpd_protocol::{Filter, command::Argument};
@@ -193,6 +180,14 @@ impl Filter {
 impl Argument for Filter {
     fn render(self) -> Cow<'static, str> {
         Cow::Owned(self.0.render())
+    }
+}
+
+impl Not for Filter {
+    type Output = Self;
+
+    fn not(self) -> Self::Output {
+        self.negate()
     }
 }
 
