@@ -11,7 +11,6 @@ use tokio::{
     sync::{
         mpsc::{self, UnboundedReceiver, UnboundedSender},
         oneshot,
-        Mutex,
     },
 };
 use tokio_util::codec::{FramedRead, FramedWrite};
@@ -27,8 +26,8 @@ static CANCEL_IDLE: &str = "noidle";
 type CommandResponder = oneshot::Sender<Result<Response, CommandError>>;
 
 /// Client for MPD.
-#[derive(Debug)]
-pub struct Client(Mutex<UnboundedSender<(CommandList, CommandResponder)>>);
+#[derive(Clone, Debug)]
+pub struct Client(UnboundedSender<(CommandList, CommandResponder)>);
 
 impl Client {
     /// Connect to the MPD server using the given connection.
@@ -69,7 +68,7 @@ impl Client {
             state_changes_sender,
         ));
 
-        Ok((Self(Mutex::new(commands)), state_changes))
+        Ok((Self(commands), state_changes))
     }
 
     /// Send the given command, and return the response to it.
@@ -116,7 +115,7 @@ impl Client {
 
     async fn do_send(&self, commands: CommandList) -> Result<Response, CommandError> {
         let (tx, rx) = oneshot::channel();
-        self.0.lock().await.send((commands, tx))?;
+        self.0.send((commands, tx))?;
 
         rx.await?
     }
