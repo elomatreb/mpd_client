@@ -1,7 +1,10 @@
 //! The client implementation.
 
 use futures::sink::SinkExt;
-use mpd_protocol::{response::Error as ErrorResponse, Command, CommandList, MpdCodec, MpdCodecError, Response};
+use mpd_protocol::{
+    response::{Error as ErrorResponse, Frame},
+    Command, CommandList, MpdCodec, MpdCodecError, Response,
+};
 use tokio::{
     io::{self, split, AsyncRead, AsyncWrite},
     stream::{Stream, StreamExt},
@@ -41,6 +44,10 @@ impl Client {
     /// # Panics
     ///
     /// Since this spawns a task internally, this will panic when called outside a tokio runtime.
+    ///
+    /// # Errors
+    ///
+    /// This will return an error if sending the initial commands over the given transport fails.
     pub async fn connect<C>(
         connection: C,
     ) -> Result<
@@ -68,9 +75,50 @@ impl Client {
     }
 
     /// Send the given command, and return the response to it.
-    pub async fn command(&self, command: Command) -> Result<Response, CommandError> {
+    ///
+    /// # Errors
+    ///
+    /// This will return an error if the connection to MPD is closed (cleanly) or a protocol error
+    /// occurs (including IO errors), or if the command results in an MPD error.
+    pub async fn command(&self, command: Command) -> Result<Frame, CommandError> {
+        self.do_send(CommandList::new(command))
+            .await?
+            .single_frame()
+            .map_err(Into::into)
+    }
+
+    /// Send the given command list, and return the responses to the contained commands.
+    ///
+    /// # Errors
+    ///
+    /// Errors will be returned in the same conditions as with [`command`], but if *any* of the
+    /// commands in the list return an error condition, the entire list will be treated as an
+    /// error. You may recover possible succesful fields in a response from the [error variant].
+    ///
+    /// [`command`]: #method.command
+    /// [error variant]: enum.CommandError.html#variant.ErrorResponse
+    pub async fn command_list(&self, commands: CommandList) -> Result<Vec<Frame>, CommandError> {
+        let res = self.do_send(commands).await?;
+        let mut frames = Vec::with_capacity(res.len());
+
+        for frame in res {
+            match frame {
+                Ok(f) => frames.push(f),
+                Err(error) => {
+                    return Err(CommandError::ErrorResponse {
+                        error,
+                        succesful_frames: frames,
+                    });
+                }
+            }
+        }
+
+        Ok(frames)
+    }
+
+    async fn do_send(&self, commands: CommandList) -> Result<Response, CommandError> {
         let (tx, rx) = oneshot::channel();
-        self.0.lock().await.send((CommandList::new(command), tx))?;
+        self.0.lock().await.send((commands, tx))?;
 
         rx.await?
     }
@@ -83,6 +131,13 @@ pub enum CommandError {
     ConnectionClosed,
     /// Received or attempted to send an invalid message
     InvalidMessage(MpdCodecError),
+    /// Command returned an error
+    ErrorResponse {
+        /// The error
+        error: ErrorResponse,
+        /// Possible sucessful frames in the same response, empty if not in a command list
+        succesful_frames: Vec<Frame>,
+    },
 }
 
 impl fmt::Display for CommandError {
@@ -90,6 +145,16 @@ impl fmt::Display for CommandError {
         match self {
             CommandError::ConnectionClosed => write!(f, "The connection is closed"),
             CommandError::InvalidMessage(_) => write!(f, "Invalid message"),
+            CommandError::ErrorResponse {
+                error,
+                succesful_frames,
+            } => write!(
+                f,
+                "Command returned an error (code {} - {:?}) after {} succesful frames",
+                error.code,
+                error.message,
+                succesful_frames.len()
+            ),
         }
     }
 }
@@ -121,6 +186,16 @@ impl<T> From<MpscSendError<T>> for CommandError {
 impl From<OneshotRecvError> for CommandError {
     fn from(_: OneshotRecvError) -> Self {
         CommandError::ConnectionClosed
+    }
+}
+
+#[doc(hidden)]
+impl From<ErrorResponse> for CommandError {
+    fn from(error: ErrorResponse) -> Self {
+        CommandError::ErrorResponse {
+            error,
+            succesful_frames: Vec::new(),
+        }
     }
 }
 
