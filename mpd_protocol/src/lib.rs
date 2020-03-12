@@ -24,6 +24,8 @@ pub mod filter;
 pub mod parser;
 pub mod response;
 
+mod macros;
+
 pub use codec::{MpdCodec, MpdCodecError};
 pub use command::{Command, CommandList};
 pub use filter::Filter;
