@@ -21,8 +21,8 @@ static COMMAND_LIST_END: &str = "command_list_end\n";
 /// A single command, possibly including arguments.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Command {
-    base: String,
-    args: Vec<String>,
+    base: Cow<'static, str>,
+    args: Vec<Cow<'static, str>>,
 }
 
 /// A non-empty list of commands.
@@ -40,7 +40,7 @@ pub trait Argument {
     ///
     /// This does not need to include escaping (except where it is necessary due to nesting of
     /// escaped values, such as in filter expressions) or quoting of values containing whitespace.
-    fn render(self) -> String;
+    fn render(self) -> Cow<'static, str>;
 }
 
 /// Error returned when attempting to construct an invalid command.
@@ -64,7 +64,7 @@ impl Command {
     /// Same as [`build`], but panics on error instead of returning a result.
     ///
     /// [`build`]: #method.build
-    pub fn new(command: impl Into<String>) -> Self {
+    pub fn new(command: impl Into<Cow<'static, str>>) -> Self {
         Self::build(command).expect("Invalid command")
     }
 
@@ -74,7 +74,7 @@ impl Command {
     ///
     /// Errors are returned when the command base is invalid (e.g. empty string or containing
     /// whitespace).
-    pub fn build(command: impl Into<String>) -> Result<Self, CommandError> {
+    pub fn build(command: impl Into<Cow<'static, str>>) -> Result<Self, CommandError> {
         let base = command.into();
 
         validate_command_part(&base)?;
@@ -91,8 +91,7 @@ impl Command {
     ///
     /// [`add_argument`]: #method.add_argument
     pub fn argument(mut self, argument: impl Argument) -> Self {
-        self.add_argument(argument.render())
-            .expect("Invalid argument");
+        self.add_argument(argument).expect("Invalid argument");
         self
     }
 
@@ -113,7 +112,7 @@ impl Command {
 
     /// Render this command to the wire representation.
     pub(crate) fn render(self) -> String {
-        let mut out = self.base;
+        let mut out = self.base.into_owned();
 
         for arg in self.args {
             // Argumetns needs to be quoted if they contain whitespace
@@ -202,14 +201,14 @@ impl CommandList {
 }
 
 impl Argument for String {
-    fn render(self) -> String {
-        self
+    fn render(self) -> Cow<'static, str> {
+        Cow::Owned(self)
     }
 }
 
 impl Argument for &'static str {
-    fn render(self) -> String {
-        self.to_owned()
+    fn render(self) -> Cow<'static, str> {
+        Cow::Borrowed(self)
     }
 }
 

@@ -2,6 +2,7 @@
 //! expressions](https://www.musicpd.org/doc/html/protocol.html#filters), as used by e.g. the
 //! `find` command.
 
+use std::borrow::Cow;
 use std::error::Error;
 use std::fmt;
 
@@ -190,8 +191,8 @@ impl Filter {
 }
 
 impl Argument for Filter {
-    fn render(self) -> String {
-        self.0.render()
+    fn render(self) -> Cow<'static, str> {
+        Cow::Owned(self.0.render())
     }
 }
 
