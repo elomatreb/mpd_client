@@ -2,25 +2,23 @@
 
 use futures::sink::SinkExt;
 use mpd_protocol::{
-    response::{Error as ErrorResponse, Frame},
+    response::Frame,
     Command, CommandList, MpdCodec, MpdCodecError, Response,
 };
 use tokio::{
     io::{self, split, AsyncRead, AsyncWrite},
     stream::{Stream, StreamExt},
     sync::{
-        mpsc::{self, error::SendError as MpscSendError, UnboundedReceiver, UnboundedSender},
-        oneshot::{self, error::RecvError as OneshotRecvError},
+        mpsc::{self, UnboundedReceiver, UnboundedSender},
+        oneshot,
         Mutex,
     },
 };
 use tokio_util::codec::{FramedRead, FramedWrite};
 
 use std::collections::VecDeque;
-use std::error::Error;
-use std::fmt;
-use std::fmt::Debug;
 
+use crate::errors::{CommandError, StateChangeError};
 use crate::util::Subsystem;
 
 static IDLE: &str = "idle";
@@ -96,7 +94,7 @@ impl Client {
     /// error. You may recover possible succesful fields in a response from the [error variant].
     ///
     /// [`command`]: #method.command
-    /// [error variant]: enum.CommandError.html#variant.ErrorResponse
+    /// [error variant]: ../errors/enum.CommandError.html#variant.ErrorResponse
     pub async fn command_list(&self, commands: CommandList) -> Result<Vec<Frame>, CommandError> {
         let res = self.do_send(commands).await?;
         let mut frames = Vec::with_capacity(res.len());
@@ -121,132 +119,6 @@ impl Client {
         self.0.lock().await.send((commands, tx))?;
 
         rx.await?
-    }
-}
-
-/// Errors which can occur when issuing a command.
-#[derive(Debug)]
-pub enum CommandError {
-    /// The connection to MPD is closed
-    ConnectionClosed,
-    /// Received or attempted to send an invalid message
-    InvalidMessage(MpdCodecError),
-    /// Command returned an error
-    ErrorResponse {
-        /// The error
-        error: ErrorResponse,
-        /// Possible sucessful frames in the same response, empty if not in a command list
-        succesful_frames: Vec<Frame>,
-    },
-}
-
-impl fmt::Display for CommandError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            CommandError::ConnectionClosed => write!(f, "The connection is closed"),
-            CommandError::InvalidMessage(_) => write!(f, "Invalid message"),
-            CommandError::ErrorResponse {
-                error,
-                succesful_frames,
-            } => write!(
-                f,
-                "Command returned an error (code {} - {:?}) after {} succesful frames",
-                error.code,
-                error.message,
-                succesful_frames.len()
-            ),
-        }
-    }
-}
-
-impl Error for CommandError {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        match self {
-            CommandError::InvalidMessage(e) => Some(e),
-            _ => None,
-        }
-    }
-}
-
-#[doc(hidden)]
-impl From<MpdCodecError> for CommandError {
-    fn from(e: MpdCodecError) -> Self {
-        CommandError::InvalidMessage(e)
-    }
-}
-
-#[doc(hidden)]
-impl<T> From<MpscSendError<T>> for CommandError {
-    fn from(_: MpscSendError<T>) -> Self {
-        CommandError::ConnectionClosed
-    }
-}
-
-#[doc(hidden)]
-impl From<OneshotRecvError> for CommandError {
-    fn from(_: OneshotRecvError) -> Self {
-        CommandError::ConnectionClosed
-    }
-}
-
-#[doc(hidden)]
-impl From<ErrorResponse> for CommandError {
-    fn from(error: ErrorResponse) -> Self {
-        CommandError::ErrorResponse {
-            error,
-            succesful_frames: Vec::new(),
-        }
-    }
-}
-
-/// Errors which may occur while listening for state change events.
-#[derive(Debug)]
-pub enum StateChangeError {
-    /// The connection to MPD is closed
-    ConnectionClosed,
-    /// The message was invalid
-    InvalidMessage(MpdCodecError),
-    /// The state change message contained an error frame
-    ErrorMessage(ErrorResponse),
-    /// The state message wasn't empty, but did not contain the expected `changed` key
-    MissingChangedKey,
-}
-
-impl fmt::Display for StateChangeError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            StateChangeError::ConnectionClosed => write!(f, "The connection was closed"),
-            StateChangeError::InvalidMessage(_) => write!(f, "Invalid message"),
-            StateChangeError::ErrorMessage(ErrorResponse { code, message, .. }) => write!(
-                f,
-                "Message contained an error frame (code {} - {:?})",
-                code, message
-            ),
-            StateChangeError::MissingChangedKey => write!(f, "Message was missing 'changed' key"),
-        }
-    }
-}
-
-impl Error for StateChangeError {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        match self {
-            StateChangeError::InvalidMessage(e) => Some(e),
-            _ => None,
-        }
-    }
-}
-
-#[doc(hidden)]
-impl From<ErrorResponse> for StateChangeError {
-    fn from(r: ErrorResponse) -> Self {
-        StateChangeError::ErrorMessage(r)
-    }
-}
-
-#[doc(hidden)]
-impl From<MpdCodecError> for StateChangeError {
-    fn from(e: MpdCodecError) -> Self {
-        StateChangeError::InvalidMessage(e)
     }
 }
 

@@ -12,6 +12,7 @@
 //! User-friendly async client for [MPD](https://musicpd.org).
 
 pub mod client;
+pub mod errors;
 pub mod util;
 
 pub use client::Client;
