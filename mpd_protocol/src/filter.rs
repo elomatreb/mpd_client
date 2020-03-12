@@ -58,9 +58,9 @@ impl fmt::Display for FilterError {
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum FilterType {
     Tag {
-        tag: String,
+        tag: Cow<'static, str>,
         operator: Operator,
-        value: String,
+        value: Cow<'static, str>,
     },
     Not(Box<FilterType>),
     And(Vec<FilterType>),
@@ -90,9 +90,9 @@ impl Filter {
     /// );
     /// ```
     pub fn tag(
-        tag: impl Into<String>,
+        tag: impl Into<Cow<'static, str>>,
         operator: Operator,
-        value: impl Into<String>,
+        value: impl Into<Cow<'static, str>>,
     ) -> Result<Self, FilterError> {
         let tag = tag.into();
         if tag.is_empty() {
@@ -119,7 +119,7 @@ impl Filter {
     ///     "(artist == \"hello world\")"
     /// );
     /// ```
-    pub fn equal(tag: impl Into<String>, value: impl Into<String>) -> Self {
+    pub fn equal(tag: impl Into<Cow<'static, str>>, value: impl Into<Cow<'static, str>>) -> Self {
         Filter::tag(tag, Operator::Equal, value).expect("Invalid filter expression")
     }
 
