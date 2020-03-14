@@ -5,7 +5,7 @@
 ///
 /// command_list![
 ///     Command::new("status"),
-///     Command::new("pause").argument("1"),
+///     Command::new("pause").argument("1")
 /// ];
 ///
 /// // Equivalent to:
@@ -18,7 +18,7 @@
 ///         Command::new("pause").argument("1")
 ///     );
 ///     command_list
-/// }
+/// };
 /// ```
 #[macro_export]
 macro_rules! command_list {
