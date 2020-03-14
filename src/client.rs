@@ -1,10 +1,7 @@
 //! The client implementation.
 
 use futures::sink::SinkExt;
-use mpd_protocol::{
-    response::Frame,
-    Command, CommandList, MpdCodec, MpdCodecError, Response,
-};
+use mpd_protocol::{response::Frame, Command, CommandList, MpdCodec, MpdCodecError, Response};
 use tokio::{
     io::{self, split, AsyncRead, AsyncWrite},
     stream::{Stream, StreamExt},
@@ -16,6 +13,7 @@ use tokio::{
 use tokio_util::codec::{FramedRead, FramedWrite};
 
 use std::collections::VecDeque;
+use std::iter;
 
 use crate::errors::{CommandError, StateChangeError};
 use crate::util::Subsystem;
@@ -205,8 +203,9 @@ async fn run_loop<C>(
                     }
                 }
 
-                // Get the next command to send
-                if let Some((command, responder)) = command_queue.pop_front() {
+                // Get the next command with an open response channel (closed channels represent
+                // cancelled command futures).
+                if let Some((command, responder)) = next_command(&mut command_queue) {
                     // If there is a command in the queue, send it immediately and store the
                     // responder
                     current_command_responder = Some(responder);
@@ -224,6 +223,13 @@ async fn run_loop<C>(
             }
         }
     }
+}
+
+fn next_command(
+    queue: &mut VecDeque<(CommandList, CommandResponder)>,
+) -> Option<(CommandList, CommandResponder)> {
+    iter::from_fn(|| queue.pop_front())
+        .find(|(_, responder)| !responder.is_closed())
 }
 
 fn response_to_subsystem(res: Response) -> Result<Option<Subsystem>, StateChangeError> {
