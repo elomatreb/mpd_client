@@ -1,6 +1,6 @@
-//! Tools for constructing [filter
-//! expressions](https://www.musicpd.org/doc/html/protocol.html#filters), as used by e.g. the
-//! `find` command.
+//! Tools for constructing [filter expressions], as used by e.g. the `find` command.
+//!
+//! [filter expressions]: https://www.musicpd.org/doc/html/protocol.html#filters
 
 use std::borrow::Cow;
 use std::error::Error;
@@ -19,7 +19,9 @@ pub static ANY: &str = "any";
 /// Provided here to have more apparent meaning than a simple empty string literal.
 pub static IS_ABSENT: &str = "";
 
-/// A [filter expression](https://www.musicpd.org/doc/html/protocol.html#filters).
+/// A [filter expression].
+///
+/// [filter expression]: https://www.musicpd.org/doc/html/protocol.html#filters
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Filter(FilterType);
 
@@ -68,14 +70,13 @@ enum FilterType {
 }
 
 impl Filter {
-    /// Create a filter which selects on the given `tag`, using the given
-    /// [`operator`](enum.Operator.html), for the given `value`.
+    /// Create a filter which selects on the given `tag`, using the given [`operator`], for the
+    /// given `value`.
     ///
     /// An error is returned when the given `tag` is empty, but `value` may be empty (which results
-    /// in the filter only matching if the `tag` is **not** present, see also
-    /// [`IS_ABSENT`](static.IS_ABSENT.html)).
+    /// in the filter only matching if the `tag` is **not** present, see also [`IS_ABSENT`]).
     ///
-    /// The magic value [`any`](static.ANY.html) checks for the value in any tag.
+    /// The magic value [`any`] checks for the value in any tag.
     ///
     /// ```
     /// use mpd_protocol::command::Argument;
@@ -90,6 +91,10 @@ impl Filter {
     ///     FilterError::EmptyTag
     /// );
     /// ```
+    ///
+    /// [`operator`]: enum.Operator.html
+    /// [`IS_ABSENT`]: static.iS_ABSENT.html
+    /// [`any`]: static.ANY.html
     pub fn tag(
         tag: impl Into<Cow<'static, str>>,
         operator: Operator,
@@ -109,8 +114,8 @@ impl Filter {
 
     /// Create a filter which checks where the given `tag` is equal to the given `value`.
     ///
-    /// Similar to [`tag`](#method.tag), but always checks for equality and panics when the given
-    /// `tag` is invalid.
+    /// Similar to [`tag`], but always checks for equality and panics when the given `tag` is
+    /// invalid.
     ///
     /// ```
     /// use mpd_protocol::{Filter, command::Argument};
@@ -120,6 +125,8 @@ impl Filter {
     ///     "(artist == \"hello world\")"
     /// );
     /// ```
+    ///
+    /// [`tag`]: #method.tag
     pub fn equal(tag: impl Into<Cow<'static, str>>, value: impl Into<Cow<'static, str>>) -> Self {
         Filter::tag(tag, Operator::Equal, value).expect("Invalid filter expression")
     }

@@ -7,16 +7,21 @@
 #![deny(intra_doc_link_resolution_failure)]
 #![forbid(unsafe_code)]
 
-//! Implementation of the client protocol for [MPD](https://musicpd.org). Supports binary responses
-//! and command lists, provided they are initiated with the `command_list_ok_begin` command.
+//! Implementation of the client protocol for [MPD]. Supports binary responses and command lists,
+//! provided they are initiated with the `command_list_ok_begin` command.
 //!
-//! Consists of a parser for MPD responses ([`parser`](parser/index.html)), and an implementation
-//! of [Tokio](https://tokio.rs)'s
-//! [codec](https://docs.rs/tokio-util/0.2.0/tokio_util/codec/index.html) subsystem to facilitate
-//! asynchronous clients ([`codec`](codec/index.html)).
+//! Consists of a parser for MPD responses ([`parser`]), and an implementation of [Tokio]'s
+//! [codec][tokio-codec] subsystem to facilitate asynchronous clients ([`codec`]).
 //!
-//! Also provided are utilities for constructing [commands](command/index.html) and [filter
-//! expressions](filter/index.html), as a special case of argument to commands.
+//! Also provided are utilities for constructing [commands] and [filter expressions], as a special
+//! case of argument to commands.
+//!
+//! [MPD]: https://musicpd.org
+//! [Tokio]: https://tokio.rs
+//! [tokio-codec]: https://docs.rs/tokio-util/0.2.0/tokio_util/codec/index.html
+//! [`codec`]: codec/index.html
+//! [commands]: command/index.html
+//! [filter expressions]: filter/index.html
 
 pub mod codec;
 pub mod command;

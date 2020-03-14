@@ -1,10 +1,13 @@
-//! [Codec](https://docs.rs/tokio-util/0.2.0/tokio_util/codec/index.html) for MPD protocol.
+//! [Codec] for MPD protocol.
 //!
 //! The codec accepts sending arbitrary (single) messages, it is up to you to make sure they are
 //! valid.
 //!
-//! See the notes on the [`parser`](../parser/index.html) module about what responses the codec
+//! See the notes on the [`parser`] module about what responses the codec
 //! supports.
+//!
+//! [Codec]: https://docs.rs/tokio-util/0.2.0/tokio_util/codec/index.html
+//! [`parser`]: ../parser/index.html
 
 use bytes::{Buf, Bytes, BytesMut};
 use log::{debug, info, trace};
@@ -176,7 +179,9 @@ fn convert_raw_response(res: &[parser::Response<'_>]) -> Response {
     Response::new(frames, error)
 }
 
-/// Errors which can occur during [`MpdCodec`](struct.MpdCodec.html) operation.
+/// Errors which can occur during [`MpdCodec`] operation.
+///
+/// [`MpdCodec`]: struct.MpdCodec.html
 #[derive(Debug)]
 pub enum MpdCodecError {
     /// IO error occured

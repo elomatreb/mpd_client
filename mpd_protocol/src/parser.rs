@@ -1,4 +1,4 @@
-//! [`nom`](https://github.com/Geal/nom)-based parsers for MPD responses.
+//! [`nom`]-based parsers for MPD responses.
 //!
 //! # Feature support
 //!
@@ -9,6 +9,8 @@
 //! responses are not separated from each other, which causes the responses to be treated as a
 //! single large one, resulting in an error if any but the last response in the list contain
 //! binary fields.
+//!
+//! [`nom`]: https://crates.io/crates/nom
 
 use nom::{
     branch::alt,
@@ -28,7 +30,9 @@ use std::str::{self, FromStr};
 
 /// Initial message sent by MPD on connect.
 ///
-/// Parsed from raw data using [`greeting`](fn.greeting.html).
+/// Parsed from raw data using [`greeting`].
+///
+/// [`greeting`]: fn.greeting.html
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Greeting<'a> {
     /// Protocol version reported by MPD.
@@ -37,8 +41,10 @@ pub struct Greeting<'a> {
 
 /// Complete response, either succesful or an error. Succesful responses may be empty.
 ///
-/// Parsed from raw data using [`response`](fn.response.html). See also the notes about [parser
-/// support](index.html#feature-support).
+/// Parsed from raw data using [`response`]. See also the notes about [parser support].
+///
+/// [`response`]: fn.response.html
+/// [parser support]: index.html#feature-support
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Response<'a> {
     /// Successful response.
@@ -50,8 +56,9 @@ pub enum Response<'a> {
     },
     /// Error response.
     Error {
-        /// Error code, as [defined by
-        /// MPD](https://github.com/MusicPlayerDaemon/MPD/blob/master/src/protocol/Ack.hxx).
+        /// Error code, as [defined by MPD][mpd-error-def].
+        ///
+        /// [mpd-error-def]: https://github.com/MusicPlayerDaemon/MPD/blob/master/src/protocol/Ack.hxx
         code: u64,
         /// Index of command that caused this error in a command list.
         command_index: u64,
@@ -62,7 +69,9 @@ pub enum Response<'a> {
     },
 }
 
-/// Parse a [`Greeting`](struct.Greeting.html) line.
+/// Parse a [`Greeting`] line.
+///
+/// [`Greeting`]: struct.Greeting.html
 ///
 /// ```
 /// use mpd_protocol::parser::{Greeting, greeting};
@@ -79,7 +88,7 @@ pub fn greeting(i: &[u8]) -> IResult<&[u8], Greeting<'_>> {
 
 /// Parse a complete response, resulting in one or more frames if succesful.
 ///
-/// See also the notes about [parser support](index.html#feature-support).
+/// See also the notes about [parser support].
 ///
 /// ```
 /// use mpd_protocol::parser::{Response, response};
@@ -89,6 +98,8 @@ pub fn greeting(i: &[u8]) -> IResult<&[u8], Greeting<'_>> {
 ///     Ok(([].as_ref(), vec![Response::Success { fields: vec![("foo", "bar")], binary: None }]))
 /// );
 /// ```
+///
+/// [parser support]: index.html#feature-support
 pub fn response(i: &[u8]) -> IResult<&[u8], Vec<Response<'_>>> {
     alt((
         map(error, |r| vec![r]),

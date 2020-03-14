@@ -29,9 +29,9 @@ pub struct Frame {
 /// Data in an error.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Error {
-    /// Error code. See [the MPD
-    /// source](https://github.com/MusicPlayerDaemon/MPD/blob/master/src/protocol/Ack.hxx#L30) for
-    /// a list of of possible values.
+    /// Error code. See [the MPD source][mpd-error-def] for a list of of possible values.
+    ///
+    /// [mpd-error-def]: https://github.com/MusicPlayerDaemon/MPD/blob/master/src/protocol/Ack.hxx#L30
     pub code: u64,
     /// Index of command in a command list that caused this error. 0 when not in a command list.
     pub command_index: u64,
@@ -196,8 +196,9 @@ impl Response {
     }
 }
 
-/// Iterator over frames in a response, as returned by
-/// [`frames()`](struct.Response.html#method.frames).
+/// Iterator over frames in a response, as returned by [`frames()`].
+///
+/// [`frames()`]: struct.Response.html#method.frames
 #[derive(Copy, Clone, Debug)]
 pub struct FramesRef<'a> {
     response: &'a Response,
@@ -244,8 +245,9 @@ impl<'a> IntoIterator for &'a Response {
     }
 }
 
-/// Iterator over frames in a response, as returned by
-/// [`into_frames()`](struct.Response.html#method.into_frames).
+/// Iterator over frames in a response, as returned by [`into_frames()`].
+///
+/// [`into_frames()`]: struct.Response.html#method.into_frames
 #[derive(Clone, Debug)]
 pub struct Frames(Response);
 
