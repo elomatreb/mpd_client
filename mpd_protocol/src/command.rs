@@ -201,6 +201,12 @@ impl CommandList {
     }
 }
 
+impl Extend<Command> for CommandList {
+    fn extend<T: IntoIterator<Item = Command>>(&mut self, iter: T) {
+        self.tail.extend(iter);
+    }
+}
+
 impl Argument for String {
     fn render(self) -> Cow<'static, str> {
         Cow::Owned(self)
