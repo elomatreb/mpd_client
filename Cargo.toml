@@ -1,6 +1,6 @@
 [package]
 name = "mpd_client"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Ole Bertram <git@bertr.am>"]
 edition = "2018"
 description = "Prototype of a user-friendly async MPD client"
@@ -12,7 +12,7 @@ license = "GPL-3.0-or-later"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-mpd_protocol = { path = "../mpd_protocol" }
+mpd_protocol = "0.5.0"
 tokio = { version = "0.2.11", features = ["full"] }
 tokio-util = { version = "0.2.0", features = ["codec"] }
 futures = "0.3.4"
