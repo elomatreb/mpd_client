@@ -80,7 +80,7 @@ fn decoder_command_list() {
                 },
                 Frame {
                     values: Vec::new(),
-                    binary: Some(Bytes::from("BINARY")),
+                    binary: Some(Vec::from("BINARY")),
                 }
             ],
             None,
@@ -102,7 +102,7 @@ fn decoder_binary_response() {
         Some(Response::new(
             vec![Frame {
                 values: Vec::new(),
-                binary: Some(Bytes::from("HELLO \nOK\n WORLD")),
+                binary: Some(Vec::from("HELLO \nOK\n WORLD")),
             }],
             None,
         )),

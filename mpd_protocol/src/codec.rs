@@ -151,7 +151,7 @@ fn convert_raw_response(res: &[parser::Response<'_>]) -> Response {
                     .map(|(k, v)| (String::from(*k), String::from(*v)))
                     .collect();
 
-                let binary = binary.map(|bin| Bytes::copy_from_slice(bin));
+                let binary = binary.map(|bin| Vec::from(bin));
 
                 frames.push(Frame { values, binary });
             }

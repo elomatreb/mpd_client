@@ -1,7 +1,5 @@
 //! Complete responses.
 
-use bytes::Bytes;
-
 use std::collections::HashMap;
 use std::iter::FusedIterator;
 
@@ -23,7 +21,7 @@ pub struct Frame {
     /// Key-value pairs. Keys can repeat arbitrarily often.
     pub values: Vec<(String, String)>,
     /// Binary frame.
-    pub binary: Option<Bytes>,
+    pub binary: Option<Vec<u8>>,
 }
 
 /// Data in an error.
