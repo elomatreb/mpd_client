@@ -9,7 +9,7 @@
 //! [Codec]: https://docs.rs/tokio-util/0.2.0/tokio_util/codec/index.html
 //! [`parser`]: ../parser/index.html
 
-use bytes::{Buf, Bytes, BytesMut};
+use bytes::{Buf, BytesMut};
 use log::{debug, info, trace};
 use tokio_util::codec::{Decoder, Encoder};
 
@@ -88,7 +88,8 @@ impl Decoder for MpdCodec {
                         return Ok(None);
                     } else {
                         // We got a malformed greeting
-                        return Err(MpdCodecError::InvalidGreeting(src.split().freeze()));
+                        let err = src.split();
+                        return Err(MpdCodecError::InvalidGreeting(Vec::from(&err[..])));
                     }
                 }
             }
@@ -117,7 +118,8 @@ impl Decoder for MpdCodec {
                 }
                 Err(e) => {
                     if !e.is_incomplete() {
-                        return Err(MpdCodecError::InvalidResponse(src.split().freeze()));
+                        let err = src.split();
+                        return Err(MpdCodecError::InvalidResponse(Vec::from(&err[..])));
                     }
                     trace!("decode: Message incomplete");
                 }
@@ -186,9 +188,9 @@ pub enum MpdCodecError {
     /// IO error occured
     Io(io::Error),
     /// Did not get expected greeting as first message (`OK MPD <protocol version>`)
-    InvalidGreeting(Bytes),
+    InvalidGreeting(Vec<u8>),
     /// A message could not be parsed succesfully.
-    InvalidResponse(Bytes),
+    InvalidResponse(Vec<u8>),
     /// A command string passed to the encoder was invalid (empty or contained a newline)
     InvalidCommand(String),
 }
