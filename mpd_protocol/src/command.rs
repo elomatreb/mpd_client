@@ -334,7 +334,6 @@ impl fmt::Display for CommandError {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::filter::Filter;
 
     #[test]
     fn single_render() {
@@ -350,13 +349,6 @@ mod test {
         assert_eq!(
             Command::new("hello").argument("foo's bar\"").render(),
             "hello \"foo\\'s bar\\\"\"\n"
-        );
-
-        assert_eq!(
-            Command::new("find")
-                .argument(Filter::equal("album", "hello world"))
-                .render(),
-            "find \"(album == \\\"hello world\\\")\"\n"
         );
 
         assert_eq!(

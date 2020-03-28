@@ -13,9 +13,6 @@
 //! Consists of a parser for MPD responses ([`parser`]), and an implementation of [Tokio]'s
 //! [codec][tokio-codec] subsystem to facilitate asynchronous clients ([`codec`]).
 //!
-//! Also provided are utilities for constructing [commands] and [filter expressions], as a special
-//! case of argument to commands.
-//!
 //! [MPD]: https://musicpd.org
 //! [Tokio]: https://tokio.rs
 //! [tokio-codec]: https://docs.rs/tokio-util/0.2.0/tokio_util/codec/index.html
@@ -25,7 +22,6 @@
 
 pub mod codec;
 pub mod command;
-pub mod filter;
 pub mod parser;
 pub mod response;
 
@@ -33,6 +29,5 @@ mod macros;
 
 pub use codec::{MpdCodec, MpdCodecError};
 pub use command::{Command, CommandList};
-pub use filter::Filter;
 pub use parser::{greeting as parse_greeting, response as parse_response};
 pub use response::Response;
