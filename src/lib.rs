@@ -16,6 +16,13 @@ pub mod errors;
 pub mod util;
 
 pub use client::Client;
+pub use util::Subsystem;
+
+pub use mpd_protocol::{
+    command_list, filter,
+    response::{Error, Frame},
+    Command, CommandList, MpdCodecError,
+};
 
 #[cfg(test)]
 mod tests {

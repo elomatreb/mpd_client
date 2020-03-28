@@ -1,5 +1,4 @@
-use mpd_client::{Client, util::Subsystem};
-use mpd_protocol::{response::Frame, Command};
+use mpd_client::{Client, Command, Frame, Subsystem};
 
 use tokio::net::TcpStream;
 use tokio::stream::StreamExt;
@@ -36,12 +35,14 @@ fn print_current_song(response: Frame) {
     if values.is_empty() {
         println!("(none)");
     } else {
-        println!("\"{}\" by \"{}\"", display_value(values.get("Title")), display_value(values.get("Artist")));
+        println!(
+            "\"{}\" by \"{}\"",
+            display_value(values.get("Title")),
+            display_value(values.get("Artist"))
+        );
     }
 }
 
 fn display_value<'a>(value: Option<&'_ Vec<&'a str>>) -> &'a str {
-    value
-        .and_then(|v| v.first())
-        .unwrap_or(&"(empty value)")
+    value.and_then(|v| v.first()).unwrap_or(&"(empty value)")
 }
