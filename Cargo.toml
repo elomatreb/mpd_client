@@ -12,7 +12,7 @@ license = "GPL-3.0-or-later"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-mpd_protocol = "0.5.0"
-tokio = { version = "0.2.11", features = ["full"] }
-tokio-util = { version = "0.2.0", features = ["codec"] }
+mpd_protocol = "0.6.0"
+tokio = { version = "0.2.13", features = ["full"] }
+tokio-util = { version = "0.3.1", features = ["codec"] }
 futures = "0.3.4"
