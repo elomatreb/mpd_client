@@ -47,11 +47,10 @@ impl MpdCodec {
     }
 }
 
-impl Encoder for MpdCodec {
-    type Item = CommandList;
+impl Encoder<CommandList> for MpdCodec {
     type Error = MpdCodecError;
 
-    fn encode(&mut self, command: Self::Item, buf: &mut BytesMut) -> Result<(), Self::Error> {
+    fn encode(&mut self, command: CommandList, buf: &mut BytesMut) -> Result<(), Self::Error> {
         trace!("encode: Command {:?}", command);
 
         buf.extend_from_slice(command.render().as_bytes());
