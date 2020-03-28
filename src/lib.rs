@@ -13,13 +13,15 @@
 
 pub mod client;
 pub mod errors;
+pub mod filter;
 pub mod util;
 
 pub use client::Client;
+pub use filter::Filter;
 pub use util::Subsystem;
 
 pub use mpd_protocol::{
-    command_list, filter,
+    command_list,
     response::{Error, Frame},
     Command, CommandList, MpdCodecError,
 };

@@ -228,8 +228,7 @@ async fn run_loop<C>(
 fn next_command(
     queue: &mut VecDeque<(CommandList, CommandResponder)>,
 ) -> Option<(CommandList, CommandResponder)> {
-    iter::from_fn(|| queue.pop_front())
-        .find(|(_, responder)| !responder.is_closed())
+    iter::from_fn(|| queue.pop_front()).find(|(_, responder)| !responder.is_closed())
 }
 
 fn response_to_subsystem(res: Response) -> Result<Option<Subsystem>, StateChangeError> {
