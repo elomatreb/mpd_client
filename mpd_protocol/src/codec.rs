@@ -13,13 +13,14 @@ use bytes::{Buf, BytesMut};
 use log::{debug, info, trace};
 use tokio_util::codec::{Decoder, Encoder};
 
+use std::convert::TryFrom;
 use std::error::Error;
 use std::fmt;
 use std::io;
 
 use crate::command::CommandList;
 use crate::parser;
-use crate::response::{Error as ResponseError, Frame, Response};
+use crate::response::Response;
 
 /// [Codec] for MPD protocol.
 ///
@@ -105,7 +106,9 @@ impl Decoder for MpdCodec {
 
             match parser::response(&src[..msg_end]) {
                 Ok((_remainder, response)) => {
-                    let r = convert_raw_response(&response);
+                    // The errors returned by the TryFrom impl are not possible when operating
+                    // directly on the results of our parser
+                    let r = Response::try_from(response.as_slice()).unwrap();
 
                     src.advance(msg_end);
                     self.cursor = 0;
@@ -137,47 +140,6 @@ impl Decoder for MpdCodec {
 
         Ok(None)
     }
-}
-
-/// Convert the raw parsed response to one with owned data
-fn convert_raw_response(res: &[parser::Response<'_>]) -> Response {
-    let mut frames = Vec::with_capacity(res.len());
-    let mut error = None;
-
-    for r in res {
-        match r {
-            parser::Response::Success { fields, binary } => {
-                let values = fields
-                    .iter()
-                    .map(|(k, v)| (String::from(*k), String::from(*v)))
-                    .collect();
-
-                let binary = binary.map(|bin| Vec::from(bin));
-
-                frames.push(Frame { values, binary });
-            }
-            parser::Response::Error {
-                code,
-                command_index,
-                current_command,
-                message,
-            } => {
-                assert!(
-                    error.is_none(),
-                    "response contained more than a single error"
-                );
-
-                error = Some(ResponseError {
-                    code: *code,
-                    command_index: *command_index,
-                    current_command: current_command.map(String::from),
-                    message: String::from(*message),
-                });
-            }
-        }
-    }
-
-    Response::new(frames, error)
 }
 
 /// Errors which can occur during [`MpdCodec`] operation.

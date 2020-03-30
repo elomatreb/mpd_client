@@ -1,7 +1,11 @@
 //! Complete responses.
 
 use std::collections::HashMap;
+use std::convert::TryFrom;
+use std::fmt;
 use std::iter::FusedIterator;
+
+use crate::parser;
 
 /// Response to a command, consisting of an abitrary amount of frames, which are responses to
 /// individual commands, and optionally a single error.
@@ -37,6 +41,15 @@ pub struct Error {
     pub current_command: Option<String>,
     /// Message describing the error.
     pub message: String,
+}
+
+/// Errors returned when attmepting to construct an owned `Response` from a list of parser results
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum OwnedResponseError {
+    /// There were further frames after an error frame
+    FramesAfterError,
+    /// An empty slice was provided (A response needs at least one frame or error)
+    Empty,
 }
 
 #[allow(clippy::len_without_is_empty)]
@@ -194,6 +207,56 @@ impl Response {
     }
 }
 
+impl<'a> TryFrom<&'a [parser::Response<'_>]> for Response {
+    type Error = OwnedResponseError;
+
+    fn try_from(raw_frames: &'a [parser::Response<'_>]) -> Result<Self, Self::Error> {
+        if raw_frames.is_empty() {
+            return Err(OwnedResponseError::Empty);
+        }
+
+        // Optimistically pre-allocated Vec
+        let mut frames = Vec::with_capacity(raw_frames.len());
+        let mut error = None;
+
+        for frame in raw_frames.iter().rev() {
+            match frame {
+                parser::Response::Success { fields, binary } => {
+                    let values = fields
+                        .iter()
+                        .map(|&(k, v)| (k.to_owned(), v.to_owned()))
+                        .collect();
+
+                    let binary = binary.map(Vec::from);
+
+                    frames.push(Frame { values, binary });
+                }
+                parser::Response::Error {
+                    code,
+                    command_index,
+                    current_command,
+                    message,
+                } => {
+                    if !frames.is_empty() {
+                        // If we already saw succesful frames, the error would not have been the
+                        // final element
+                        return Err(OwnedResponseError::FramesAfterError);
+                    }
+
+                    error = Some(Error {
+                        code: *code,
+                        command_index: *command_index,
+                        current_command: current_command.map(String::from),
+                        message: (*message).to_owned(),
+                    });
+                }
+            }
+        }
+
+        Ok(Response { frames, error })
+    }
+}
+
 /// Iterator over frames in a response, as returned by [`frames()`].
 ///
 /// [`frames()`]: struct.Response.html#method.frames
@@ -333,6 +396,21 @@ impl Frame {
         map
     }
 }
+
+impl fmt::Display for OwnedResponseError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            OwnedResponseError::FramesAfterError => {
+                write!(f, "Error frame was not the final element of response")
+            }
+            OwnedResponseError::Empty => {
+                write!(f, "Attempted to construct response with no values")
+            }
+        }
+    }
+}
+
+impl std::error::Error for OwnedResponseError {}
 
 #[cfg(test)]
 mod test {
