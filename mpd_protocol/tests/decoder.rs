@@ -1,6 +1,8 @@
 use bytes::{Bytes, BytesMut};
 use tokio_util::codec::Decoder;
 
+use std::sync::Arc;
+
 use mpd_protocol::codec::MpdCodec;
 use mpd_protocol::response::{Frame, Response};
 
@@ -49,9 +51,9 @@ fn decoder_simple_response() {
         Some(Response::new(
             vec![Frame {
                 values: vec![
-                    (String::from("hello"), String::from("world")),
-                    (String::from("foo"), String::from("OK")),
-                    (String::from("bar"), String::from("1234")),
+                    (Arc::from("hello"), String::from("world")),
+                    (Arc::from("foo"), String::from("OK")),
+                    (Arc::from("bar"), String::from("1234")),
                 ],
                 binary: None,
             }],
@@ -75,7 +77,7 @@ fn decoder_command_list() {
             vec![
                 Frame::empty(),
                 Frame {
-                    values: vec![(String::from("foo"), String::from("bar"))],
+                    values: vec![(Arc::from("foo"), String::from("bar"))],
                     binary: None,
                 },
                 Frame {
@@ -118,7 +120,7 @@ fn decoder_multiple_messages() {
     assert_eq!(
         Some(Response::new(
             vec![Frame {
-                values: vec![(String::from("foo"), String::from("bar"))],
+                values: vec![(Arc::from("foo"), String::from("bar"))],
                 binary: None,
             }],
             None,
@@ -129,7 +131,7 @@ fn decoder_multiple_messages() {
     assert_eq!(
         Some(Response::new(
             vec![Frame {
-                values: vec![(String::from("hello"), String::from("world"))],
+                values: vec![(Arc::from("hello"), String::from("world"))],
                 binary: None,
             }],
             None,

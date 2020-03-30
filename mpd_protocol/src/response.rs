@@ -1,9 +1,12 @@
 //! Complete responses.
 
+use fnv::FnvHashSet;
+
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::fmt;
 use std::iter::FusedIterator;
+use std::sync::Arc;
 
 use crate::parser;
 
@@ -23,7 +26,7 @@ pub struct Response {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Frame {
     /// Key-value pairs. Keys can repeat arbitrarily often.
-    pub values: Vec<(String, String)>,
+    pub values: Vec<(Arc<str>, String)>,
     /// Binary frame.
     pub binary: Option<Vec<u8>>,
 }
@@ -176,11 +179,12 @@ impl Response {
     /// Creates an iterator over all frames and errors in the response.
     ///
     /// ```
+    /// use std::sync::Arc;
     /// use mpd_protocol::response::{Frame, Response};
     ///
-    /// let mut first = vec![(String::from("hello"), String::from("world"))];
+    /// let mut first = vec![(Arc::from("hello"), String::from("world"))];
     ///
-    /// let second = vec![(String::from("foo"), String::from("bar"))];
+    /// let second = vec![(Arc::from("foo"), String::from("bar"))];
     ///
     /// let mut iter = Response::new(vec![Frame {
     ///     values: first.clone(),
@@ -219,12 +223,14 @@ impl<'a> TryFrom<&'a [parser::Response<'_>]> for Response {
         let mut frames = Vec::with_capacity(raw_frames.len());
         let mut error = None;
 
+        let mut keys = FnvHashSet::default();
+
         for frame in raw_frames.iter().rev() {
             match frame {
                 parser::Response::Success { fields, binary } => {
                     let values = fields
                         .iter()
-                        .map(|&(k, v)| (k.to_owned(), v.to_owned()))
+                        .map(|&(k, v)| (simple_intern(&mut keys, k), v.to_owned()))
                         .collect();
 
                     let binary = binary.map(Vec::from);
@@ -254,6 +260,17 @@ impl<'a> TryFrom<&'a [parser::Response<'_>]> for Response {
         }
 
         Ok(Response { frames, error })
+    }
+}
+
+fn simple_intern(store: &mut FnvHashSet<Arc<str>>, value: &str) -> Arc<str> {
+    match store.get(value) {
+        Some(v) => Arc::clone(v),
+        None => {
+            let v = Arc::from(value);
+            store.insert(Arc::clone(&v));
+            v
+        }
     }
 }
 
@@ -368,13 +385,14 @@ impl Frame {
     /// key are ordered like they appear in the response.
     ///
     /// ```
+    /// use std::sync::Arc;
     /// use mpd_protocol::response::Frame;
     ///
     /// let f = Frame {
     ///     values: vec![
-    ///         (String::from("foo"), String::from("bar")),
-    ///         (String::from("hello"), String::from("world")),
-    ///         (String::from("foo"), String::from("baz")),
+    ///         (Arc::from("foo"), String::from("bar")),
+    ///         (Arc::from("hello"), String::from("world")),
+    ///         (Arc::from("foo"), String::from("baz")),
     ///     ],
     ///     binary: None,
     /// };
@@ -384,11 +402,11 @@ impl Frame {
     /// assert_eq!(map.get("foo"), Some(&vec!["bar", "baz"]));
     /// assert_eq!(map.get("hello"), Some(&vec!["world"]));
     /// ```
-    pub fn values_as_map(&self) -> HashMap<&str, Vec<&str>> {
+    pub fn values_as_map(&self) -> HashMap<Arc<str>, Vec<&str>> {
         let mut map = HashMap::new();
 
         for (k, v) in self.values.iter() {
-            map.entry(k.as_str())
+            map.entry(Arc::clone(k))
                 .or_insert_with(Vec::new)
                 .push(v.as_str());
         }
