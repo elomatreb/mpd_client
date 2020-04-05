@@ -227,7 +227,7 @@ pub fn escape_argument(argument: &str) -> Cow<'_, str> {
 }
 
 /// Like escape_argument, but preserves the lifetime of a passed Cow and can quote if necessary
-fn escape_argument_internal<'a>(argument: Cow<'a, str>, enable_quotes: bool) -> Cow<'a, str> {
+fn escape_argument_internal(argument: Cow<'_, str>, enable_quotes: bool) -> Cow<'_, str> {
     let needs_quotes = enable_quotes && needs_quotes(&argument);
     let escape_count = argument.chars().filter(|c| should_escape(*c)).count();
 
@@ -272,7 +272,7 @@ fn should_escape(c: char) -> bool {
 
 fn validate_no_extra_whitespace(command: &str) -> Result<(), CommandError> {
     // If either the first or last character are whitespace we have leading or trailing whitespace
-    if command.chars().nth(0).unwrap().is_ascii_whitespace()
+    if command.chars().next().unwrap().is_ascii_whitespace()
         || command.chars().last().unwrap().is_ascii_whitespace()
     {
         Err(CommandError::UnncessaryWhitespace)

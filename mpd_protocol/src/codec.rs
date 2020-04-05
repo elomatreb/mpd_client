@@ -45,7 +45,7 @@ impl MpdCodec {
     /// Returns the protocol version the server is speaking if this decoder instance already
     /// received a greeting, `None` otherwise.
     pub fn protocol_version(&self) -> Option<&str> {
-        self.protocol_version.as_ref().map(String::as_str)
+        self.protocol_version.as_deref()
     }
 }
 
@@ -78,6 +78,7 @@ impl Decoder for MpdCodec {
     type Item = Response;
     type Error = MpdCodecError;
 
+    #[allow(clippy::cognitive_complexity)]
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
         if self.decode_span.is_none() {
             self.decode_span = Some(span!(Level::DEBUG, "decode_command"));
