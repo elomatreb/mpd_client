@@ -18,7 +18,7 @@ use std::error::Error;
 use std::fmt;
 use std::io;
 
-use crate::command::CommandList;
+use crate::command::{Command, CommandList};
 use crate::parser;
 use crate::response::Response;
 
@@ -46,6 +46,16 @@ impl MpdCodec {
     /// received a greeting, `None` otherwise.
     pub fn protocol_version(&self) -> Option<&str> {
         self.protocol_version.as_ref().map(String::as_str)
+    }
+}
+
+impl Encoder<Command> for MpdCodec {
+    type Error = MpdCodecError;
+
+    fn encode(&mut self, command: Command, dst: &mut BytesMut) -> Result<(), Self::Error> {
+        // This is free since CommandList stores its first item inline
+        let command_list = CommandList::new(command);
+        self.encode(command_list, dst)
     }
 }
 
