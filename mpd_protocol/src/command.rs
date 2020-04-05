@@ -7,6 +7,8 @@
 //!
 //! [MPD documentation]: https://www.musicpd.org/doc/html/protocol.html#command-reference
 
+use bytes::{BufMut, BytesMut};
+
 use std::borrow::Cow;
 use std::error::Error;
 use std::fmt::{self, Debug};
@@ -14,10 +16,10 @@ use std::iter;
 
 /// Start a command list, separated with list terminators. Our parser can't separate messages when
 /// the form of command list without terminators is used.
-static COMMAND_LIST_BEGIN: &str = "command_list_ok_begin\n";
+static COMMAND_LIST_BEGIN: &[u8] = b"command_list_ok_begin\n";
 
 /// End a command list.
-static COMMAND_LIST_END: &str = "command_list_end\n";
+static COMMAND_LIST_END: &[u8] = b"command_list_end\n";
 
 /// A single command, possibly including arguments.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -107,37 +109,31 @@ impl Command {
 
         validate_argument(&argument)?;
 
-        self.args.push(argument);
+        self.args.push(escape_argument_internal(argument, true));
         Ok(())
     }
 
+    /// Get the expected length when this command is rendered to the wire representation
+    fn rendered_length_hint(&self) -> usize {
+        let mut len = self.base.len();
+
+        len += self.args.len(); // One separating space for each argument
+        len += self.args.iter().map(|a| a.len()).sum::<usize>(); // The actual arguments
+        len += 1; // Terminating newline
+
+        len
+    }
+
     /// Render this command to the wire representation.
-    pub(crate) fn render(self) -> String {
-        let mut out = self.base.into_owned();
+    fn render(self, dst: &mut BytesMut) {
+        dst.extend_from_slice(self.base.as_bytes());
 
         for arg in self.args {
-            // Argumetns needs to be quoted if they contain whitespace
-            let quote = needs_quotes(&arg);
-            let arg = escape_argument(&arg);
-
-            // Leading space + length of argument + two quotes if necessary + newline
-            out.reserve(1 + arg.len() + if quote { 2 } else { 0 } + 1);
-            out.push(' ');
-
-            if quote {
-                out.push('"');
-            }
-
-            out.push_str(&arg);
-
-            if quote {
-                out.push('"');
-            }
+            dst.put_u8(b' ');
+            dst.extend_from_slice(arg.as_bytes());
         }
 
-        out.push('\n');
-
-        out
+        dst.put_u8(b'\n');
     }
 }
 
@@ -176,28 +172,25 @@ impl CommandList {
     }
 
     /// Render the command list to the wire representation.
-    pub(crate) fn render(self) -> String {
+    pub(crate) fn render(self, dst: &mut BytesMut) {
         // If the list only contains a single command, don't wrap it into a command list
         if self.tail.is_empty() {
-            return self.first.render();
+            dst.reserve(self.first.rendered_length_hint());
+            self.first.render(dst);
+        } else {
+            let commands_len = iter::once(&self.first)
+                .chain(self.tail.iter())
+                .map(|c| c.rendered_length_hint())
+                .sum::<usize>();
+
+            dst.reserve(COMMAND_LIST_BEGIN.len() + commands_len + COMMAND_LIST_END.len());
+
+            dst.extend_from_slice(COMMAND_LIST_BEGIN);
+            for command in iter::once(self.first).chain(self.tail) {
+                command.render(dst);
+            }
+            dst.extend_from_slice(COMMAND_LIST_END);
         }
-
-        let commands = iter::once(self.first)
-            .chain(self.tail)
-            .map(|c| c.render())
-            .collect::<Vec<_>>();
-
-        let mut out = String::with_capacity(
-            COMMAND_LIST_BEGIN.len()
-                + commands.iter().map(|c| c.len()).sum::<usize>()
-                + COMMAND_LIST_END.len(),
-        );
-
-        out.push_str(COMMAND_LIST_BEGIN);
-        out.extend(commands);
-        out.push_str(COMMAND_LIST_END);
-
-        out
     }
 }
 
@@ -230,24 +223,41 @@ impl Argument for &'static str {
 /// assert_eq!(escape_argument("foo'bar\""), "foo\\'bar\\\"");
 /// ```
 pub fn escape_argument(argument: &str) -> Cow<'_, str> {
+    escape_argument_internal(Cow::Borrowed(argument), false)
+}
+
+/// Like escape_argument, but preserves the lifetime of a passed Cow and can quote if necessary
+fn escape_argument_internal<'a>(argument: Cow<'a, str>, enable_quotes: bool) -> Cow<'a, str> {
+    let needs_quotes = enable_quotes && needs_quotes(&argument);
     let escape_count = argument.chars().filter(|c| should_escape(*c)).count();
 
-    if escape_count == 0 {
+    if escape_count == 0 && !needs_quotes {
         // The argument does not need to be quoted or escaped, return back an unmodified reference
-        return Cow::Borrowed(argument);
-    }
+        argument
+    } else {
+        // The base length of the argument + a backslash for each escaped character + two quotes if
+        // necessary
+        let len = argument.len() + escape_count + if needs_quotes { 2 } else { 0 };
+        let mut out = String::with_capacity(len);
 
-    let mut out = String::with_capacity(argument.len() + escape_count);
-
-    for c in argument.chars() {
-        if should_escape(c) {
-            out.push('\\');
+        if needs_quotes {
+            out.push('"');
         }
 
-        out.push(c);
-    }
+        for c in argument.chars() {
+            if should_escape(c) {
+                out.push('\\');
+            }
 
-    Cow::Owned(out)
+            out.push(c);
+        }
+
+        if needs_quotes {
+            out.push('"');
+        }
+
+        Cow::Owned(out)
+    }
 }
 
 /// If the given argument needs to be surrounded with quotes (i.e. it contains spaces).
@@ -337,19 +347,23 @@ mod test {
 
     #[test]
     fn single_render() {
-        assert_eq!(Command::build("status").unwrap().render(), "status\n");
+        let buf = &mut BytesMut::with_capacity(100);
 
-        assert_eq!(Command::new("pause").argument("1").render(), "pause 1\n");
+        Command::build("status").unwrap().render(buf);
+        assert_eq!(buf, "status\n");
+        buf.clear();
 
-        assert_eq!(
-            Command::new("hello").argument("foo bar").render(),
-            "hello \"foo bar\"\n"
-        );
+        Command::new("pause").argument("1").render(buf);
+        assert_eq!(buf, "pause 1\n");
+        buf.clear();
 
-        assert_eq!(
-            Command::new("hello").argument("foo's bar\"").render(),
-            "hello \"foo\\'s bar\\\"\"\n"
-        );
+        Command::new("hello").argument("foo bar").render(buf);
+        assert_eq!(buf, "hello \"foo bar\"\n");
+        buf.clear();
+
+        Command::new("hello").argument("foo's bar\"").render(buf);
+        assert_eq!(buf, "hello \"foo\\'s bar\\\"\"\n");
+        buf.clear();
 
         assert_eq!(
             Command::build(" hello").unwrap_err(),
@@ -371,16 +385,20 @@ mod test {
 
     #[test]
     fn command_list_render() {
+        let buf = &mut BytesMut::with_capacity(100);
         let starter = CommandList::new(Command::new("status"));
 
-        assert_eq!(starter.clone().render(), "status\n");
+        starter.clone().render(buf);
+        assert_eq!(buf, "status\n");
+        buf.clear();
 
+        starter
+            .command(Command::new("hello").argument("world"))
+            .render(buf);
         assert_eq!(
-            starter
-                .clone()
-                .command(Command::new("hello").argument("world"))
-                .render(),
+            buf,
             "command_list_ok_begin\nstatus\nhello world\ncommand_list_end\n"
         );
+        buf.clear();
     }
 }

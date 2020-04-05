@@ -66,10 +66,9 @@ impl Encoder<CommandList> for MpdCodec {
         let span = span!(Level::DEBUG, "encode_command", ?command);
         let _enter = span.enter();
 
-        let rendered = command.render();
-        trace!(encoded_length = rendered.len());
-
-        buf.extend_from_slice(rendered.as_bytes());
+        let len_before = buf.len();
+        command.render(buf);
+        trace!(encoded_length = buf.len() - len_before);
 
         Ok(())
     }
