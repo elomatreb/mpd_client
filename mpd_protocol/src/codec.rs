@@ -10,8 +10,8 @@
 //! [`parser`]: ../parser/index.html
 
 use bytes::{Buf, BytesMut};
-use log::{debug, info, trace};
 use tokio_util::codec::{Decoder, Encoder};
+use tracing::{debug, info, span, trace, Level, Span};
 
 use std::convert::TryFrom;
 use std::error::Error;
@@ -29,8 +29,9 @@ use crate::response::Response;
 ///
 /// [Codec]: https://docs.rs/tokio-util/0.2.0/tokio_util/codec/index.html
 /// [`CommandList`]: ../command/struct.CommandList.html
-#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, Default)]
 pub struct MpdCodec {
+    decode_span: Option<Span>,
     cursor: usize,
     protocol_version: Option<String>,
 }
@@ -38,7 +39,7 @@ pub struct MpdCodec {
 impl MpdCodec {
     /// Creates a new `MpdCodec`.
     pub fn new() -> Self {
-        MpdCodec::default()
+        Self::default()
     }
 
     /// Returns the protocol version the server is speaking if this decoder instance already
@@ -52,9 +53,13 @@ impl Encoder<CommandList> for MpdCodec {
     type Error = MpdCodecError;
 
     fn encode(&mut self, command: CommandList, buf: &mut BytesMut) -> Result<(), Self::Error> {
-        trace!("encode: Command {:?}", command);
+        let span = span!(Level::DEBUG, "encode_command", ?command);
+        let _enter = span.enter();
 
-        buf.extend_from_slice(command.render().as_bytes());
+        let rendered = command.render();
+        trace!(encoded_length = rendered.len());
+
+        buf.extend_from_slice(rendered.as_bytes());
 
         Ok(())
     }
@@ -65,27 +70,31 @@ impl Decoder for MpdCodec {
     type Error = MpdCodecError;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
-        trace!("decode: {} bytes of buffer", src.len());
+        if self.decode_span.is_none() {
+            self.decode_span = Some(span!(Level::DEBUG, "decode_command"));
+        }
+
+        let enter = self.decode_span.as_ref().unwrap().enter();
+
+        trace!(
+            buffer_length = src.len(),
+            greeted = self.protocol_version.is_some()
+        );
 
         if self.protocol_version.is_none() {
             match parser::greeting(src) {
                 Ok((rem, greeting)) => {
-                    info!("decode: Greeted by server, version {:?}", greeting.version);
-
+                    info!(protocol_version = greeting.version);
                     self.protocol_version = Some(greeting.version.to_owned());
 
                     // Drop the part of the buffer containing the greeting
                     let new_start = src.len() - rem.len();
                     src.advance(new_start);
-                    debug!(
-                        "decode: Dropping {} bytes of greeting, remaining length: {}",
-                        new_start,
-                        src.len()
-                    );
+                    trace!(buffer_after_greeting = src.len());
                 }
                 Err(e) => {
                     if e.is_incomplete() {
-                        trace!("decode: Greeting incomplete");
+                        trace!("greeting incomplete");
                         return Ok(None);
                     } else {
                         // We got a malformed greeting
@@ -96,27 +105,37 @@ impl Decoder for MpdCodec {
             }
         }
 
+        trace!(self.cursor);
+
         for (terminator, _) in src[self.cursor..]
             .windows(3)
             .enumerate()
             .filter(|(_, w)| w == b"OK\n")
         {
             let msg_end = self.cursor + terminator + 3;
-            trace!("decode: Message potentially ends at index {}", msg_end);
+            trace!(end = msg_end, "potential response end");
 
-            match parser::response(&src[..msg_end]) {
+            let parser_result = parser::response(&src[..]);
+            trace!("completed parsing");
+
+            match parser_result {
                 Ok((_remainder, response)) => {
                     // The errors returned by the TryFrom impl are not possible when operating
                     // directly on the results of our parser
                     let r = Response::try_from(response.as_slice()).unwrap();
 
                     src.advance(msg_end);
-                    self.cursor = 0;
 
                     debug!(
-                        "decoder: Response complete, {} bytes of buffer remaining",
-                        src.len()
+                        response = ?r,
+                        remaining_buffer = src.len(),
+                        "response complete",
                     );
+
+                    drop(enter);
+                    self.cursor = 0;
+                    self.decode_span = None;
+
                     return Ok(Some(r));
                 }
                 Err(e) => {
@@ -124,19 +143,15 @@ impl Decoder for MpdCodec {
                         let err = src.split();
                         return Err(MpdCodecError::InvalidResponse(Vec::from(&err[..])));
                     }
-                    trace!("decode: Message incomplete");
+                    trace!("response incomplete");
                 }
             }
         }
 
-        // We didn't find a terminator
+        // We didn't find a terminator or the message was incomplete
 
         // Subtract two in case the terminator was already partially in the buffer
         self.cursor = src.len().saturating_sub(2);
-        trace!(
-            "decode: Starting next search for message terminator at index {}",
-            self.cursor
-        );
 
         Ok(None)
     }
