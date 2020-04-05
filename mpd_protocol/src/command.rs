@@ -401,4 +401,13 @@ mod test {
         );
         buf.clear();
     }
+
+    #[test]
+    fn argument_escaping() {
+        assert_eq!(escape_argument("status"), "status");
+
+        assert_eq!(escape_argument("Joe's"), "Joe\\'s");
+
+        assert_eq!(escape_argument("hello\\world"), "hello\\\\world");
+    }
 }
