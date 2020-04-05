@@ -262,7 +262,7 @@ fn escape_argument_internal<'a>(argument: Cow<'a, str>, enable_quotes: bool) -> 
 
 /// If the given argument needs to be surrounded with quotes (i.e. it contains spaces).
 fn needs_quotes(arg: &str) -> bool {
-    arg.chars().any(|c| c == ' ')
+    arg.chars().any(|c| c == ' ' || c == '\t')
 }
 
 /// If the given character needs to be escaped
