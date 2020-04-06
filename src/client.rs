@@ -232,16 +232,14 @@ fn next_command(
 }
 
 fn response_to_subsystem(res: Response) -> Result<Option<Subsystem>, StateChangeError> {
-    let values = res.single_frame()?.values;
+    let mut frame = res.single_frame()?;
 
-    if values.is_empty() {
+    if frame.values.is_empty() {
         Ok(None)
     } else {
-        let raw = values
-            .into_iter()
-            .find(|(k, _)| k == "changed")
-            .ok_or(StateChangeError::MissingChangedKey)?
-            .1;
+        let raw = frame
+            .get("changed")
+            .ok_or(StateChangeError::MissingChangedKey)?;
 
         Ok(Some(Subsystem::from(raw)))
     }
