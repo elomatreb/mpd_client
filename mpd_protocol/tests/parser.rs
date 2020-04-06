@@ -39,6 +39,20 @@ fn empty_response() {
 }
 
 #[test]
+fn empty_key_value() {
+    assert_eq!(
+        response(b"hello: \nOK\n"),
+        Ok((
+            EMPTY,
+            vec![Response::Success {
+                fields: vec![("hello", "")],
+                binary: None,
+            }],
+        ))
+    );
+}
+
+#[test]
 fn simple_response() {
     assert_eq!(
         response(b"foo: bar\nfoo: baz\nmep: asdf\nOK\n"),

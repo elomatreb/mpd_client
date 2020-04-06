@@ -185,7 +185,7 @@ fn key_value_field(i: &[u8]) -> IResult<&[u8], (&str, &str)> {
     separated_pair(
         utf8(take_while1(|b| is_alphabetic(b) || b == b'_' || b == b'-')),
         tag(": "),
-        utf8(terminated(take_while1(|b| b != b'\n'), newline)),
+        utf8(terminated(take_while(|b| b != b'\n'), newline)),
     )(i)
 }
 
