@@ -1,19 +1,21 @@
 //! The client implementation.
 
-use futures::sink::SinkExt;
+use futures::{
+    future::{select, Either},
+    sink::SinkExt,
+    stream::{Stream, StreamExt},
+};
 use mpd_protocol::{response::Frame, Command, CommandList, MpdCodec, MpdCodecError, Response};
 use tokio::{
-    io::{self, split, AsyncRead, AsyncWrite},
-    stream::{Stream, StreamExt},
+    io::{AsyncRead, AsyncWrite},
     sync::{
         mpsc::{self, UnboundedReceiver, UnboundedSender},
         oneshot,
     },
 };
-use tokio_util::codec::{FramedRead, FramedWrite};
+use tokio_util::codec::{Decoder, Framed};
 
-use std::collections::VecDeque;
-use std::iter;
+use std::fmt::Debug;
 
 use crate::errors::{CommandError, StateChangeError};
 use crate::util::Subsystem;
@@ -113,122 +115,130 @@ impl Client {
 
     async fn do_send(&self, commands: CommandList) -> Result<Response, CommandError> {
         let (tx, rx) = oneshot::channel();
-        self.0.send((commands, tx))?;
+        self.commands_sender.send((commands, tx))?;
 
         rx.await?
     }
 }
 
-struct Connection<C: AsyncRead + AsyncWrite> {
-    read: FramedRead<io::ReadHalf<C>, MpdCodec>,
-    write: FramedWrite<io::WriteHalf<C>, MpdCodec>,
-}
-
-async fn connect<C: AsyncRead + AsyncWrite>(connection: C) -> Result<Connection<C>, MpdCodecError> {
-    let (read, write) = split(connection);
-    let read = FramedRead::new(read, MpdCodec::new());
-    let mut write = FramedWrite::new(write, MpdCodec::new());
+async fn connect<C: AsyncRead + AsyncWrite + Unpin>(
+    connection: C,
+) -> Result<Framed<C, MpdCodec>, MpdCodecError> {
+    let mut framed = MpdCodec::new().framed(connection);
 
     // Immediately send an idle command, to prevent the connection from timing out
     write.send(CommandList::new(Command::new(IDLE))).await?;
 
-    Ok(Connection { read, write })
+    Ok(framed)
+}
+
+#[derive(Debug)]
+enum State {
+    Idling,
+    WaitingForCommandReply(CommandResponder),
 }
 
 async fn run_loop<C>(
-    connection: Connection<C>,
+    mut connection: Framed<C, MpdCodec>,
     mut commands: UnboundedReceiver<(CommandList, CommandResponder)>,
     state_changes: UnboundedSender<Result<Subsystem, StateChangeError>>,
 ) where
-    C: AsyncRead + AsyncWrite,
+    C: AsyncRead + AsyncWrite + Unpin,
 {
-    let Connection {
-        mut read,
-        mut write,
-    } = connection;
+    let mut state = State::Idling;
 
-    let mut current_command_responder: Option<CommandResponder> = None;
-    let mut command_queue = VecDeque::new();
+    loop {
+        match state {
+            State::Idling => {
+                // We are idling (the last command sent to the server was an IDLE).
 
-    let mut commands_channel_open = true;
+                // Wait for either a command to send or a message from the server, which would be a
+                // state change notification.
+                let event = select(connection.next(), commands.next()).await;
 
-    while commands_channel_open || current_command_responder.is_some() || !command_queue.is_empty()
-    {
-        tokio::select! {
-            command = commands.next(), if commands_channel_open => {
-                let command = match command {
-                    Some(c) => c,
-                    None => {
-                        commands_channel_open = false;
-                        continue;
+                match event {
+                    Either::Left((response, _)) => {
+                        // A server message was received. Since we were idling, this is a state
+                        // change notification or `None` is the connection was closed.
+
+                        match response {
+                            Some(Ok(res)) => {
+                                if let Some(state_change) = response_to_subsystem(res).transpose() {
+                                    let _ = state_changes.send(state_change);
+                                }
+
+                                if let Err(e) = connection.send(Command::new(IDLE)).await {
+                                    let _ = state_changes.send(Err(e.into()));
+                                    break;
+                                }
+                            }
+                            Some(Err(e)) => {
+                                let _ = state_changes.send(Err(e.into()));
+                                break;
+                            }
+                            None => break, // The connection was closed
+                        }
                     }
-                };
+                    Either::Right((command, _)) => {
+                        // A command was received or the commands channel was dropped. The latter
+                        // is an indicator for us to close the connection.
 
-                // Add the command to the queue to be processed during a later iteration of this
-                // loop.
-                command_queue.push_back(command);
+                        let (command, responder) = match command {
+                            None => break, // The connection was closed
+                            Some(c) => c,
+                        };
 
-                if current_command_responder.is_none() {
-                    // If there is no current responder, we are currently idling, so cancel that.
-                    if let Err(e) = write.send(CommandList::new(Command::new(CANCEL_IDLE))).await {
-                        // Get back the responder (and command) we just pushed
-                        let (_, responder) = command_queue.pop_back().unwrap();
-                        let _ = responder.send(Err(e.into()));
+                        // Cancel currently ongoing idle
+                        if let Err(e) = connection.send(Command::new(CANCEL_IDLE)).await {
+                            let _ = responder.send(Err(e.into()));
+                            break;
+                        }
+
+                        // Response to CANCEL_IDLE above
+                        match connection.next().await {
+                            None => break,
+                            Some(Ok(res)) => {
+                                if let Some(state_change) = response_to_subsystem(res).transpose() {
+                                    let _ = state_changes.send(state_change);
+                                }
+                            }
+                            Some(Err(e)) => {
+                                let _ = responder.send(Err(e.into()));
+                                break;
+                            }
+                        }
+
+                        // Actually send the command. This sets the state for the next loop
+                        // iteration.
+                        match connection.send(command).await {
+                            Ok(_) => state = State::WaitingForCommandReply(responder),
+                            Err(e) => {
+                                let _ = responder.send(Err(e.into()));
+                                break;
+                            }
+                        }
                     }
                 }
             }
-            msg = read.next() => {
-                let msg = match msg {
-                    Some(m) => m,
-                    // If the connection is closed, exit the loop. This will drop all remaining
-                    // responders, which signals error conditions.
+            State::WaitingForCommandReply(responder) => {
+                // We're waiting for the response to the command associated with `responder`.
+
+                let response = match connection.next().await {
                     None => break,
+                    Some(res) => res,
                 };
 
-                // If there is a current responder set, the message we just received was a reply to
-                // an explicit command.
-                if let Some(responder) = current_command_responder.take() {
-                    // The response channel may have already been dropped if the future
-                    // representing the command request was cancelled dropped, but there's nothing
-                    // we can do about it.
-                    let _ = responder.send(msg.map_err(Into::into));
-                } else {
-                    // If not responder is available, the message is a state change notification.
-                    let msg = msg.map_err(Into::into).and_then(response_to_subsystem);
+                let _ = responder.send(response.map_err(Into::into));
 
-                    // The notification may be empty if no changes occured.
-                    if let Some(msg) = msg.transpose() {
-                        // Just like above, the state change notification channel may be dropped.
-                        let _ = state_changes.send(msg);
-                    }
-                }
-
-                // Get the next command with an open response channel (closed channels represent
-                // cancelled command futures).
-                if let Some((command, responder)) = next_command(&mut command_queue) {
-                    // If there is a command in the queue, send it immediately and store the
-                    // responder
-                    current_command_responder = Some(responder);
-
-                    if let Err(e) = write.send(command).await {
-                        let responder = current_command_responder.take().unwrap();
-                        let _ = responder.send(Err(e.into()));
-                    }
-                } else {
-                    // If there is no command in the queue, start idling
-                    if let Err(e) = write.send(CommandList::new(Command::new(IDLE))).await {
-                        let _ = state_changes.send(Err(e.into()));
-                    }
+                // Start idling again
+                state = State::Idling;
+                if let Err(e) = connection.send(CommandList::new(Command::new(IDLE))).await {
+                    let _ = state_changes.send(Err(e.into()));
+                    break;
                 }
             }
         }
     }
-}
-
-fn next_command(
-    queue: &mut VecDeque<(CommandList, CommandResponder)>,
-) -> Option<(CommandList, CommandResponder)> {
-    iter::from_fn(|| queue.pop_front()).find(|(_, responder)| !responder.is_closed())
 }
 
 fn response_to_subsystem(res: Response) -> Result<Option<Subsystem>, StateChangeError> {
