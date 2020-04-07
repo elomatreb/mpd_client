@@ -8,6 +8,7 @@ use futures::{
 use mpd_protocol::{response::Frame, Command, CommandList, MpdCodec, MpdCodecError, Response};
 use tokio::{
     io::{AsyncRead, AsyncWrite},
+    net::{TcpStream, ToSocketAddrs, UnixStream},
     sync::{
         mpsc::{self, UnboundedReceiver, UnboundedSender},
         oneshot,
@@ -18,6 +19,7 @@ use tracing::{debug, error, span, trace, warn, Level, Span};
 use tracing_futures::Instrument;
 
 use std::fmt::Debug;
+use std::path::Path;
 use std::sync::Arc;
 
 use crate::errors::{CommandError, StateChangeError};
@@ -36,6 +38,64 @@ pub struct Client {
 }
 
 impl Client {
+    /// Connect to an MPD server at the given TCP address.
+    ///
+    /// See [`connect`] for details of the result.
+    ///
+    /// # Panics
+    ///
+    /// This panics for the same reasons as [`connect`].
+    ///
+    /// # Errors
+    ///
+    /// This returns errors in the same conditions as [`connect`], and if connecting to the given
+    /// TCP address fails for any reason.
+    ///
+    /// [`connect`]: #method.connect
+    pub async fn connect_to<A: ToSocketAddrs + Debug>(
+        address: A,
+    ) -> Result<
+        (
+            Self,
+            impl Stream<Item = Result<Subsystem, StateChangeError>>,
+        ),
+        MpdCodecError,
+    > {
+        let span = span!(Level::DEBUG, "client connection", tcp_addr = ?address);
+        let connection = TcpStream::connect(address).await?;
+
+        Self::do_connect(connection, span).await
+    }
+
+    /// Connect to an MPD server using the Unix socket at the given path.
+    ///
+    /// See [`connect`] for details of the result.
+    ///
+    /// # Panics
+    ///
+    /// This panics for the same reasons as [`connect`].
+    ///
+    /// # Errors
+    ///
+    /// This returns errors in the same conditions as [`connect`], and if connecting to the Unix
+    /// socket at the given address fails for any reason.
+    ///
+    /// [`connect`]: #method.connect
+    pub async fn connect_unix<P: AsRef<Path>>(
+        path: P,
+    ) -> Result<
+        (
+            Self,
+            impl Stream<Item = Result<Subsystem, StateChangeError>>,
+        ),
+        MpdCodecError,
+    > {
+        let span = span!(Level::DEBUG, "client connection", unix_addr = ?path.as_ref());
+        let connection = UnixStream::connect(path).await?;
+
+        Self::do_connect(connection, span).await
+    }
+
     /// Connect to the MPD server using the given connection.
     ///
     /// Returns a `Client` you can use to issue commands, and a stream of state change events as
@@ -44,6 +104,8 @@ impl Client {
     /// Since this is generic over the connection type, you can use it with both TCP and Unix
     /// socket connections.
     ///
+    /// See also [`connect_to`] and [`connect_unix`] for the common connection case.
+    ///
     /// # Panics
     ///
     /// Since this spawns a task internally, this will panic when called outside a tokio runtime.
@@ -51,6 +113,9 @@ impl Client {
     /// # Errors
     ///
     /// This will return an error if sending the initial commands over the given transport fails.
+    ///
+    /// [`connect_to`]: #method.connect_to
+    /// [`connect_unix`]: #method.connect_unix
     pub async fn connect<C>(
         connection: C,
     ) -> Result<
@@ -61,29 +126,9 @@ impl Client {
         MpdCodecError,
     >
     where
-        C: AsyncRead + AsyncWrite + Send + Unpin + Debug + 'static,
+        C: AsyncRead + AsyncWrite + Send + Unpin + 'static,
     {
-        let (state_changes_sender, state_changes) = mpsc::unbounded_channel();
-        let (commands_sender, commands_receiver) = mpsc::unbounded_channel();
-
-        let span = Arc::new(span!(Level::DEBUG, "client connection", ?connection));
-        let _enter = span.enter();
-
-        let connection = connect(connection).await?;
-
-        debug!("connected succesfully");
-
-        let run_loop = run_loop(connection, commands_receiver, state_changes_sender)
-            .instrument(span!(parent: span.as_ref(), Level::TRACE, "run loop"));
-
-        tokio::spawn(run_loop);
-
-        let client = Self {
-            commands_sender,
-            span: Arc::clone(&span),
-        };
-
-        Ok((client, state_changes))
+        Self::do_connect(connection, span!(Level::DEBUG, "client connection")).await
     }
 
     /// Send the given command, and return the response to it.
@@ -133,6 +178,39 @@ impl Client {
         self.commands_sender.send((commands, tx))?;
 
         rx.await?
+    }
+
+    async fn do_connect<C>(
+        connection: C,
+        span: Span,
+    ) -> Result<
+        (
+            Self,
+            impl Stream<Item = Result<Subsystem, StateChangeError>>,
+        ),
+        MpdCodecError,
+    >
+    where
+        C: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+    {
+        let (state_changes_sender, state_changes) = mpsc::unbounded_channel();
+        let (commands_sender, commands_receiver) = mpsc::unbounded_channel();
+
+        let connection = connect(connection).await?;
+
+        debug!("connected succesfully");
+
+        let run_loop = run_loop(connection, commands_receiver, state_changes_sender)
+            .instrument(span!(parent: &span, Level::TRACE, "run loop"));
+
+        tokio::spawn(run_loop);
+
+        let client = Self {
+            commands_sender,
+            span: Arc::new(span),
+        };
+
+        Ok((client, state_changes))
     }
 }
 
