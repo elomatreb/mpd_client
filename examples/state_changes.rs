@@ -1,10 +1,15 @@
 use mpd_client::{Client, Command, Frame, Subsystem};
+use tracing_subscriber::{EnvFilter, FmtSubscriber};
 
 use tokio::net::TcpStream;
 use tokio::stream::StreamExt;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    FmtSubscriber::builder()
+        .with_env_filter(EnvFilter::from_default_env())
+        .init();
+
     // This could also be a UnixStream
     let connection = TcpStream::connect("localhost:6600").await?;
 

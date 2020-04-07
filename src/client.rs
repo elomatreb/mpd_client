@@ -14,8 +14,11 @@ use tokio::{
     },
 };
 use tokio_util::codec::{Decoder, Framed};
+use tracing::{debug, error, span, trace, warn, Level, Span};
+use tracing_futures::Instrument;
 
 use std::fmt::Debug;
+use std::sync::Arc;
 
 use crate::errors::{CommandError, StateChangeError};
 use crate::util::Subsystem;
@@ -27,7 +30,10 @@ type CommandResponder = oneshot::Sender<Result<Response, CommandError>>;
 
 /// Client for MPD.
 #[derive(Clone, Debug)]
-pub struct Client(UnboundedSender<(CommandList, CommandResponder)>);
+pub struct Client {
+    commands_sender: UnboundedSender<(CommandList, CommandResponder)>,
+    span: Arc<Span>,
+}
 
 impl Client {
     /// Connect to the MPD server using the given connection.
@@ -55,20 +61,29 @@ impl Client {
         MpdCodecError,
     >
     where
-        C: AsyncRead + AsyncWrite + Send + 'static,
+        C: AsyncRead + AsyncWrite + Send + Unpin + Debug + 'static,
     {
         let (state_changes_sender, state_changes) = mpsc::unbounded_channel();
-        let (commands, commands_receiver) = mpsc::unbounded_channel();
+        let (commands_sender, commands_receiver) = mpsc::unbounded_channel();
+
+        let span = Arc::new(span!(Level::DEBUG, "client connection", ?connection));
+        let _enter = span.enter();
 
         let connection = connect(connection).await?;
 
-        tokio::spawn(run_loop(
-            connection,
-            commands_receiver,
-            state_changes_sender,
-        ));
+        debug!("connected succesfully");
 
-        Ok((Self(commands), state_changes))
+        let run_loop = run_loop(connection, commands_receiver, state_changes_sender)
+            .instrument(span!(parent: span.as_ref(), Level::TRACE, "run loop"));
+
+        tokio::spawn(run_loop);
+
+        let client = Self {
+            commands_sender,
+            span: Arc::clone(&span),
+        };
+
+        Ok((client, state_changes))
     }
 
     /// Send the given command, and return the response to it.
@@ -124,10 +139,13 @@ impl Client {
 async fn connect<C: AsyncRead + AsyncWrite + Unpin>(
     connection: C,
 ) -> Result<Framed<C, MpdCodec>, MpdCodecError> {
+    trace!("sending initial command");
     let mut framed = MpdCodec::new().framed(connection);
 
     // Immediately send an idle command, to prevent the connection from timing out
-    write.send(CommandList::new(Command::new(IDLE))).await?;
+    if let Err(error) = framed.send(Command::new(IDLE)).await {
+        error!(?error, "failed to send initial command");
+    }
 
     Ok(framed)
 }
@@ -145,9 +163,13 @@ async fn run_loop<C>(
 ) where
     C: AsyncRead + AsyncWrite + Unpin,
 {
+    trace!("entering run loop");
+
     let mut state = State::Idling;
 
     loop {
+        trace!(?state, "loop iteration");
+
         match state {
             State::Idling => {
                 // We are idling (the last command sent to the server was an IDLE).
@@ -164,15 +186,18 @@ async fn run_loop<C>(
                         match response {
                             Some(Ok(res)) => {
                                 if let Some(state_change) = response_to_subsystem(res).transpose() {
+                                    trace!(?state_change);
                                     let _ = state_changes.send(state_change);
                                 }
 
                                 if let Err(e) = connection.send(Command::new(IDLE)).await {
+                                    error!(error = ?e, "failed to start idling after state change");
                                     let _ = state_changes.send(Err(e.into()));
                                     break;
                                 }
                             }
                             Some(Err(e)) => {
+                                error!(error = ?e, "state change error");
                                 let _ = state_changes.send(Err(e.into()));
                                 break;
                             }
@@ -188,8 +213,11 @@ async fn run_loop<C>(
                             Some(c) => c,
                         };
 
+                        trace!(?command, "command received");
+
                         // Cancel currently ongoing idle
                         if let Err(e) = connection.send(Command::new(CANCEL_IDLE)).await {
+                            error!(error = ?e, "failed to cancel idle prior to sending command");
                             let _ = responder.send(Err(e.into()));
                             break;
                         }
@@ -199,10 +227,12 @@ async fn run_loop<C>(
                             None => break,
                             Some(Ok(res)) => {
                                 if let Some(state_change) = response_to_subsystem(res).transpose() {
+                                    trace!(?state_change);
                                     let _ = state_changes.send(state_change);
                                 }
                             }
                             Some(Err(e)) => {
+                                error!(error = ?e, "state change error prior to sending command");
                                 let _ = responder.send(Err(e.into()));
                                 break;
                             }
@@ -213,10 +243,13 @@ async fn run_loop<C>(
                         match connection.send(command).await {
                             Ok(_) => state = State::WaitingForCommandReply(responder),
                             Err(e) => {
+                                error!(error = ?e, "failed to send command");
                                 let _ = responder.send(Err(e.into()));
                                 break;
                             }
                         }
+
+                        trace!("command sent succesfully");
                     }
                 }
             }
@@ -228,17 +261,22 @@ async fn run_loop<C>(
                     Some(res) => res,
                 };
 
+                trace!(?response, "response to command received");
+
                 let _ = responder.send(response.map_err(Into::into));
 
                 // Start idling again
                 state = State::Idling;
                 if let Err(e) = connection.send(CommandList::new(Command::new(IDLE))).await {
+                    error!(error = ?e, "failed to start idling after receiving command response");
                     let _ = state_changes.send(Err(e.into()));
                     break;
                 }
             }
         }
     }
+
+    trace!("exited run_loop");
 }
 
 fn response_to_subsystem(res: Response) -> Result<Option<Subsystem>, StateChangeError> {
@@ -247,9 +285,10 @@ fn response_to_subsystem(res: Response) -> Result<Option<Subsystem>, StateChange
     if frame.values.is_empty() {
         Ok(None)
     } else {
-        let raw = frame
-            .get("changed")
-            .ok_or(StateChangeError::MissingChangedKey)?;
+        let raw = frame.get("changed").ok_or_else(|| {
+            warn!("state change response was not empty but was missing the `changed` key");
+            StateChangeError::MissingChangedKey
+        })?;
 
         Ok(Some(Subsystem::from(raw)))
     }
