@@ -248,7 +248,7 @@ pub fn escape_argument(argument: &str) -> Cow<'_, str> {
 
 /// Like escape_argument, but preserves the lifetime of a passed Cow and can quote if necessary
 fn escape_argument_internal(argument: Cow<'_, str>, enable_quotes: bool) -> Cow<'_, str> {
-    let needs_quotes = enable_quotes && needs_quotes(&argument);
+    let needs_quotes = enable_quotes && argument.contains(&[' ', '\t'][..]);
     let escape_count = argument.chars().filter(|c| should_escape(*c)).count();
 
     if escape_count == 0 && !needs_quotes {
@@ -280,11 +280,6 @@ fn escape_argument_internal(argument: Cow<'_, str>, enable_quotes: bool) -> Cow<
     }
 }
 
-/// If the given argument needs to be surrounded with quotes (i.e. it contains spaces).
-fn needs_quotes(arg: &str) -> bool {
-    arg.chars().any(|c| c == ' ' || c == '\t')
-}
-
 /// If the given character needs to be escaped
 fn should_escape(c: char) -> bool {
     c == '\\' || c == '"' || c == '\''
@@ -293,7 +288,7 @@ fn should_escape(c: char) -> bool {
 fn validate_no_extra_whitespace(command: &str) -> Result<(), CommandError> {
     // If either the first or last character are whitespace we have leading or trailing whitespace
     if command.chars().next().unwrap().is_ascii_whitespace()
-        || command.chars().last().unwrap().is_ascii_whitespace()
+        || command.chars().next_back().unwrap().is_ascii_whitespace()
     {
         Err(CommandError::UnncessaryWhitespace)
     } else {
