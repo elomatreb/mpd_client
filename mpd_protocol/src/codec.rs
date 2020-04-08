@@ -183,8 +183,6 @@ pub enum MpdCodecError {
     InvalidGreeting(Vec<u8>),
     /// A message could not be parsed succesfully.
     InvalidResponse(Vec<u8>),
-    /// A command string passed to the encoder was invalid (empty or contained a newline)
-    InvalidCommand(String),
 }
 
 impl fmt::Display for MpdCodecError {
@@ -197,7 +195,6 @@ impl fmt::Display for MpdCodecError {
             MpdCodecError::InvalidResponse(response) => {
                 write!(f, "invalid response: {:?}", response)
             }
-            MpdCodecError::InvalidCommand(command) => write!(f, "invalid command: {:?}", command),
         }
     }
 }
