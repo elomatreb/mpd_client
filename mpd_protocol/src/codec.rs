@@ -11,7 +11,7 @@
 
 use bytes::{Buf, BytesMut};
 use tokio_util::codec::{Decoder, Encoder};
-use tracing::{debug, info, span, trace, Level, Span};
+use tracing::{debug, error, info, span, trace, Level, Span};
 
 use std::convert::TryFrom;
 use std::error::Error;
@@ -108,7 +108,9 @@ impl Decoder for MpdCodec {
                         return Ok(None);
                     } else {
                         // We got a malformed greeting
+                        error!(error = ?e, "error parsing greeting");
                         let err = src.split();
+                        self.cursor = 0;
                         return Err(MpdCodecError::InvalidGreeting(Vec::from(&err[..])));
                     }
                 }
@@ -150,10 +152,13 @@ impl Decoder for MpdCodec {
                 }
                 Err(e) => {
                     if !e.is_incomplete() {
+                        error!(error = ?e, "error parsing response");
                         let err = src.split();
+                        self.cursor = 0;
                         return Err(MpdCodecError::InvalidResponse(Vec::from(&err[..])));
+                    } else {
+                        trace!("response incomplete");
                     }
-                    trace!("response incomplete");
                 }
             }
         }
