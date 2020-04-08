@@ -22,7 +22,7 @@ static COMMAND_LIST_BEGIN: &[u8] = b"command_list_ok_begin\n";
 static COMMAND_LIST_END: &[u8] = b"command_list_end\n";
 
 /// A single command, possibly including arguments.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub struct Command {
     base: Cow<'static, str>,
     args: Vec<Cow<'static, str>>,
@@ -31,7 +31,7 @@ pub struct Command {
 /// A non-empty list of commands.
 ///
 /// Commands will be automatically wrapped in a proper command list if necessary.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub struct CommandList {
     first: Command,
     tail: Vec<Command>,
@@ -137,6 +137,18 @@ impl Command {
     }
 }
 
+impl Debug for Command {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.args.is_empty() {
+            write!(f, "Command({:?})", self.base)
+        } else {
+            write!(f, "Command({:?}, ", self.base)?;
+            f.debug_list().entries(&self.args).finish()?;
+            write!(f, ")")
+        }
+    }
+}
+
 #[allow(clippy::len_without_is_empty)]
 impl CommandList {
     /// Create a command list from the given single command.
@@ -191,6 +203,14 @@ impl CommandList {
             }
             dst.extend_from_slice(COMMAND_LIST_END);
         }
+    }
+}
+
+impl Debug for CommandList {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_list()
+            .entries(iter::once(&self.first).chain(&self.tail))
+            .finish()
     }
 }
 
