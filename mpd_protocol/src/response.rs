@@ -1,8 +1,10 @@
 //! Complete responses.
 
+pub mod error;
+pub mod frame;
+
 use fnv::FnvHashSet;
 
-use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::fmt;
 use std::iter::FusedIterator;
@@ -10,40 +12,22 @@ use std::sync::Arc;
 
 use crate::parser;
 
-/// Response to a command, consisting of an abitrary amount of frames, which are responses to
-/// individual commands, and optionally a single error.
+pub use error::Error;
+pub use frame::Frame;
+
+/// Response to a command, consisting of an abitrary amount of [frames], which are responses to
+/// individual commands, and optionally a single [error].
 ///
 /// Since an error terminates a command list, there can only be one error in a response.
+///
+/// [frames]: frame/struct.Frame.html
+/// [error]: error/struct.Error.html
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Response {
     /// The sucessful responses.
     frames: Vec<Frame>,
     /// The error, if one occured.
     error: Option<Error>,
-}
-
-/// Data in a succesful response.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Frame {
-    /// Key-value pairs. Keys can repeat arbitrarily often.
-    pub values: Vec<(Arc<str>, String)>,
-    /// Binary frame.
-    pub binary: Option<Vec<u8>>,
-}
-
-/// Data in an error.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct Error {
-    /// Error code. See [the MPD source][mpd-error-def] for a list of of possible values.
-    ///
-    /// [mpd-error-def]: https://github.com/MusicPlayerDaemon/MPD/blob/master/src/protocol/Ack.hxx#L30
-    pub code: u64,
-    /// Index of command in a command list that caused this error. 0 when not in a command list.
-    pub command_index: u64,
-    /// Command that returned the error, if applicable.
-    pub current_command: Option<String>,
-    /// Message describing the error.
-    pub message: String,
 }
 
 /// Errors returned when attmepting to construct an owned `Response` from a list of parser results
@@ -361,88 +345,6 @@ impl IntoIterator for Response {
         self.into_frames()
     }
 }
-
-impl Frame {
-    /// Create an empty frame (0 key-value pairs).
-    ///
-    /// ```
-    /// use mpd_protocol::response::Frame;
-    ///
-    /// let f = Frame::empty();
-    /// assert_eq!(0, f.values.len());
-    /// assert!(f.binary.is_none());
-    /// ```
-    pub fn empty() -> Self {
-        Self {
-            values: Vec::new(),
-            binary: None,
-        }
-    }
-
-    /// Find the first key-value pair with the given key, and return a reference to its value.
-    pub fn find<K>(&self, key: K) -> Option<&str>
-    where
-        K: AsRef<str>,
-    {
-        self.values
-            .iter()
-            .find(|&(k, _)| k.as_ref() == key.as_ref())
-            .map(|(_, v)| v.as_str())
-    }
-
-    /// Find the first key-value pair with the given key, and return its value.
-    ///
-    /// This removes it from the list of values in this frame.
-    pub fn get<K>(&mut self, key: K) -> Option<String>
-    where
-        K: AsRef<str>,
-    {
-        let index = self
-            .values
-            .iter()
-            .enumerate()
-            .find(|&(_, (k, _))| k.as_ref() == key.as_ref())
-            .map(|(index, _)| index);
-
-        index.map(|i| self.values.remove(i).1)
-    }
-
-    /// Collect the key-value pairs in this resposne into a `HashMap`.
-    ///
-    /// Beware that this loses the order relationship between different keys. Values for a given
-    /// key are ordered like they appear in the response.
-    ///
-    /// ```
-    /// use std::sync::Arc;
-    /// use mpd_protocol::response::Frame;
-    ///
-    /// let f = Frame {
-    ///     values: vec![
-    ///         (Arc::from("foo"), String::from("bar")),
-    ///         (Arc::from("hello"), String::from("world")),
-    ///         (Arc::from("foo"), String::from("baz")),
-    ///     ],
-    ///     binary: None,
-    /// };
-    ///
-    /// let map = f.values_as_map();
-    ///
-    /// assert_eq!(map.get("foo"), Some(&vec!["bar", "baz"]));
-    /// assert_eq!(map.get("hello"), Some(&vec!["world"]));
-    /// ```
-    pub fn values_as_map(&self) -> HashMap<Arc<str>, Vec<&str>> {
-        let mut map = HashMap::new();
-
-        for (k, v) in self.values.iter() {
-            map.entry(Arc::clone(k))
-                .or_insert_with(Vec::new)
-                .push(v.as_str());
-        }
-
-        map
-    }
-}
-
 impl fmt::Display for OwnedResponseError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
