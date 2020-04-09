@@ -183,14 +183,17 @@ impl<'a> TryFrom<&'a [parser::Response<'_>]> for Response {
         for frame in raw_frames.iter().rev() {
             match frame {
                 parser::Response::Success { fields, binary } => {
-                    let values = fields
+                    let fields = fields
                         .iter()
-                        .map(|&(k, v)| (simple_intern(&mut keys, k), v.to_owned()))
+                        .map(|&(k, v)| Some((simple_intern(&mut keys, k), v.to_owned())))
                         .collect();
 
                     let binary = binary.map(Vec::from);
 
-                    frames.push(Frame { values, binary });
+                    frames.push(Frame {
+                        fields: frame::FieldsContainer(fields),
+                        binary,
+                    });
                 }
                 parser::Response::Error {
                     code,

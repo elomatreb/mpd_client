@@ -1,6 +1,5 @@
 //! A succesful response to a command.
 
-use std::collections::HashMap;
 use std::sync::Arc;
 
 /// A succesful response to a command.
@@ -9,7 +8,7 @@ use std::sync::Arc;
 /// single binary blob.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Frame {
-    pub(super) values: Vec<(Arc<str>, String)>,
+    pub(super) fields: FieldsContainer,
     pub(super) binary: Option<Vec<u8>>,
 }
 
@@ -17,14 +16,14 @@ impl Frame {
     /// Create an empty frame (0 key-value pairs).
     pub fn empty() -> Self {
         Self {
-            values: Vec::new(),
+            fields: FieldsContainer::default(),
             binary: None,
         }
     }
 
     /// Get the number of key-value pairs in this response frame.
     pub fn fields_len(&self) -> usize {
-        self.values.len()
+        self.fields().count()
     }
 
     /// Returns `true` if the frame is entirely empty, i.e. contains 0 key-value pairs and no
@@ -42,32 +41,47 @@ impl Frame {
         self.binary.is_some()
     }
 
+    /// Returns an iterator over all key-value pairs in this frame, in the order they appear in the
+    /// response.
+    ///
+    /// If keys have been removed using [`get`], they will not appear.
+    ///
+    /// [`get`]: #method.get
+    pub fn fields(&self) -> impl Iterator<Item = (&str, &str)> {
+        self.fields.0.iter().filter_map(|field| match field {
+            None => None,
+            Some((key, value)) => Some((key.as_ref(), value.as_ref())),
+        })
+    }
+
     /// Find the first key-value pair with the given key, and return a reference to its value.
     pub fn find<K>(&self, key: K) -> Option<&str>
     where
         K: AsRef<str>,
     {
-        self.values
-            .iter()
-            .find(|&(k, _)| k.as_ref() == key.as_ref())
-            .map(|(_, v)| v.as_str())
+        self.fields()
+            .find_map(|(k, v)| if k == key.as_ref() { Some(v) } else { None })
     }
 
     /// Find the first key-value pair with the given key, and return its value.
     ///
-    /// This removes it from the list of values in this frame.
+    /// This removes it from the list of fields in this frame.
     pub fn get<K>(&mut self, key: K) -> Option<String>
     where
         K: AsRef<str>,
     {
-        let index = self
-            .values
-            .iter()
-            .enumerate()
-            .find(|&(_, (k, _))| k.as_ref() == key.as_ref())
-            .map(|(index, _)| index);
+        self.fields.0.iter_mut().find_map(|field| {
+            let k = match field.as_ref() {
+                None => return None,
+                Some((k, _)) => k,
+            };
 
-        index.map(|i| self.values.remove(i).1)
+            if k.as_ref() == key.as_ref() {
+                field.take().map(|(_, v)| v)
+            } else {
+                None
+            }
+        })
     }
 
     /// Get the binary blob contained in this frame, if present.
@@ -76,20 +90,7 @@ impl Frame {
     pub fn get_binary(&mut self) -> Option<Vec<u8>> {
         self.binary.take()
     }
-
-    /// Collect the key-value pairs in this resposne into a `HashMap`.
-    ///
-    /// Beware that this loses the order relationship between different keys. Values for a given
-    /// key are ordered like they appear in the response.
-    pub fn values_as_map(&self) -> HashMap<Arc<str>, Vec<&str>> {
-        let mut map = HashMap::new();
-
-        for (k, v) in self.values.iter() {
-            map.entry(Arc::clone(k))
-                .or_insert_with(Vec::new)
-                .push(v.as_str());
-        }
-
-        map
-    }
 }
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(super) struct FieldsContainer(pub(super) Vec<Option<(Arc<str>, String)>>);
