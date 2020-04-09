@@ -4,12 +4,13 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 /// A succesful response to a command.
+///
+/// Consists of zero or more key-value pairs, where the keys are not unique, and optionally a
+/// single binary blob.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Frame {
-    /// Key-value pairs. Keys can repeat arbitrarily often.
-    pub values: Vec<(Arc<str>, String)>,
-    /// Binary frame.
-    pub binary: Option<Vec<u8>>,
+    pub(super) values: Vec<(Arc<str>, String)>,
+    pub(super) binary: Option<Vec<u8>>,
 }
 
 impl Frame {
