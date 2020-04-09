@@ -286,11 +286,12 @@ mod tests {
 
         assert!(buf.is_empty());
 
-        assert_eq!(first.find("foo"), None);
+        assert!(first.is_empty());
 
         assert_eq!(second.find("foo"), Some("bar"));
 
         assert_eq!(third.find("binary"), None);
+        assert_eq!(third.get_binary(), Some(Vec::from("BINARY")));
     }
 
     #[test]
@@ -305,7 +306,8 @@ mod tests {
         let response = codec.decode(buf).expect("failed to decode").unwrap();
         let mut frame = response.single_frame().unwrap();
 
-        assert_eq!(frame.find("binary"), None);
+        assert_eq!(frame.fields_len(), 0);
+        assert_eq!(frame.get_binary(), Some(Vec::from("HELLO \nOK\n WORLD")));
 
         assert!(buf.is_empty());
     }

@@ -22,6 +22,26 @@ impl Frame {
         }
     }
 
+    /// Get the number of key-value pairs in this response frame.
+    pub fn fields_len(&self) -> usize {
+        self.values.len()
+    }
+
+    /// Returns `true` if the frame is entirely empty, i.e. contains 0 key-value pairs and no
+    /// binary blob.
+    pub fn is_empty(&self) -> bool {
+        self.fields_len() == 0 && !self.has_binary()
+    }
+
+    /// Returns `true` if the frame contains a binary blob.
+    ///
+    /// This will return `false` after you remove the binary blob using [`get_binary`].
+    ///
+    /// [`get_binary`]: #method.get_binary
+    pub fn has_binary(&self) -> bool {
+        self.binary.is_some()
+    }
+
     /// Find the first key-value pair with the given key, and return a reference to its value.
     pub fn find<K>(&self, key: K) -> Option<&str>
     where
@@ -48,6 +68,13 @@ impl Frame {
             .map(|(index, _)| index);
 
         index.map(|i| self.values.remove(i).1)
+    }
+
+    /// Get the binary blob contained in this frame, if present.
+    ///
+    /// This will remove it from the frame, future calls to this method will return `None`.
+    pub fn get_binary(&mut self) -> Option<Vec<u8>> {
+        self.binary.take()
     }
 
     /// Collect the key-value pairs in this resposne into a `HashMap`.
