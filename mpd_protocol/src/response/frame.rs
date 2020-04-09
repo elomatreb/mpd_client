@@ -15,14 +15,6 @@ pub struct Frame {
 
 impl Frame {
     /// Create an empty frame (0 key-value pairs).
-    ///
-    /// ```
-    /// use mpd_protocol::response::Frame;
-    ///
-    /// let f = Frame::empty();
-    /// assert_eq!(0, f.values.len());
-    /// assert!(f.binary.is_none());
-    /// ```
     pub fn empty() -> Self {
         Self {
             values: Vec::new(),
@@ -62,25 +54,6 @@ impl Frame {
     ///
     /// Beware that this loses the order relationship between different keys. Values for a given
     /// key are ordered like they appear in the response.
-    ///
-    /// ```
-    /// use std::sync::Arc;
-    /// use mpd_protocol::response::Frame;
-    ///
-    /// let f = Frame {
-    ///     values: vec![
-    ///         (Arc::from("foo"), String::from("bar")),
-    ///         (Arc::from("hello"), String::from("world")),
-    ///         (Arc::from("foo"), String::from("baz")),
-    ///     ],
-    ///     binary: None,
-    /// };
-    ///
-    /// let map = f.values_as_map();
-    ///
-    /// assert_eq!(map.get("foo"), Some(&vec!["bar", "baz"]));
-    /// assert_eq!(map.get("hello"), Some(&vec!["world"]));
-    /// ```
     pub fn values_as_map(&self) -> HashMap<Arc<str>, Vec<&str>> {
         let mut map = HashMap::new();
 

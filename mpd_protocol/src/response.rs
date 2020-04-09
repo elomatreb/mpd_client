@@ -161,35 +161,6 @@ impl Response {
     }
 
     /// Creates an iterator over all frames and errors in the response.
-    ///
-    /// ```
-    /// use std::sync::Arc;
-    /// use mpd_protocol::response::{Frame, Response};
-    ///
-    /// let mut first = vec![(Arc::from("hello"), String::from("world"))];
-    ///
-    /// let second = vec![(Arc::from("foo"), String::from("bar"))];
-    ///
-    /// let mut iter = Response::new(vec![Frame {
-    ///     values: first.clone(),
-    ///     binary: None,
-    /// }, Frame {
-    ///     values: second.clone(),
-    ///     binary: None,
-    /// }], None).into_frames();
-    ///
-    /// assert_eq!(Some(Ok(Frame {
-    ///     values: first,
-    ///     binary: None,
-    /// })), iter.next());
-    ///
-    /// assert_eq!(Some(Ok(Frame {
-    ///     values: second,
-    ///     binary: None,
-    /// })), iter.next());
-    ///
-    /// assert_eq!(None, iter.next());
-    /// ```
     pub fn into_frames(self) -> Frames {
         Frames(self)
     }
