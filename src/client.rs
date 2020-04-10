@@ -360,7 +360,7 @@ async fn run_loop<C>(
 fn response_to_subsystem(res: Response) -> Result<Option<Subsystem>, StateChangeError> {
     let mut frame = res.single_frame()?;
 
-    if frame.values.is_empty() {
+    if frame.fields_len() == 0 {
         Ok(None)
     } else {
         let raw = frame.get("changed").ok_or_else(|| {

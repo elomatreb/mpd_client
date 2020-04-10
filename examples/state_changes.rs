@@ -40,19 +40,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn print_current_song(response: Frame) {
-    let values = response.values_as_map();
-
-    if values.is_empty() {
+    if response.is_empty() {
         println!("(none)");
     } else {
         println!(
             "\"{}\" by \"{}\"",
-            display_value(values.get("Title")),
-            display_value(values.get("Artist"))
+            response.find("Title").unwrap_or("(no title"),
+            response.find("Artist").unwrap_or("(no artist)")
         );
     }
-}
-
-fn display_value<'a>(value: Option<&'_ Vec<&'a str>>) -> &'a str {
-    value.and_then(|v| v.first()).unwrap_or(&"(empty value)")
 }
