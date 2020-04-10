@@ -91,8 +91,6 @@ pub enum StateChangeError {
     InvalidMessage(MpdCodecError),
     /// The state change message contained an error frame
     ErrorMessage(ErrorResponse),
-    /// The state message wasn't empty, but did not contain the expected `changed` key
-    MissingChangedKey,
 }
 
 impl fmt::Display for StateChangeError {
@@ -104,7 +102,6 @@ impl fmt::Display for StateChangeError {
                 "Message contained an error frame (code {} - {:?})",
                 code, message
             ),
-            StateChangeError::MissingChangedKey => write!(f, "Message was missing 'changed' key"),
         }
     }
 }

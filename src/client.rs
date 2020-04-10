@@ -351,14 +351,14 @@ async fn run_loop<C>(
 fn response_to_subsystem(res: Response) -> Result<Option<Subsystem>, StateChangeError> {
     let mut frame = res.single_frame()?;
 
-    if frame.fields_len() == 0 {
-        Ok(None)
-    } else {
-        let raw = frame.get("changed").ok_or_else(|| {
-            warn!("state change response was not empty but was missing the `changed` key");
-            StateChangeError::MissingChangedKey
-        })?;
+    Ok(match frame.get("changed") {
+        Some(raw) => Some(Subsystem::from(raw)),
+        None => {
+            if frame.fields_len() != 0 {
+                warn!("state change response was not empty but did not contain `changed` key");
+            }
 
-        Ok(Some(Subsystem::from(raw)))
-    }
+            None
+        }
+    })
 }
