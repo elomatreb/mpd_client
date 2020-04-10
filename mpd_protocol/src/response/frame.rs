@@ -58,6 +58,8 @@ impl Frame {
     }
 
     /// Find the first key-value pair with the given key, and return a reference to its value.
+    ///
+    /// The key is case-sensitive.
     pub fn find<K>(&self, key: K) -> Option<&str>
     where
         K: AsRef<str>,
@@ -75,7 +77,7 @@ impl Frame {
 
     /// Find the first key-value pair with the given key, and return its value.
     ///
-    /// This removes it from the list of fields in this frame.
+    /// The key is case-sensitive. This removes it from the list of fields in this frame.
     pub fn get<K>(&mut self, key: K) -> Option<String>
     where
         K: AsRef<str>,
@@ -294,10 +296,12 @@ mod tests {
 
         assert_eq!(frame.find("hello"), Some("first value"));
         assert_eq!(frame.find("404"), None);
+        assert_eq!(frame.find("HELLO"), None); // case-sensitive
 
         assert_eq!(frame.get("hello"), Some(String::from("first value")));
         assert_eq!(frame.get("hello"), Some(String::from("second value")));
         assert_eq!(frame.get("hello"), None);
+        assert_eq!(frame.get("Foo"), None); // case-sensitive
     }
 
     #[test]
