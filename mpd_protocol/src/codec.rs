@@ -225,6 +225,18 @@ mod tests {
     }
 
     #[test]
+    fn encoder() {
+        let mut codec = MpdCodec::new();
+        let buf = &mut BytesMut::new();
+
+        let command = CommandList::new(Command::build("status").unwrap());
+
+        codec.encode(command.clone(), buf).unwrap();
+
+        assert_eq!(&b"status\n"[..], buf);
+    }
+
+    #[test]
     fn greeting() {
         let codec = &mut MpdCodec::new();
         let buf = &mut BytesMut::from("OK MPD 0.21.11"); // Note missing newline
@@ -278,7 +290,11 @@ mod tests {
 
         buf.extend_from_slice(b"\n");
 
-        let mut response = codec.decode(buf).expect("failed to decode").unwrap().into_frames();
+        let mut response = codec
+            .decode(buf)
+            .expect("failed to decode")
+            .unwrap()
+            .into_frames();
 
         let first = response.next().unwrap().unwrap();
         let second = response.next().unwrap().unwrap();
