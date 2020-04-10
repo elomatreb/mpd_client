@@ -3,6 +3,8 @@
 use fnv::FnvHashSet;
 
 use std::fmt;
+use std::iter::FusedIterator;
+use std::slice;
 use std::sync::Arc;
 
 /// A succesful response to a command.
@@ -50,8 +52,8 @@ impl Frame {
     /// If keys have been removed using [`get`], they will not appear.
     ///
     /// [`get`]: #method.get
-    pub fn fields(&self) -> impl Iterator<Item = (&str, &str)> {
-        self.fields.iter_present()
+    pub fn fields(&self) -> Fields<'_> {
+        Fields(self.fields.0.iter())
     }
 
     /// Find the first key-value pair with the given key, and return a reference to its value.
@@ -114,18 +116,9 @@ impl fmt::Debug for Frame {
 #[derive(Clone, Default, PartialEq, Eq)]
 pub(super) struct FieldsContainer(Vec<Option<(Arc<str>, String)>>);
 
-impl FieldsContainer {
-    fn iter_present(&self) -> impl Iterator<Item = (&str, &str)> {
-        self.0.iter().filter_map(|field| match field {
-            None => None,
-            Some((key, value)) => Some((key.as_ref(), value.as_ref())),
-        })
-    }
-}
-
 impl fmt::Debug for FieldsContainer {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_map().entries(self.iter_present()).finish()
+        f.debug_map().entries(Fields(self.0.iter())).finish()
     }
 }
 
@@ -150,6 +143,45 @@ fn simple_intern(store: &mut FnvHashSet<Arc<str>>, value: &str) -> Arc<str> {
             store.insert(Arc::clone(&v));
             v
         }
+    }
+}
+
+/// Iterator returned by the [`fields`] method.
+///
+/// [`fields`]: struct.Frame.html#method.fields
+#[derive(Debug)]
+pub struct Fields<'a>(slice::Iter<'a, Option<(Arc<str>, String)>>);
+
+impl<'a> Iterator for Fields<'a> {
+    type Item = (&'a str, &'a str);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.0.next() {
+            None => None,
+            Some(None) => self.next(),
+            Some(Some((k, v))) => Some((k.as_ref(), v.as_ref())),
+        }
+    }
+}
+
+impl DoubleEndedIterator for Fields<'_> {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        match self.0.next_back() {
+            None => None,
+            Some(None) => self.next_back(),
+            Some(Some((k, v))) => Some((k.as_ref(), v.as_ref())),
+        }
+    }
+}
+
+impl FusedIterator for Fields<'_> {}
+
+impl<'a> IntoIterator for &'a Frame {
+    type Item = (&'a str, &'a str);
+    type IntoIter = Fields<'a>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.fields()
     }
 }
 
