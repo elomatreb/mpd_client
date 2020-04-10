@@ -6,6 +6,7 @@ use std::fmt;
 use std::iter::FusedIterator;
 use std::slice;
 use std::sync::Arc;
+use std::vec;
 
 /// A succesful response to a command.
 ///
@@ -182,6 +183,45 @@ impl<'a> IntoIterator for &'a Frame {
 
     fn into_iter(self) -> Self::IntoIter {
         self.fields()
+    }
+}
+
+/// Iterator returned by the `IntoIterator` implementation on [`Frame`].
+///
+/// [`Frame`]: struct.Frame.html
+#[derive(Debug)]
+pub struct IntoIter(vec::IntoIter<Option<(Arc<str>, String)>>);
+
+impl Iterator for IntoIter {
+    type Item = (Arc<str>, String);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.0.next() {
+            None => None,
+            Some(None) => self.next(),
+            Some(value) => value,
+        }
+    }
+}
+
+impl DoubleEndedIterator for IntoIter {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        match self.0.next_back() {
+            None => None,
+            Some(None) => self.next_back(),
+            Some(value) => value,
+        }
+    }
+}
+
+impl FusedIterator for IntoIter {}
+
+impl IntoIterator for Frame {
+    type Item = (Arc<str>, String);
+    type IntoIter = IntoIter;
+
+    fn into_iter(self) -> Self::IntoIter {
+        IntoIter(self.fields.0.into_iter())
     }
 }
 
