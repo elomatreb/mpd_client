@@ -66,6 +66,13 @@ impl Frame {
             .find_map(|(k, v)| if k == key.as_ref() { Some(v) } else { None })
     }
 
+    /// Returns a reference to the binary blob in this frame, if there is one.
+    ///
+    /// If the binary blob has been removed using [`get_binary`], this will return `None`.
+    pub fn binary(&self) -> Option<&[u8]> {
+        self.binary.as_deref()
+    }
+
     /// Find the first key-value pair with the given key, and return its value.
     ///
     /// This removes it from the list of fields in this frame.
