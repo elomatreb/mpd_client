@@ -196,10 +196,15 @@ impl Client {
         let (state_changes_sender, state_changes) = mpsc::unbounded_channel();
         let (commands_sender, commands_receiver) = mpsc::unbounded_channel();
 
-        let connection = connect(connection).await?;
+        trace!("sending initial idle command");
+        let mut connection = MpdCodec::new().framed(connection);
+
+        if let Err(e) = connection.send(Command::new(IDLE)).await {
+            error!(error = ?e, "failed to send initial idle command");
+            return Err(e);
+        }
 
         debug!("connected succesfully");
-
         let run_loop = run_loop(connection, commands_receiver, state_changes_sender)
             .instrument(span!(parent: &span, Level::TRACE, "run loop"));
 
@@ -212,20 +217,6 @@ impl Client {
 
         Ok((client, state_changes))
     }
-}
-
-async fn connect<C: AsyncRead + AsyncWrite + Unpin>(
-    connection: C,
-) -> Result<Framed<C, MpdCodec>, MpdCodecError> {
-    trace!("sending initial command");
-    let mut framed = MpdCodec::new().framed(connection);
-
-    // Immediately send an idle command, to prevent the connection from timing out
-    if let Err(error) = framed.send(Command::new(IDLE)).await {
-        error!(?error, "failed to send initial command");
-    }
-
-    Ok(framed)
 }
 
 #[derive(Debug)]
