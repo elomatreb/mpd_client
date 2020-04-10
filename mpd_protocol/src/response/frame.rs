@@ -2,13 +2,14 @@
 
 use fnv::FnvHashSet;
 
+use std::fmt;
 use std::sync::Arc;
 
 /// A succesful response to a command.
 ///
 /// Consists of zero or more key-value pairs, where the keys are not unique, and optionally a
 /// single binary blob.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Frame {
     pub(super) fields: FieldsContainer,
     pub(super) binary: Option<Vec<u8>>,
@@ -50,10 +51,7 @@ impl Frame {
     ///
     /// [`get`]: #method.get
     pub fn fields(&self) -> impl Iterator<Item = (&str, &str)> {
-        self.fields.0.iter().filter_map(|field| match field {
-            None => None,
-            Some((key, value)) => Some((key.as_ref(), value.as_ref())),
-        })
+        self.fields.iter_present()
     }
 
     /// Find the first key-value pair with the given key, and return a reference to its value.
@@ -94,8 +92,42 @@ impl Frame {
     }
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+impl fmt::Debug for Frame {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if f.alternate() {
+            f.debug_struct("Frame")
+                .field("fields", &self.fields)
+                .field("binary", &self.binary)
+                .finish()
+        } else {
+            f.debug_struct("Frame")
+                .field("fields", &self.fields)
+                .field(
+                    "binary",
+                    &self.binary.as_ref().map(|b| format!("<{} bytes>", b.len())),
+                )
+                .finish()
+        }
+    }
+}
+
+#[derive(Clone, Default, PartialEq, Eq)]
 pub(super) struct FieldsContainer(Vec<Option<(Arc<str>, String)>>);
+
+impl FieldsContainer {
+    fn iter_present(&self) -> impl Iterator<Item = (&str, &str)> {
+        self.0.iter().filter_map(|field| match field {
+            None => None,
+            Some((key, value)) => Some((key.as_ref(), value.as_ref())),
+        })
+    }
+}
+
+impl fmt::Debug for FieldsContainer {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_map().entries(self.iter_present()).finish()
+    }
+}
 
 impl From<&[(&str, &str)]> for FieldsContainer {
     fn from(fields: &[(&str, &str)]) -> Self {
