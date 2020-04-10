@@ -87,8 +87,6 @@ impl From<ErrorResponse> for CommandError {
 /// Errors which may occur while listening for state change events.
 #[derive(Debug)]
 pub enum StateChangeError {
-    /// The connection to MPD is closed
-    ConnectionClosed,
     /// The message was invalid
     InvalidMessage(MpdCodecError),
     /// The state change message contained an error frame
@@ -100,7 +98,6 @@ pub enum StateChangeError {
 impl fmt::Display for StateChangeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            StateChangeError::ConnectionClosed => write!(f, "The connection was closed"),
             StateChangeError::InvalidMessage(_) => write!(f, "Invalid message"),
             StateChangeError::ErrorMessage(ErrorResponse { code, message, .. }) => write!(
                 f,
