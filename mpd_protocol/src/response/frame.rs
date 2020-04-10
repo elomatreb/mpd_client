@@ -22,7 +22,7 @@ impl Frame {
     /// Create an empty frame (0 key-value pairs).
     pub fn empty() -> Self {
         Self {
-            fields: FieldsContainer::default(),
+            fields: FieldsContainer(Vec::new()),
             binary: None,
         }
     }
@@ -114,7 +114,7 @@ impl fmt::Debug for Frame {
     }
 }
 
-#[derive(Clone, Default, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub(super) struct FieldsContainer(Vec<Option<(Arc<str>, String)>>);
 
 impl fmt::Debug for FieldsContainer {
@@ -263,7 +263,7 @@ mod tests {
     #[test]
     fn binary() {
         let mut frame = Frame {
-            fields: FieldsContainer::default(),
+            fields: FieldsContainer(Vec::new()),
             binary: Some(Vec::from("hello world")),
         };
 
