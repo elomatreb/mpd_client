@@ -190,13 +190,25 @@ impl<'a> IntoIterator for &'a Frame {
 ///
 /// [`Frame`]: struct.Frame.html
 #[derive(Debug)]
-pub struct IntoIter(vec::IntoIter<Option<(Arc<str>, String)>>);
+pub struct IntoIter {
+    iter: vec::IntoIter<Option<(Arc<str>, String)>>,
+    binary: Option<Vec<u8>>,
+}
+
+impl IntoIter {
+    /// Get the binary blob contained in this frame, if present.
+    ///
+    /// This will remove it from the frame, future calls to this method will return `None`.
+    pub fn get_binary(&mut self) -> Option<Vec<u8>> {
+        self.binary.take()
+    }
+}
 
 impl Iterator for IntoIter {
     type Item = (Arc<str>, String);
 
     fn next(&mut self) -> Option<Self::Item> {
-        match self.0.next() {
+        match self.iter.next() {
             None => None,
             Some(None) => self.next(),
             Some(value) => value,
@@ -206,7 +218,7 @@ impl Iterator for IntoIter {
 
 impl DoubleEndedIterator for IntoIter {
     fn next_back(&mut self) -> Option<Self::Item> {
-        match self.0.next_back() {
+        match self.iter.next_back() {
             None => None,
             Some(None) => self.next_back(),
             Some(value) => value,
@@ -221,7 +233,10 @@ impl IntoIterator for Frame {
     type IntoIter = IntoIter;
 
     fn into_iter(self) -> Self::IntoIter {
-        IntoIter(self.fields.0.into_iter())
+        IntoIter {
+            iter: self.fields.0.into_iter(),
+            binary: self.binary,
+        }
     }
 }
 
