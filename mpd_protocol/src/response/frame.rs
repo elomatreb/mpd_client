@@ -1,5 +1,7 @@
 //! A succesful response to a command.
 
+use fnv::FnvHashSet;
+
 use std::sync::Arc;
 
 /// A succesful response to a command.
@@ -93,7 +95,31 @@ impl Frame {
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub(super) struct FieldsContainer(pub(super) Vec<Option<(Arc<str>, String)>>);
+pub(super) struct FieldsContainer(Vec<Option<(Arc<str>, String)>>);
+
+impl From<&[(&str, &str)]> for FieldsContainer {
+    fn from(fields: &[(&str, &str)]) -> Self {
+        let mut keys = FnvHashSet::default();
+
+        let fields = fields
+            .iter()
+            .map(|&(k, v)| Some((simple_intern(&mut keys, k), v.to_owned())))
+            .collect();
+
+        Self(fields)
+    }
+}
+
+fn simple_intern(store: &mut FnvHashSet<Arc<str>>, value: &str) -> Arc<str> {
+    match store.get(value) {
+        Some(v) => Arc::clone(v),
+        None => {
+            let v = Arc::from(value);
+            store.insert(Arc::clone(&v));
+            v
+        }
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -166,5 +192,26 @@ mod tests {
 
         assert_eq!(iter.next(), None);
         assert_eq!(iter.next(), None);
+    }
+
+    #[test]
+    fn conversion() {
+        let fields = vec![
+            ("hello", "first value"),
+            ("foo", "bar"),
+            ("hello", "second value"),
+        ];
+
+        let mut converted = FieldsContainer::from(fields.as_slice());
+
+        let c = converted.0.pop().unwrap().unwrap();
+        let b = converted.0.pop().unwrap().unwrap();
+        let a = converted.0.pop().unwrap().unwrap();
+
+        assert_eq!(a, (Arc::from("hello"), String::from("first value")));
+        assert_eq!(b, (Arc::from("foo"), String::from("bar")));
+        assert_eq!(c, (Arc::from("hello"), String::from("second value")));
+
+        assert!(Arc::ptr_eq(&a.0, &c.0)); // Same allocation
     }
 }

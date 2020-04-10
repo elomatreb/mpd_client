@@ -3,12 +3,9 @@
 pub mod error;
 pub mod frame;
 
-use fnv::FnvHashSet;
-
 use std::convert::TryFrom;
 use std::fmt;
 use std::iter::FusedIterator;
-use std::sync::Arc;
 
 use crate::parser;
 
@@ -178,20 +175,13 @@ impl<'a> TryFrom<&'a [parser::Response<'_>]> for Response {
         let mut frames = Vec::with_capacity(raw_frames.len());
         let mut error = None;
 
-        let mut keys = FnvHashSet::default();
-
         for frame in raw_frames.iter().rev() {
             match frame {
                 parser::Response::Success { fields, binary } => {
-                    let fields = fields
-                        .iter()
-                        .map(|&(k, v)| Some((simple_intern(&mut keys, k), v.to_owned())))
-                        .collect();
-
                     let binary = binary.map(Vec::from);
 
                     frames.push(Frame {
-                        fields: frame::FieldsContainer(fields),
+                        fields: frame::FieldsContainer::from(fields.as_slice()),
                         binary,
                     });
                 }
@@ -218,17 +208,6 @@ impl<'a> TryFrom<&'a [parser::Response<'_>]> for Response {
         }
 
         Ok(Response { frames, error })
-    }
-}
-
-fn simple_intern(store: &mut FnvHashSet<Arc<str>>, value: &str) -> Arc<str> {
-    match store.get(value) {
-        Some(v) => Arc::clone(v),
-        None => {
-            let v = Arc::from(value);
-            store.insert(Arc::clone(&v));
-            v
-        }
     }
 }
 
