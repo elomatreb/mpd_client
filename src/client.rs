@@ -10,7 +10,7 @@ use tokio::{
     io::{AsyncRead, AsyncWrite},
     net::{TcpStream, ToSocketAddrs, UnixStream},
     sync::{
-        mpsc::{self, Receiver, Sender, UnboundedSender},
+        mpsc::{self, error::TryRecvError, Receiver, Sender, UnboundedSender},
         oneshot,
     },
 };
@@ -174,6 +174,7 @@ impl Client {
     }
 
     async fn do_send(&self, commands: CommandList) -> Result<Response, CommandError> {
+        trace!(?commands, "do_send");
         let (tx, rx) = oneshot::channel();
 
         let mut commands_sender = self.commands_sender.clone();
@@ -336,12 +337,32 @@ async fn run_loop<C>(
 
                 let _ = responder.send(response.map_err(Into::into));
 
-                // Start idling again
-                state = State::Idling;
-                if let Err(e) = connection.send(CommandList::new(Command::new(IDLE))).await {
-                    error!(error = ?e, "failed to start idling after receiving command response");
-                    let _ = state_changes.send(Err(e.into()));
-                    break;
+                // See if we can immediately send the next command
+                match commands.try_recv() {
+                    Ok((command, responder)) => {
+                        trace!(?command, "next command immediately available");
+                        match connection.send(command).await {
+                            Ok(_) => state = State::WaitingForCommandReply(responder),
+                            Err(e) => {
+                                error!(error = ?e, "failed to send command");
+                                let _ = responder.send(Err(e.into()));
+                                break;
+                            }
+                        }
+                    }
+                    Err(TryRecvError::Empty) => {
+                        trace!("no next command immediately available, idling");
+
+                        // Start idling again
+                        state = State::Idling;
+                        let idle = Command::new(IDLE);
+                        if let Err(e) = connection.send(idle).await {
+                            error!(error = ?e, "failed to start idling after receiving command response");
+                            let _ = state_changes.send(Err(e.into()));
+                            break;
+                        }
+                    }
+                    Err(TryRecvError::Closed) => break,
                 }
             }
         }
