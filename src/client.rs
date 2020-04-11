@@ -10,7 +10,7 @@ use tokio::{
     io::{AsyncRead, AsyncWrite},
     net::{TcpStream, ToSocketAddrs, UnixStream},
     sync::{
-        mpsc::{self, UnboundedReceiver, UnboundedSender},
+        mpsc::{self, Receiver, Sender, UnboundedSender},
         oneshot,
     },
 };
@@ -33,7 +33,7 @@ type CommandResponder = oneshot::Sender<Result<Response, CommandError>>;
 /// Client for MPD.
 #[derive(Clone, Debug)]
 pub struct Client {
-    commands_sender: UnboundedSender<(CommandList, CommandResponder)>,
+    commands_sender: Sender<(CommandList, CommandResponder)>,
     span: Arc<Span>,
 }
 
@@ -175,7 +175,9 @@ impl Client {
 
     async fn do_send(&self, commands: CommandList) -> Result<Response, CommandError> {
         let (tx, rx) = oneshot::channel();
-        self.commands_sender.send((commands, tx))?;
+
+        let mut commands_sender = self.commands_sender.clone();
+        commands_sender.send((commands, tx)).await?;
 
         rx.await?
     }
@@ -194,7 +196,7 @@ impl Client {
         C: AsyncRead + AsyncWrite + Unpin + Send + 'static,
     {
         let (state_changes_sender, state_changes) = mpsc::unbounded_channel();
-        let (commands_sender, commands_receiver) = mpsc::unbounded_channel();
+        let (commands_sender, commands_receiver) = mpsc::channel(1);
 
         trace!("sending initial idle command");
         let mut connection = MpdCodec::new().framed(connection);
@@ -227,7 +229,7 @@ enum State {
 
 async fn run_loop<C>(
     mut connection: Framed<C, MpdCodec>,
-    mut commands: UnboundedReceiver<(CommandList, CommandResponder)>,
+    mut commands: Receiver<(CommandList, CommandResponder)>,
     state_changes: UnboundedSender<Result<Subsystem, StateChangeError>>,
 ) where
     C: AsyncRead + AsyncWrite + Unpin,
