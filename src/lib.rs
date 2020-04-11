@@ -25,11 +25,3 @@ pub use mpd_protocol::{
     response::{Error, Frame},
     Command, CommandList, MpdCodecError,
 };
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn it_works() {
-        assert_eq!(2 + 2, 4);
-    }
-}
