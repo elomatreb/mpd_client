@@ -3,7 +3,7 @@
 use futures::{
     future::{select, Either},
     sink::SinkExt,
-    stream::{Stream, StreamExt},
+    stream::StreamExt,
 };
 use mpd_protocol::{response::Frame, Command, CommandList, MpdCodec, MpdCodecError, Response};
 use tokio::{
@@ -23,7 +23,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use crate::errors::{CommandError, StateChangeError};
-use crate::state_changes::Subsystem;
+use crate::state_changes::{StateChanges, Subsystem};
 
 static IDLE: &str = "idle";
 static CANCEL_IDLE: &str = "noidle";
@@ -54,13 +54,7 @@ impl Client {
     /// [`connect`]: #method.connect
     pub async fn connect_to<A: ToSocketAddrs + Debug>(
         address: A,
-    ) -> Result<
-        (
-            Self,
-            impl Stream<Item = Result<Subsystem, StateChangeError>>,
-        ),
-        MpdCodecError,
-    > {
+    ) -> Result<(Client, StateChanges), MpdCodecError> {
         let span = span!(Level::DEBUG, "client connection", tcp_addr = ?address);
         let connection = TcpStream::connect(address).await?;
 
@@ -83,13 +77,7 @@ impl Client {
     /// [`connect`]: #method.connect
     pub async fn connect_unix<P: AsRef<Path>>(
         path: P,
-    ) -> Result<
-        (
-            Self,
-            impl Stream<Item = Result<Subsystem, StateChangeError>>,
-        ),
-        MpdCodecError,
-    > {
+    ) -> Result<(Client, StateChanges), MpdCodecError> {
         let span = span!(Level::DEBUG, "client connection", unix_addr = ?path.as_ref());
         let connection = UnixStream::connect(path).await?;
 
@@ -116,15 +104,7 @@ impl Client {
     ///
     /// [`connect_to`]: #method.connect_to
     /// [`connect_unix`]: #method.connect_unix
-    pub async fn connect<C>(
-        connection: C,
-    ) -> Result<
-        (
-            Self,
-            impl Stream<Item = Result<Subsystem, StateChangeError>>,
-        ),
-        MpdCodecError,
-    >
+    pub async fn connect<C>(connection: C) -> Result<(Client, StateChanges), MpdCodecError>
     where
         C: AsyncRead + AsyncWrite + Send + Unpin + 'static,
     {
@@ -183,16 +163,7 @@ impl Client {
         rx.await?
     }
 
-    async fn do_connect<C>(
-        connection: C,
-        span: Span,
-    ) -> Result<
-        (
-            Self,
-            impl Stream<Item = Result<Subsystem, StateChangeError>>,
-        ),
-        MpdCodecError,
-    >
+    async fn do_connect<C>(connection: C, span: Span) -> Result<(Self, StateChanges), MpdCodecError>
     where
         C: AsyncRead + AsyncWrite + Unpin + Send + 'static,
     {
@@ -218,6 +189,7 @@ impl Client {
             span: Arc::new(span),
         };
 
+        let state_changes = StateChanges { rx: state_changes };
         Ok((client, state_changes))
     }
 }
