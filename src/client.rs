@@ -31,6 +31,23 @@ static CANCEL_IDLE: &str = "noidle";
 type CommandResponder = oneshot::Sender<Result<Response, CommandError>>;
 
 /// Client for MPD.
+///
+/// You can use this to send commands to the MPD server, and wait for the response.
+///
+/// Dropping the `Client` (all clients if you clonewill close the connection. You can clone this
+/// cheaply, which will result in the connection closing after *all* of the `Client`s are dropped.
+///
+/// ```no_run
+/// use mpd_client::{Command, Client};
+///
+/// #[tokio::main]
+/// async fn main() -> Result<(), Box<dyn std::error::Error>> {
+///     let (client, _state_changes) = Client::connect_to("localhost:6600").await?;
+///
+///     client.command(Command::new("play")).await?;
+///     Ok(())
+/// }
+/// ```
 #[derive(Clone, Debug)]
 pub struct Client {
     commands_sender: Sender<(CommandList, CommandResponder)>,
