@@ -25,8 +25,8 @@ pub enum Subsystem {
     Other(String),
 }
 
-impl From<String> for Subsystem {
-    fn from(raw: String) -> Self {
+impl Subsystem {
+    pub(crate) fn from_raw_string(raw: String) -> Self {
         match raw.as_str() {
             "database" => Subsystem::Database,
             "message" => Subsystem::Message,

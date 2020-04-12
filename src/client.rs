@@ -375,7 +375,7 @@ fn response_to_subsystem(res: Response) -> Result<Option<Subsystem>, StateChange
     let mut frame = res.single_frame()?;
 
     Ok(match frame.get("changed") {
-        Some(raw) => Some(Subsystem::from(raw)),
+        Some(raw) => Some(Subsystem::from_raw_string(raw)),
         None => {
             if frame.fields_len() != 0 {
                 warn!("state change response was not empty but did not contain `changed` key");
