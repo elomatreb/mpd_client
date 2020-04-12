@@ -23,7 +23,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use crate::errors::{CommandError, StateChangeError};
-use crate::util::Subsystem;
+use crate::state_changes::Subsystem;
 
 static IDLE: &str = "idle";
 static CANCEL_IDLE: &str = "noidle";

@@ -14,11 +14,11 @@
 pub mod client;
 pub mod errors;
 pub mod filter;
-pub mod util;
+pub mod state_changes;
 
 pub use client::Client;
 pub use filter::Filter;
-pub use util::Subsystem;
+pub use state_changes::Subsystem;
 
 pub use mpd_protocol::{
     command_list,

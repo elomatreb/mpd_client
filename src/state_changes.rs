@@ -1,4 +1,4 @@
-//! Utilities for working with MPD.
+//! Tools for handling state-change events emitted by MPD.
 
 /// Subsystems of MPD which can receive state change notifications.
 ///
