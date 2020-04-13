@@ -18,10 +18,12 @@ use tokio_util::codec::{Decoder, Framed};
 use tracing::{debug, error, span, trace, warn, Level, Span};
 use tracing_futures::Instrument;
 
+use std::convert::TryInto;
 use std::fmt::Debug;
 use std::path::Path;
 use std::sync::Arc;
 
+use crate::commands::Command as TypedCommand;
 use crate::errors::{CommandError, StateChangeError};
 use crate::state_changes::{StateChanges, Subsystem};
 
@@ -139,6 +141,16 @@ impl Client {
             .await?
             .single_frame()
             .map_err(Into::into)
+    }
+
+    /// Send typed commnad.
+    pub async fn command_typed<C: TypedCommand>(
+        &self,
+        command: C,
+    ) -> Result<C::Response, CommandError> {
+        let command = command.to_command();
+        let frame = self.command(command).await?;
+        Ok(frame.try_into().unwrap())
     }
 
     /// Send the given command list, and return the responses to the contained commands.

@@ -16,6 +16,7 @@ mod client;
 pub mod errors;
 pub mod filter;
 pub mod state_changes;
+pub mod commands;
 
 pub use client::Client;
 pub use filter::Filter;
