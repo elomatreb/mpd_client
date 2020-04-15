@@ -2,10 +2,7 @@
 
 use mpd_protocol::Command as RawCommand;
 
-use super::{
-    responses::{self as res, Empty},
-    Command,
-};
+use super::{responses as res, Command};
 
 macro_rules! argless_command {
     // Utility branch to generate struct with doc expression
@@ -31,8 +28,8 @@ macro_rules! argless_command {
     };
 }
 
-argless_command!(Next, "next", Empty);
-argless_command!(Previous, "previous", Empty);
-argless_command!(Stop, "stop", Empty);
+argless_command!(Next, "next", res::Empty);
+argless_command!(Previous, "previous", res::Empty);
+argless_command!(Stop, "stop", res::Empty);
 
 argless_command!(Status, "status", res::Status);
