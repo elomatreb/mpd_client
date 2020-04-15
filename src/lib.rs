@@ -27,3 +27,7 @@ pub use mpd_protocol::{
     response::{Error, Frame},
     Command, CommandList, MpdCodecError,
 };
+
+mod sealed {
+    pub trait Sealed {}
+}

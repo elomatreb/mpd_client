@@ -18,7 +18,6 @@ use tokio_util::codec::{Decoder, Framed};
 use tracing::{debug, error, span, trace, warn, Level, Span};
 use tracing_futures::Instrument;
 
-use std::convert::TryInto;
 use std::fmt::Debug;
 use std::path::Path;
 use std::sync::Arc;
@@ -148,9 +147,11 @@ impl Client {
         &self,
         command: C,
     ) -> Result<C::Response, CommandError> {
+        use crate::commands::responses::Response;
         let command = command.to_command();
         let frame = self.command(command).await?;
-        Ok(frame.try_into().unwrap())
+
+        Ok(Response::convert(frame).unwrap())
     }
 
     /// Send the given command list, and return the responses to the contained commands.

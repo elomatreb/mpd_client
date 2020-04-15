@@ -11,19 +11,14 @@
 mod definitions;
 pub mod responses;
 
-use mpd_protocol::response::Frame;
-
-use std::convert::TryFrom;
-
-use responses::TypedResponseError;
 pub use definitions::*;
+use responses::Response;
 
 /// Types which can be used as pre-built properly typed commands.
 pub trait Command {
     /// The response this command expects.
-    type Response: TryFrom<Frame, Error = TypedResponseError>;
+    type Response: Response;
 
     /// Create the "raw" command representation for transmission.
     fn to_command(self) -> mpd_protocol::Command;
 }
-

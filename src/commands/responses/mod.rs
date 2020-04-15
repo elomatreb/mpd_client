@@ -5,15 +5,23 @@ mod util_macros;
 
 use mpd_protocol::response::Frame;
 
-use std::convert::TryFrom;
 use std::error::Error;
 use std::fmt;
 use std::num::{ParseFloatError, ParseIntError};
 use std::time::Duration;
 
+use crate::sealed;
+
+/// "Marker" trait for responses to commands.
+///
+/// This is sealed, so it cannot be implemented.
+pub trait Response: Sized + sealed::Sealed {
+    #[doc(hidden)]
+    fn convert(frame: Frame) -> Result<Self, TypedResponseError>;
+}
+
 /// Error returned when failing to convert a raw `Frame` into the proper typed response.
 #[derive(Clone, Debug, PartialEq, Eq)]
-#[allow(missing_copy_implementations)]
 pub struct TypedResponseError {
     field: &'static str,
     kind: ErrorKind,
@@ -67,10 +75,9 @@ pub type JobId = u64;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Empty;
 
-impl TryFrom<Frame> for Empty {
-    type Error = TypedResponseError;
-
-    fn try_from(_: Frame) -> Result<Self, Self::Error> {
+impl sealed::Sealed for Empty {}
+impl Response for Empty {
+    fn convert(_: Frame) -> Result<Self, TypedResponseError> {
         // silently ignore any actually existing fields
         Ok(Self)
     }
@@ -124,10 +131,9 @@ pub struct Status {
     pub error: Option<String>,
 }
 
-impl TryFrom<Frame> for Status {
-    type Error = TypedResponseError;
-
-    fn try_from(mut raw: Frame) -> Result<Self, Self::Error> {
+impl sealed::Sealed for Status {}
+impl Response for Status {
+    fn convert(mut raw: Frame) -> Result<Self, TypedResponseError> {
         let single = match raw.get("single") {
             None => SingleMode::Disabled,
             Some(val) => match val.as_str() {
@@ -180,10 +186,9 @@ pub struct Stats {
     pub db_last_update: u64,
 }
 
-impl TryFrom<Frame> for Stats {
-    type Error = TypedResponseError;
-
-    fn try_from(mut raw: Frame) -> Result<Self, Self::Error> {
+impl sealed::Sealed for Stats {}
+impl Response for Stats {
+    fn convert(mut raw: Frame) -> Result<Self, TypedResponseError> {
         Ok(Self {
             artists: field!(raw, "artists" integer),
             albums: field!(raw, "albums" integer),
