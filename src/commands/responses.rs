@@ -233,3 +233,35 @@ impl TryFrom<Frame> for Status {
         })
     }
 }
+
+/// Response to the `stats` command.
+///
+/// General server statistics.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[allow(missing_docs)]
+pub struct Stats {
+    pub artists: u64,
+    pub albums: u64,
+    pub songs: u64,
+    pub uptime: Duration,
+    pub playtime: Duration,
+    pub db_playtime: Duration,
+    /// Raw server UNIX timestamp of last database update.
+    pub db_last_update: u64,
+}
+
+impl TryFrom<Frame> for Stats {
+    type Error = TypedResponseError;
+
+    fn try_from(mut raw: Frame) -> Result<Self, Self::Error> {
+        Ok(Self {
+            artists: field!(raw, "artists" integer),
+            albums: field!(raw, "albums" integer),
+            songs: field!(raw, "songs" integer),
+            uptime: field!(raw, "uptime" duration),
+            playtime: field!(raw, "playtime" duration),
+            db_playtime: field!(raw, "db_playtime" duration),
+            db_last_update: field!(raw, "db_update" integer),
+        })
+    }
+}

@@ -33,3 +33,4 @@ argless_command!(Previous, "previous", res::Empty);
 argless_command!(Stop, "stop", res::Empty);
 
 argless_command!(Status, "status", res::Status);
+argless_command!(Stats, "stats", res::Stats);
