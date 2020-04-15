@@ -8,7 +8,7 @@
 //!
 //! [0]: https://www.musicpd.org/doc/html/protocol.html#command-reference
 
-pub mod definitions;
+mod definitions;
 pub mod responses;
 
 use mpd_protocol::response::Frame;
