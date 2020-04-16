@@ -34,3 +34,5 @@ argless_command!(Stop, "stop", res::Empty);
 
 argless_command!(Status, "status", res::Status);
 argless_command!(Stats, "stats", res::Stats);
+
+argless_command!(CurrentSong, "currentsong", Option<res::Song>);

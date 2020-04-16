@@ -3,6 +3,8 @@
 #[macro_use]
 mod util_macros;
 
+mod song;
+
 use mpd_protocol::response::Frame;
 
 use std::error::Error;
@@ -10,6 +12,7 @@ use std::fmt;
 use std::num::{ParseFloatError, ParseIntError};
 use std::time::Duration;
 
+pub use song::{Song, Tag};
 use crate::sealed;
 
 /// "Marker" trait for responses to commands.
@@ -32,6 +35,8 @@ pub struct TypedResponseError {
 enum ErrorKind {
     /// A required field was missing entirely.
     Missing,
+    /// We expected a certain field, but found another.
+    UnexpectedField(String),
     /// A field had a unexpected value.
     InvalidValue(String),
     /// A field containing an integer failed to parse.
@@ -48,6 +53,9 @@ impl fmt::Display for TypedResponseError {
             ErrorKind::Missing => write!(f, "field {:?} is but missing", self.field),
             ErrorKind::InvalidValue(val) => {
                 write!(f, "value {:?} is invalid for field {:?}", val, self.field)
+            }
+            ErrorKind::UnexpectedField(found) => {
+                write!(f, "Expected field {:?} but found {:?}", self.field, found)
             }
             ErrorKind::MalformedInteger(_) => write!(f, "field {:?} is not an integer", self.field),
             ErrorKind::MalformedFloat(_) => write!(f, "field {:?} is not a float", self.field),
@@ -198,5 +206,13 @@ impl Response for Stats {
             db_playtime: field!(raw, "db_playtime" duration),
             db_last_update: field!(raw, "db_update" integer),
         })
+    }
+}
+
+impl sealed::Sealed for Option<Song> {}
+impl Response for Option<Song> {
+    fn convert(raw: Frame) -> Result<Self, TypedResponseError> {
+        let mut vec = Song::parse_frame(raw, Some(1))?;
+        Ok(vec.pop())
     }
 }
