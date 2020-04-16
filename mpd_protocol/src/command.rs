@@ -232,6 +232,12 @@ impl Argument for &'static str {
     }
 }
 
+impl Argument for Cow<'static, str> {
+    fn render(self) -> Cow<'static, str> {
+        self
+    }
+}
+
 /// Escape a single argument, prefixing necessary characters (quotes and backslashes) with
 /// backslashes.
 ///
