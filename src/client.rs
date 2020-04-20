@@ -243,137 +243,137 @@ async fn run_loop<C>(
     loop {
         trace!(state = ?state.loop_state, "loop iteration");
 
-        match state.loop_state {
-            LoopState::Idling => {
-                // We are idling (the last command sent to the server was an IDLE).
-
-                // Wait for either a command to send or a message from the server, which would be a
-                // state change notification.
-                let event = select(state.connection.next(), state.commands.next()).await;
-
-                match event {
-                    Either::Left((response, _)) => {
-                        // A server message was received. Since we were idling, this is a state
-                        // change notification or `None` is the connection was closed.
-
-                        match response {
-                            Some(Ok(res)) => {
-                                if let Some(state_change) = response_to_subsystem(res).transpose() {
-                                    trace!(?state_change);
-                                    let _ = state.state_changes.send(state_change);
-                                }
-
-                                if let Err(e) = state.connection.send(Command::new(IDLE)).await {
-                                    error!(error = ?e, "failed to start idling after state change");
-                                    let _ = state.state_changes.send(Err(e.into()));
-                                    break;
-                                }
-                            }
-                            Some(Err(e)) => {
-                                error!(error = ?e, "state change error");
-                                let _ = state.state_changes.send(Err(e.into()));
-                                break;
-                            }
-                            None => break, // The connection was closed
-                        }
-                    }
-                    Either::Right((command, _)) => {
-                        // A command was received or the commands channel was dropped. The latter
-                        // is an indicator for us to close the connection.
-
-                        let (command, responder) = match command {
-                            None => break, // The connection was closed
-                            Some(c) => c,
-                        };
-
-                        trace!(?command, "command received");
-
-                        // Cancel currently ongoing idle
-                        if let Err(e) = state.connection.send(Command::new(CANCEL_IDLE)).await {
-                            error!(error = ?e, "failed to cancel idle prior to sending command");
-                            let _ = responder.send(Err(e.into()));
-                            break;
-                        }
-
-                        // Response to CANCEL_IDLE above
-                        match state.connection.next().await {
-                            None => break,
-                            Some(Ok(res)) => {
-                                if let Some(state_change) = response_to_subsystem(res).transpose() {
-                                    trace!(?state_change);
-                                    let _ = state.state_changes.send(state_change);
-                                }
-                            }
-                            Some(Err(e)) => {
-                                error!(error = ?e, "state change error prior to sending command");
-                                let _ = responder.send(Err(e.into()));
-                                break;
-                            }
-                        }
-
-                        // Actually send the command. This sets the state for the next loop
-                        // iteration.
-                        match state.connection.send(command).await {
-                            Ok(_) => {
-                                state.loop_state = LoopState::WaitingForCommandReply(responder)
-                            }
-                            Err(e) => {
-                                error!(error = ?e, "failed to send command");
-                                let _ = responder.send(Err(e.into()));
-                                break;
-                            }
-                        }
-
-                        trace!("command sent succesfully");
-                    }
-                }
-            }
-            LoopState::WaitingForCommandReply(responder) => {
-                // We're waiting for the response to the command associated with `responder`.
-
-                let response = match state.connection.next().await {
-                    None => break,
-                    Some(res) => res,
-                };
-
-                trace!(?response, "response to command received");
-
-                let _ = responder.send(response.map_err(Into::into));
-
-                // See if we can immediately send the next command
-                match state.commands.try_recv() {
-                    Ok((command, responder)) => {
-                        trace!(?command, "next command immediately available");
-                        match state.connection.send(command).await {
-                            Ok(_) => {
-                                state.loop_state = LoopState::WaitingForCommandReply(responder)
-                            }
-                            Err(e) => {
-                                error!(error = ?e, "failed to send command");
-                                let _ = responder.send(Err(e.into()));
-                                break;
-                            }
-                        }
-                    }
-                    Err(TryRecvError::Empty) => {
-                        trace!("no next command immediately available, idling");
-
-                        // Start idling again
-                        state.loop_state = LoopState::Idling;
-                        let idle = Command::new(IDLE);
-                        if let Err(e) = state.connection.send(idle).await {
-                            error!(error = ?e, "failed to start idling after receiving command response");
-                            let _ = state.state_changes.send(Err(e.into()));
-                            break;
-                        }
-                    }
-                    Err(TryRecvError::Closed) => break,
-                }
-            }
+        match run_loop_iteration(state).await {
+            Some(new_state) => state = new_state,
+            None => break,
         }
     }
 
     trace!("exited run_loop");
+}
+
+async fn run_loop_iteration<C>(mut state: State<C>) -> Option<State<C>>
+where
+    C: AsyncRead + AsyncWrite + Unpin,
+{
+    match state.loop_state {
+        LoopState::Idling => {
+            // We are idling (the last command sent to the server was an IDLE).
+
+            // Wait for either a command to send or a message from the server, which would be a
+            // state change notification.
+            let event = select(state.connection.next(), state.commands.next()).await;
+
+            match event {
+                Either::Left((response, _)) => {
+                    // A server message was received. Since we were idling, this is a state
+                    // change notification or `None` is the connection was closed.
+
+                    match response {
+                        Some(Ok(res)) => {
+                            if let Some(state_change) = response_to_subsystem(res).transpose() {
+                                trace!(?state_change);
+                                let _ = state.state_changes.send(state_change);
+                            }
+
+                            if let Err(e) = state.connection.send(Command::new(IDLE)).await {
+                                error!(error = ?e, "failed to start idling after state change");
+                                let _ = state.state_changes.send(Err(e.into()));
+                                return None;
+                            }
+                        }
+                        Some(Err(e)) => {
+                            error!(error = ?e, "state change error");
+                            let _ = state.state_changes.send(Err(e.into()));
+                            return None;
+                        }
+                        None => return None, // The connection was closed
+                    }
+                }
+                Either::Right((command, _)) => {
+                    // A command was received or the commands channel was dropped. The latter
+                    // is an indicator for us to close the connection.
+
+                    let (command, responder) = command?;
+                    trace!(?command, "command received");
+
+                    // Cancel currently ongoing idle
+                    if let Err(e) = state.connection.send(Command::new(CANCEL_IDLE)).await {
+                        error!(error = ?e, "failed to cancel idle prior to sending command");
+                        let _ = responder.send(Err(e.into()));
+                        return None;
+                    }
+
+                    // Response to CANCEL_IDLE above
+                    match state.connection.next().await {
+                        None => return None,
+                        Some(Ok(res)) => {
+                            if let Some(state_change) = response_to_subsystem(res).transpose() {
+                                trace!(?state_change);
+                                let _ = state.state_changes.send(state_change);
+                            }
+                        }
+                        Some(Err(e)) => {
+                            error!(error = ?e, "state change error prior to sending command");
+                            let _ = responder.send(Err(e.into()));
+                            return None;
+                        }
+                    }
+
+                    // Actually send the command. This sets the state for the next loop
+                    // iteration.
+                    match state.connection.send(command).await {
+                        Ok(_) => state.loop_state = LoopState::WaitingForCommandReply(responder),
+                        Err(e) => {
+                            error!(error = ?e, "failed to send command");
+                            let _ = responder.send(Err(e.into()));
+                            return None;
+                        }
+                    }
+
+                    trace!("command sent succesfully");
+                }
+            }
+        }
+        LoopState::WaitingForCommandReply(responder) => {
+            // We're waiting for the response to the command associated with `responder`.
+
+            let response = state.connection.next().await?;
+            trace!(?response, "response to command received");
+
+            let _ = responder.send(response.map_err(Into::into));
+
+            // See if we can immediately send the next command
+            match state.commands.try_recv() {
+                Ok((command, responder)) => {
+                    trace!(?command, "next command immediately available");
+                    match state.connection.send(command).await {
+                        Ok(_) => state.loop_state = LoopState::WaitingForCommandReply(responder),
+                        Err(e) => {
+                            error!(error = ?e, "failed to send command");
+                            let _ = responder.send(Err(e.into()));
+                            return None;
+                        }
+                    }
+                }
+                Err(TryRecvError::Empty) => {
+                    trace!("no next command immediately available, idling");
+
+                    // Start idling again
+                    state.loop_state = LoopState::Idling;
+                    let idle = Command::new(IDLE);
+                    if let Err(e) = state.connection.send(idle).await {
+                        error!(error = ?e, "failed to start idling after receiving command response");
+                        let _ = state.state_changes.send(Err(e.into()));
+                        return None;
+                    }
+                }
+                Err(TryRecvError::Closed) => return None,
+            }
+        }
+    }
+
+    Some(state)
 }
 
 fn response_to_subsystem(res: Response) -> Result<Option<Subsystem>, StateChangeError> {
