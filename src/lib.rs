@@ -11,7 +11,8 @@
 
 //! User-friendly async client for [MPD](https://musicpd.org).
 
-pub mod client;
+mod client;
+
 pub mod errors;
 pub mod filter;
 pub mod state_changes;
