@@ -390,3 +390,115 @@ fn response_to_subsystem(res: Response) -> Result<Option<Subsystem>, StateChange
         }
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::Duration;
+    use tokio_test::{assert_ok, io::Builder as MockBuilder};
+
+    static GREETING: &[u8] = b"OK MPD 0.21.11\n";
+
+    #[tokio::test]
+    async fn single_state_change() {
+        let io = MockBuilder::new()
+            .read(GREETING)
+            .write(b"idle\n")
+            .read(b"changed: player\nOK\n")
+            .write(b"idle\n")
+            .build();
+
+        let (_client, mut state_changes) = Client::connect(io).await.expect("connect failed");
+
+        assert_eq!(
+            assert_ok!(state_changes.next().await.expect("no state change")),
+            Subsystem::Player
+        );
+    }
+
+    #[tokio::test]
+    async fn command() {
+        let io = MockBuilder::new()
+            .read(GREETING)
+            .write(b"idle\n")
+            .write(b"noidle\n")
+            .read(b"changed: playlist\nOK\n")
+            .write(b"hello\n")
+            .read(b"foo: bar\nOK\n")
+            .write(b"idle\n")
+            .build();
+
+        let (client, mut state_changes) = Client::connect(io).await.expect("connect failed");
+
+        let response = client
+            .command(Command::new("hello"))
+            .await
+            .expect("command failed");
+
+        assert_eq!(response.find("foo"), Some("bar"));
+        assert_eq!(
+            assert_ok!(state_changes.next().await.expect("no state change")),
+            Subsystem::Queue
+        );
+        assert!(state_changes.next().await.is_none());
+    }
+
+    #[tokio::test]
+    async fn incomplete_response() {
+        let io = MockBuilder::new()
+            .read(GREETING)
+            .write(b"idle\n")
+            .write(b"noidle\n")
+            .read(b"OK\n")
+            .write(b"hello\n")
+            .read(b"foo: bar\n")
+            .wait(Duration::from_secs(2))
+            .read(b"baz: qux\nOK\n")
+            .write(b"idle\n")
+            .build();
+
+        let (client, _state_changes) = Client::connect(io).await.expect("connect failed");
+
+        let response = client
+            .command(Command::new("hello"))
+            .await
+            .expect("command failed");
+
+        assert_eq!(response.find("foo"), Some("bar"));
+    }
+
+    #[tokio::test]
+    async fn command_list() {
+        let io = MockBuilder::new()
+            .read(GREETING)
+            .write(b"idle\n")
+            .write(b"noidle\n")
+            .read(b"OK\n")
+            .write(b"command_list_ok_begin\nfoo\nbar\ncommand_list_end\n")
+            .read(b"foo: asdf\nlist_OK\n")
+            .read(b"baz: qux\nlist_OK\nOK\n")
+            .write(b"idle\n")
+            .build();
+
+        let (client, _state_changes) = Client::connect(io).await.expect("connect failed");
+
+        let mut commands = CommandList::new(Command::new("foo"));
+        commands.add(Command::new("bar"));
+
+        let responses = client.command_list(commands).await.expect("command failed");
+
+        assert_eq!(responses.len(), 2);
+        assert_eq!(responses[0].find("foo"), Some("asdf"));
+    }
+
+    #[tokio::test]
+    async fn dropping_client() {
+        let io = MockBuilder::new().read(GREETING).write(b"idle\n").build();
+
+        let (client, mut state_changes) = Client::connect(io).await.expect("connect failed");
+
+        drop(client);
+
+        assert!(state_changes.next().await.is_none());
+    }
+}

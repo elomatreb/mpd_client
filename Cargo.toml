@@ -21,3 +21,4 @@ tracing-futures = "0.2.3"
 
 [dev-dependencies]
 tracing-subscriber = "0.2.4"
+tokio-test = "0.2.0"
