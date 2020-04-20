@@ -60,7 +60,8 @@ pub enum Subsystem {
     Output,
     Partition,
     Player,
-    Playlist,
+    /// Called `playlist` in the protocol.
+    Queue,
     Sticker,
     StoredPlaylist,
     Subscription,
@@ -81,7 +82,7 @@ impl Subsystem {
             "output" => Subsystem::Output,
             "partition" => Subsystem::Partition,
             "player" => Subsystem::Player,
-            "playlist" => Subsystem::Playlist,
+            "playlist" => Subsystem::Queue,
             "sticker" => Subsystem::Sticker,
             "stored_playlist" => Subsystem::StoredPlaylist,
             "subscription" => Subsystem::Subscription,
