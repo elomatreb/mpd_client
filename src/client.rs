@@ -211,33 +211,45 @@ impl Client {
     }
 }
 
+struct State<C> {
+    loop_state: LoopState,
+    connection: Framed<C, MpdCodec>,
+    commands: Receiver<(CommandList, CommandResponder)>,
+    state_changes: UnboundedSender<Result<Subsystem, StateChangeError>>,
+}
+
 #[derive(Debug)]
-enum State {
+enum LoopState {
     Idling,
     WaitingForCommandReply(CommandResponder),
 }
 
 async fn run_loop<C>(
-    mut connection: Framed<C, MpdCodec>,
-    mut commands: Receiver<(CommandList, CommandResponder)>,
+    connection: Framed<C, MpdCodec>,
+    commands: Receiver<(CommandList, CommandResponder)>,
     state_changes: UnboundedSender<Result<Subsystem, StateChangeError>>,
 ) where
     C: AsyncRead + AsyncWrite + Unpin,
 {
     trace!("entering run loop");
 
-    let mut state = State::Idling;
+    let mut state = State {
+        loop_state: LoopState::Idling,
+        connection,
+        commands,
+        state_changes,
+    };
 
     loop {
-        trace!(?state, "loop iteration");
+        trace!(state = ?state.loop_state, "loop iteration");
 
-        match state {
-            State::Idling => {
+        match state.loop_state {
+            LoopState::Idling => {
                 // We are idling (the last command sent to the server was an IDLE).
 
                 // Wait for either a command to send or a message from the server, which would be a
                 // state change notification.
-                let event = select(connection.next(), commands.next()).await;
+                let event = select(state.connection.next(), state.commands.next()).await;
 
                 match event {
                     Either::Left((response, _)) => {
@@ -248,18 +260,18 @@ async fn run_loop<C>(
                             Some(Ok(res)) => {
                                 if let Some(state_change) = response_to_subsystem(res).transpose() {
                                     trace!(?state_change);
-                                    let _ = state_changes.send(state_change);
+                                    let _ = state.state_changes.send(state_change);
                                 }
 
-                                if let Err(e) = connection.send(Command::new(IDLE)).await {
+                                if let Err(e) = state.connection.send(Command::new(IDLE)).await {
                                     error!(error = ?e, "failed to start idling after state change");
-                                    let _ = state_changes.send(Err(e.into()));
+                                    let _ = state.state_changes.send(Err(e.into()));
                                     break;
                                 }
                             }
                             Some(Err(e)) => {
                                 error!(error = ?e, "state change error");
-                                let _ = state_changes.send(Err(e.into()));
+                                let _ = state.state_changes.send(Err(e.into()));
                                 break;
                             }
                             None => break, // The connection was closed
@@ -277,19 +289,19 @@ async fn run_loop<C>(
                         trace!(?command, "command received");
 
                         // Cancel currently ongoing idle
-                        if let Err(e) = connection.send(Command::new(CANCEL_IDLE)).await {
+                        if let Err(e) = state.connection.send(Command::new(CANCEL_IDLE)).await {
                             error!(error = ?e, "failed to cancel idle prior to sending command");
                             let _ = responder.send(Err(e.into()));
                             break;
                         }
 
                         // Response to CANCEL_IDLE above
-                        match connection.next().await {
+                        match state.connection.next().await {
                             None => break,
                             Some(Ok(res)) => {
                                 if let Some(state_change) = response_to_subsystem(res).transpose() {
                                     trace!(?state_change);
-                                    let _ = state_changes.send(state_change);
+                                    let _ = state.state_changes.send(state_change);
                                 }
                             }
                             Some(Err(e)) => {
@@ -301,8 +313,10 @@ async fn run_loop<C>(
 
                         // Actually send the command. This sets the state for the next loop
                         // iteration.
-                        match connection.send(command).await {
-                            Ok(_) => state = State::WaitingForCommandReply(responder),
+                        match state.connection.send(command).await {
+                            Ok(_) => {
+                                state.loop_state = LoopState::WaitingForCommandReply(responder)
+                            }
                             Err(e) => {
                                 error!(error = ?e, "failed to send command");
                                 let _ = responder.send(Err(e.into()));
@@ -314,10 +328,10 @@ async fn run_loop<C>(
                     }
                 }
             }
-            State::WaitingForCommandReply(responder) => {
+            LoopState::WaitingForCommandReply(responder) => {
                 // We're waiting for the response to the command associated with `responder`.
 
-                let response = match connection.next().await {
+                let response = match state.connection.next().await {
                     None => break,
                     Some(res) => res,
                 };
@@ -327,11 +341,13 @@ async fn run_loop<C>(
                 let _ = responder.send(response.map_err(Into::into));
 
                 // See if we can immediately send the next command
-                match commands.try_recv() {
+                match state.commands.try_recv() {
                     Ok((command, responder)) => {
                         trace!(?command, "next command immediately available");
-                        match connection.send(command).await {
-                            Ok(_) => state = State::WaitingForCommandReply(responder),
+                        match state.connection.send(command).await {
+                            Ok(_) => {
+                                state.loop_state = LoopState::WaitingForCommandReply(responder)
+                            }
                             Err(e) => {
                                 error!(error = ?e, "failed to send command");
                                 let _ = responder.send(Err(e.into()));
@@ -343,11 +359,11 @@ async fn run_loop<C>(
                         trace!("no next command immediately available, idling");
 
                         // Start idling again
-                        state = State::Idling;
+                        state.loop_state = LoopState::Idling;
                         let idle = Command::new(IDLE);
-                        if let Err(e) = connection.send(idle).await {
+                        if let Err(e) = state.connection.send(idle).await {
                             error!(error = ?e, "failed to start idling after receiving command response");
-                            let _ = state_changes.send(Err(e.into()));
+                            let _ = state.state_changes.send(Err(e.into()));
                             break;
                         }
                     }
