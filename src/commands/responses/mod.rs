@@ -216,3 +216,10 @@ impl Response for Option<Song> {
         Ok(vec.pop())
     }
 }
+
+impl sealed::Sealed for Vec<Song> {}
+impl Response for Vec<Song> {
+    fn convert(raw: Frame) -> Result<Self, TypedResponseError> {
+        Ok(Song::parse_frame(raw, None)?)
+    }
+}
