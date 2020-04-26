@@ -207,3 +207,37 @@ impl Command for Seek {
         RawCommand::new("seekcur").argument(time)
     }
 }
+
+/// `play` and `playid` commands.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Play(Option<Song>);
+
+impl Play {
+    /// Play the current song (when paused or stopped).
+    pub fn current() -> Self {
+        Self(None)
+    }
+
+    /// Play the given song.
+    pub fn song(song: Song) -> Self {
+        Self(Some(song))
+    }
+}
+
+impl Command for Play {
+    type Response = res::Empty;
+
+    fn to_command(self) -> RawCommand {
+        match self.0 {
+            None => RawCommand::new("play"),
+            Some(song) => {
+                let (command, arg) = match song {
+                    Song::Position(pos) => ("play", pos.to_string()),
+                    Song::Id(id) => ("playid", id.to_string()),
+                };
+
+                RawCommand::new(command).argument(arg)
+            }
+        }
+    }
+}
