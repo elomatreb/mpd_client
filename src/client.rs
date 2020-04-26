@@ -20,7 +20,6 @@ use tracing_futures::Instrument;
 
 use std::fmt::Debug;
 use std::path::Path;
-use std::sync::Arc;
 
 use crate::commands::Command as TypedCommand;
 use crate::errors::{CommandError, StateChangeError};
@@ -52,7 +51,7 @@ type CommandResponder = oneshot::Sender<Result<Response, CommandError>>;
 #[derive(Clone, Debug)]
 pub struct Client {
     commands_sender: Sender<(CommandList, CommandResponder)>,
-    span: Arc<Span>,
+    span: Span,
 }
 
 impl Client {
@@ -216,7 +215,7 @@ impl Client {
 
         let client = Self {
             commands_sender,
-            span: Arc::new(span),
+            span,
         };
 
         let state_changes = StateChanges { rx: state_changes };
