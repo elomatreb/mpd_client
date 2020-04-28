@@ -8,6 +8,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use super::{ErrorKind, SongIdentifier, TypedResponseError};
+use crate::commands::{SongId, SongPosition};
 
 /// A single song, as returned by the playlist or current song commands.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -107,11 +108,11 @@ where
                 // Ignored keys for now
                 "Last-Modified" | "Time" | "Range" | "Format" => (),
                 "Pos" => match value.parse() {
-                    Ok(v) => song_pos = Some(v),
+                    Ok(v) => song_pos = Some(SongPosition(v)),
                     Err(e) => return Some(Err(parse_field_error("Pos", e))),
                 },
                 "Id" => match value.parse() {
-                    Ok(v) => song_id = Some(v),
+                    Ok(v) => song_id = Some(SongId(v)),
                     Err(e) => return Some(Err(parse_field_error("Id", e))),
                 },
                 _ => {

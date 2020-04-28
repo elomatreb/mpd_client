@@ -14,6 +14,28 @@ pub mod responses;
 pub use definitions::*;
 use responses::Response;
 
+/// Stable identifier of a song in the queue.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct SongId(pub u64);
+
+impl From<u64> for SongId {
+    fn from(id: u64) -> Self {
+        Self(id)
+    }
+}
+
+/// Position of a song in the queue.
+///
+/// This will change when the queue is modified.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct SongPosition(pub usize);
+
+impl From<usize> for SongPosition {
+    fn from(pos: usize) -> Self {
+        Self(pos)
+    }
+}
+
 /// Types which can be used as pre-built properly typed commands.
 pub trait Command {
     /// The response this command expects.

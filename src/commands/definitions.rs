@@ -7,9 +7,10 @@ use std::cmp::min;
 use std::time::Duration;
 
 use super::{
-    responses::{self as res, SingleMode, SongId},
+    responses::{self as res, SingleMode},
     Command,
 };
+use crate::commands::{SongId, SongPosition};
 
 macro_rules! argless_command {
     // Utility branch to generate struct with doc expression
@@ -155,7 +156,19 @@ pub enum Song {
     /// By ID
     Id(SongId),
     /// By position in the queue.
-    Position(usize),
+    Position(SongPosition),
+}
+
+impl From<SongId> for Song {
+    fn from(id: SongId) -> Self {
+        Self::Id(id)
+    }
+}
+
+impl From<SongPosition> for Song {
+    fn from(pos: SongPosition) -> Self {
+        Self::Position(pos)
+    }
 }
 
 /// `seek` and `seekid` commands.
@@ -167,8 +180,8 @@ impl Command for SeekTo {
 
     fn to_command(self) -> RawCommand {
         let (command, song_arg) = match self.0 {
-            Song::Id(id) => ("seekid", id.to_string()),
-            Song::Position(pos) => ("seek", pos.to_string()),
+            Song::Id(id) => ("seekid", id.0.to_string()),
+            Song::Position(pos) => ("seek", pos.0.to_string()),
         };
 
         RawCommand::new(command)
@@ -219,8 +232,11 @@ impl Play {
     }
 
     /// Play the given song.
-    pub fn song(song: Song) -> Self {
-        Self(Some(song))
+    pub fn song<S>(song: S) -> Self
+    where
+        S: Into<Song>,
+    {
+        Self(Some(song.into()))
     }
 }
 
@@ -232,8 +248,8 @@ impl Command for Play {
             None => RawCommand::new("play"),
             Some(song) => {
                 let (command, arg) = match song {
-                    Song::Position(pos) => ("play", pos.to_string()),
-                    Song::Id(id) => ("playid", id.to_string()),
+                    Song::Position(pos) => ("play", pos.0.to_string()),
+                    Song::Id(id) => ("playid", id.0.to_string()),
                 };
 
                 RawCommand::new(command).argument(arg)

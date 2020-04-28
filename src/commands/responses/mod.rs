@@ -12,8 +12,9 @@ use std::fmt;
 use std::num::{ParseFloatError, ParseIntError};
 use std::time::Duration;
 
-pub use song::{Song, Tag};
+use crate::commands::{SongId, SongPosition};
 use crate::sealed;
+pub use song::{Song, Tag};
 
 /// "Marker" trait for responses to commands.
 ///
@@ -73,12 +74,6 @@ impl Error for TypedResponseError {
     }
 }
 
-/// Type of song IDs.
-pub type SongId = u64;
-
-/// Type of Job IDs.
-pub type JobId = u64;
-
 /// An empty response, which only indicates success.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Empty;
@@ -95,7 +90,7 @@ impl Response for Empty {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[allow(missing_docs)]
 pub struct SongIdentifier {
-    pub pos: usize,
+    pub pos: SongPosition,
     pub id: SongId,
 }
 
@@ -135,7 +130,7 @@ pub struct Status {
     pub duration: Option<Duration>,
     pub bitrate: Option<u64>,
     pub crossfade: Duration,
-    pub update_job: Option<JobId>,
+    pub update_job: Option<u64>,
     pub error: Option<String>,
 }
 
