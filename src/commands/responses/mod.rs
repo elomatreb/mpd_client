@@ -75,14 +75,13 @@ impl Error for TypedResponseError {
 }
 
 /// An empty response, which only indicates success.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Empty;
+pub type Empty = ();
 
 impl sealed::Sealed for Empty {}
 impl Response for Empty {
     fn convert(_: Frame) -> Result<Self, TypedResponseError> {
         // silently ignore any actually existing fields
-        Ok(Self)
+        Ok(())
     }
 }
 
