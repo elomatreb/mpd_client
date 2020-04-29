@@ -4,6 +4,7 @@ use mpd_protocol::Command as RawCommand;
 
 use std::borrow::Cow;
 use std::cmp::min;
+use std::ops::{Bound, RangeBounds};
 use std::time::Duration;
 
 use super::{
@@ -299,5 +300,66 @@ impl Command for Add {
         }
 
         command
+    }
+}
+
+/// `delete` and `deleteid` commands.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Delete(DeleteMode);
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum DeleteMode {
+    Id(SongId),
+    Range(usize, Option<usize>),
+}
+
+impl Delete {
+    /// Remove the given ID from the queue.
+    pub fn id(id: SongId) -> Self {
+        Self(DeleteMode::Id(id))
+    }
+
+    /// Remove the song at the given position from the queue.
+    pub fn position(pos: SongPosition) -> Self {
+        Self(DeleteMode::Range(pos.0, Some(pos.0 + 1)))
+    }
+
+    /// Remove the given range from the queue.
+    ///
+    /// The range must have at least a lower bound.
+    pub fn range<R>(range: R) -> Self
+    where
+        R: RangeBounds<SongPosition>,
+    {
+        let lower = match range.start_bound() {
+            Bound::Included(pos) => pos.0,
+            _ => panic!("range must have a lower bound"),
+        };
+
+        let upper = match range.end_bound() {
+            Bound::Excluded(pos) => Some(pos.0),
+            Bound::Included(pos) => Some(pos.0 + 1),
+            Bound::Unbounded => None,
+        };
+
+        Self(DeleteMode::Range(lower, upper))
+    }
+}
+
+impl Command for Delete {
+    type Response = res::Empty;
+
+    fn to_command(self) -> RawCommand {
+        match self.0 {
+            DeleteMode::Id(id) => RawCommand::new("deleteid").argument(id.0.to_string()),
+            DeleteMode::Range(from, up_to) => {
+                let range = match up_to {
+                    Some(end) => format!("{}:{}", from, end),
+                    None => format!("{}:", from),
+                };
+
+                RawCommand::new("delete").argument(range)
+            }
+        }
     }
 }
