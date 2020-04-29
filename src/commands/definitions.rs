@@ -257,3 +257,47 @@ impl Command for Play {
         }
     }
 }
+
+/// `addid` command.
+///
+/// Add a song to the queue, returning its ID. If [`at`] is not used, the song will be appended to
+/// the queue.
+///
+/// [`at`]: #method.at
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Add {
+    uri: String,
+    position: Option<usize>,
+}
+
+impl Add {
+    /// Add the song with the given URI.
+    ///
+    /// Only individual files are supported.
+    pub fn uri(uri: String) -> Self {
+        Self {
+            uri,
+            position: None,
+        }
+    }
+
+    /// Add the URI at the given position in the queue.
+    pub fn at(mut self, position: usize) -> Self {
+        self.position = Some(position);
+        self
+    }
+}
+
+impl Command for Add {
+    type Response = SongId;
+
+    fn to_command(self) -> RawCommand {
+        let mut command = RawCommand::new("addid").argument(self.uri);
+
+        if let Some(pos) = self.position {
+            command.add_argument(pos.to_string()).unwrap();
+        }
+
+        command
+    }
+}

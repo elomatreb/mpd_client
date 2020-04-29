@@ -218,3 +218,10 @@ impl Response for Vec<Song> {
         Ok(Song::parse_frame(raw, None)?)
     }
 }
+
+impl sealed::Sealed for SongId {}
+impl Response for SongId {
+    fn convert(mut raw: Frame) -> Result<Self, TypedResponseError> {
+        Ok(SongId(field!(raw, "Id" integer)))
+    }
+}
