@@ -305,10 +305,10 @@ impl Command for Add {
 
 /// `delete` and `deleteid` commands.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Delete(DeleteMode);
+pub struct Delete(Target);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum DeleteMode {
+enum Target {
     Id(SongId),
     Range(usize, Option<usize>),
 }
@@ -316,12 +316,12 @@ enum DeleteMode {
 impl Delete {
     /// Remove the given ID from the queue.
     pub fn id(id: SongId) -> Self {
-        Self(DeleteMode::Id(id))
+        Self(Target::Id(id))
     }
 
     /// Remove the song at the given position from the queue.
     pub fn position(pos: SongPosition) -> Self {
-        Self(DeleteMode::Range(pos.0, Some(pos.0 + 1)))
+        Self(Target::Range(pos.0, Some(pos.0 + 1)))
     }
 
     /// Remove the given range from the queue.
@@ -331,6 +331,12 @@ impl Delete {
     where
         R: RangeBounds<SongPosition>,
     {
+        Self(Target::range(range))
+    }
+}
+
+impl Target {
+    fn range<R: RangeBounds<SongPosition>>(range: R) -> Self {
         let lower = match range.start_bound() {
             Bound::Included(pos) => pos.0,
             _ => panic!("range must have a lower bound"),
@@ -342,7 +348,7 @@ impl Delete {
             Bound::Unbounded => None,
         };
 
-        Self(DeleteMode::Range(lower, upper))
+        Self::Range(lower, upper)
     }
 }
 
@@ -351,8 +357,8 @@ impl Command for Delete {
 
     fn to_command(self) -> RawCommand {
         match self.0 {
-            DeleteMode::Id(id) => RawCommand::new("deleteid").argument(id.0.to_string()),
-            DeleteMode::Range(from, up_to) => {
+            Target::Id(id) => RawCommand::new("deleteid").argument(id.0.to_string()),
+            Target::Range(from, up_to) => {
                 let range = match up_to {
                     Some(end) => format!("{}:{}", from, end),
                     None => format!("{}:", from),
@@ -360,6 +366,60 @@ impl Command for Delete {
 
                 RawCommand::new("delete").argument(range)
             }
+        }
+    }
+}
+
+/// `move` and `moveid` commands.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Move {
+    from: Target,
+    to: usize,
+}
+
+impl Move {
+    /// Move the song with the given ID to the given position.
+    pub fn id(id: SongId, to: SongPosition) -> Self {
+        Self {
+            from: Target::Id(id),
+            to: to.0,
+        }
+    }
+
+    /// Move the song at the given position to the given position.
+    pub fn position(from: SongPosition, to: SongPosition) -> Self {
+        Self {
+            from: Target::Range(from.0, Some(from.0 + 1)),
+            to: to.0,
+        }
+    }
+
+    /// Move the given range of song positions to the given position.
+    pub fn range<R>(range: R, to: SongPosition) -> Self
+    where
+        R: RangeBounds<SongPosition>,
+    {
+        Self {
+            from: Target::range(range),
+            to: to.0,
+        }
+    }
+}
+
+impl Command for Move {
+    type Response = res::Empty;
+
+    fn to_command(self) -> RawCommand {
+        match self.from {
+            Target::Id(id) => RawCommand::new("moveid")
+                .argument(id.0.to_string())
+                .argument(self.to.to_string()),
+            Target::Range(lower, upper) => RawCommand::new("move")
+                .argument(match upper {
+                    Some(upper) => format!("{}:{}", lower, upper),
+                    None => format!("{}:", lower),
+                })
+                .argument(self.to.to_string()),
         }
     }
 }
