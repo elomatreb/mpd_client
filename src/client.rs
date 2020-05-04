@@ -38,8 +38,9 @@ pub type ConnectResult = Result<(Client, StateChanges), MpdCodecError>;
 ///
 /// You can use this to send commands to the MPD server, and wait for the response.
 ///
-/// Dropping the `Client` (all clients if you clonewill close the connection. You can clone this
-/// cheaply, which will result in the connection closing after *all* of the `Client`s are dropped.
+/// Dropping the `Client` (all clients if it is cloned) will close the connection. You can clone
+/// this cheaply, which will result in the connection closing after *all* of the `Client`s are
+/// dropped.
 ///
 /// ```no_run
 /// use mpd_client::{commands::Play, Client};
