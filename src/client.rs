@@ -21,7 +21,7 @@ use tracing_futures::Instrument;
 use std::fmt::Debug;
 use std::path::Path;
 
-use crate::commands::Command as TypedCommand;
+use crate::commands;
 use crate::errors::{CommandError, StateChangeError};
 use crate::state_changes::{StateChanges, Subsystem};
 
@@ -38,13 +38,13 @@ type CommandResponder = oneshot::Sender<Result<Response, CommandError>>;
 /// cheaply, which will result in the connection closing after *all* of the `Client`s are dropped.
 ///
 /// ```no_run
-/// use mpd_client::{Command, Client};
+/// use mpd_client::{commands::Play, Client};
 ///
 /// #[tokio::main]
 /// async fn main() -> Result<(), Box<dyn std::error::Error>> {
 ///     let (client, _state_changes) = Client::connect_to("localhost:6600").await?;
 ///
-///     client.command(Command::new("play")).await?;
+///     client.command(Play::current()).await?;
 ///     Ok(())
 /// }
 /// ```
@@ -128,29 +128,40 @@ impl Client {
         Self::do_connect(connection, span!(Level::DEBUG, "client connection")).await
     }
 
+    /// Send a [command].
+    ///
+    /// This will automatically parse the response to a proper type.
+    ///
+    /// # Errors
+    ///
+    /// This returns errors in the same conditions as [`raw_command`], and additionally if the
+    /// response fails to convert to the expected type.
+    ///
+    /// [command]: commands/index.html
+    /// [`raw_command`]: #method.raw_command
+    pub async fn command<C>(&self, cmd: C) -> Result<C::Response, CommandError>
+    where
+        C: commands::Command,
+    {
+        use crate::commands::responses::Response;
+
+        let command = cmd.to_command();
+        let frame = self.raw_command(command).await?;
+
+        Ok(Response::convert(frame).unwrap())
+    }
+
     /// Send the given command, and return the response to it.
     ///
     /// # Errors
     ///
     /// This will return an error if the connection to MPD is closed (cleanly) or a protocol error
     /// occurs (including IO errors), or if the command results in an MPD error.
-    pub async fn command(&self, command: Command) -> Result<Frame, CommandError> {
+    pub async fn raw_command(&self, command: Command) -> Result<Frame, CommandError> {
         self.do_send(CommandList::new(command))
             .await?
             .single_frame()
             .map_err(Into::into)
-    }
-
-    /// Send typed commnad.
-    pub async fn command_typed<C: TypedCommand>(
-        &self,
-        command: C,
-    ) -> Result<C::Response, CommandError> {
-        use crate::commands::responses::Response;
-        let command = command.to_command();
-        let frame = self.command(command).await?;
-
-        Ok(Response::convert(frame).unwrap())
     }
 
     /// Send the given command list, and return the responses to the contained commands.
@@ -443,7 +454,7 @@ mod tests {
         let (client, mut state_changes) = Client::connect(io).await.expect("connect failed");
 
         let response = client
-            .command(Command::new("hello"))
+            .raw_command(Command::new("hello"))
             .await
             .expect("command failed");
 
@@ -472,7 +483,7 @@ mod tests {
         let (client, _state_changes) = Client::connect(io).await.expect("connect failed");
 
         let response = client
-            .command(Command::new("hello"))
+            .raw_command(Command::new("hello"))
             .await
             .expect("command failed");
 
