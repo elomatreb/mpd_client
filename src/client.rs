@@ -29,6 +29,7 @@ static IDLE: &str = "idle";
 static CANCEL_IDLE: &str = "noidle";
 
 type CommandResponder = oneshot::Sender<Result<Response, CommandError>>;
+type StateChangesSender = UnboundedSender<Result<Subsystem, StateChangeError>>;
 
 /// Client for MPD.
 ///
@@ -238,7 +239,7 @@ struct State<C> {
     loop_state: LoopState,
     connection: Framed<C, MpdCodec>,
     commands: Receiver<(CommandList, CommandResponder)>,
-    state_changes: UnboundedSender<Result<Subsystem, StateChangeError>>,
+    state_changes: StateChangesSender,
 }
 
 #[derive(Debug)]
@@ -250,7 +251,7 @@ enum LoopState {
 async fn run_loop<C>(
     connection: Framed<C, MpdCodec>,
     commands: Receiver<(CommandList, CommandResponder)>,
-    state_changes: UnboundedSender<Result<Subsystem, StateChangeError>>,
+    state_changes: StateChangesSender,
 ) where
     C: AsyncRead + AsyncWrite + Unpin,
 {
