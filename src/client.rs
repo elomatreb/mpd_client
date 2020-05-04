@@ -31,6 +31,9 @@ static CANCEL_IDLE: &str = "noidle";
 type CommandResponder = oneshot::Sender<Result<Response, CommandError>>;
 type StateChangesSender = UnboundedSender<Result<Subsystem, StateChangeError>>;
 
+/// Result returned by a connection attempt.
+pub type ConnectResult = Result<(Client, StateChanges), MpdCodecError>;
+
 /// Client for MPD.
 ///
 /// You can use this to send commands to the MPD server, and wait for the response.
@@ -58,8 +61,6 @@ pub struct Client {
 impl Client {
     /// Connect to an MPD server at the given TCP address.
     ///
-    /// See [`connect`] for details of the result.
-    ///
     /// # Panics
     ///
     /// This panics for the same reasons as [`connect`].
@@ -70,9 +71,7 @@ impl Client {
     /// TCP address fails for any reason.
     ///
     /// [`connect`]: #method.connect
-    pub async fn connect_to<A: ToSocketAddrs + Debug>(
-        address: A,
-    ) -> Result<(Client, StateChanges), MpdCodecError> {
+    pub async fn connect_to<A: ToSocketAddrs + Debug>(address: A) -> ConnectResult {
         let span = span!(Level::DEBUG, "client connection", tcp_addr = ?address);
         let connection = TcpStream::connect(address).await?;
 
@@ -80,8 +79,6 @@ impl Client {
     }
 
     /// Connect to an MPD server using the Unix socket at the given path.
-    ///
-    /// See [`connect`] for details of the result.
     ///
     /// # Panics
     ///
@@ -93,9 +90,7 @@ impl Client {
     /// socket at the given address fails for any reason.
     ///
     /// [`connect`]: #method.connect
-    pub async fn connect_unix<P: AsRef<Path>>(
-        path: P,
-    ) -> Result<(Client, StateChanges), MpdCodecError> {
+    pub async fn connect_unix<P: AsRef<Path>>(path: P) -> ConnectResult {
         let span = span!(Level::DEBUG, "client connection", unix_addr = ?path.as_ref());
         let connection = UnixStream::connect(path).await?;
 
@@ -104,11 +99,8 @@ impl Client {
 
     /// Connect to the MPD server using the given connection.
     ///
-    /// Returns a `Client` you can use to issue commands, and a stream of state change events as
-    /// returned by MPD.
-    ///
-    /// Since this is generic over the connection type, you can use it with both TCP and Unix
-    /// socket connections.
+    /// Since this method is generic over the connection type it can be used to connect to either a
+    /// TCP or Unix socket dynamically or e.g. use a proxy.
     ///
     /// See also [`connect_to`] and [`connect_unix`] for the common connection case.
     ///
@@ -122,7 +114,7 @@ impl Client {
     ///
     /// [`connect_to`]: #method.connect_to
     /// [`connect_unix`]: #method.connect_unix
-    pub async fn connect<C>(connection: C) -> Result<(Client, StateChanges), MpdCodecError>
+    pub async fn connect<C>(connection: C) -> ConnectResult
     where
         C: AsyncRead + AsyncWrite + Send + Unpin + 'static,
     {

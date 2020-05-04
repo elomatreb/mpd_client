@@ -18,7 +18,7 @@ pub mod commands;
 pub mod filter;
 pub mod state_changes;
 
-pub use client::Client;
+pub use client::{Client, ConnectResult};
 pub use errors::CommandError;
 pub use filter::Filter;
 pub use state_changes::Subsystem;
