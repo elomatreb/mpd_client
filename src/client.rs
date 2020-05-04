@@ -149,7 +149,7 @@ impl Client {
         let command = cmd.to_command();
         let frame = self.raw_command(command).await?;
 
-        Ok(Response::convert(frame).unwrap())
+        Ok(Response::convert(frame)?)
     }
 
     /// Send the given command, and return the response to it.

@@ -9,6 +9,8 @@ use tokio::sync::{mpsc::error::SendError, oneshot::error::RecvError};
 use std::error::Error;
 use std::fmt;
 
+use crate::commands::responses::TypedResponseError;
+
 /// Errors which can occur when issuing a command.
 #[derive(Debug)]
 pub enum CommandError {
@@ -23,6 +25,8 @@ pub enum CommandError {
         /// Possible sucessful frames in the same response, empty if not in a command list
         succesful_frames: Vec<Frame>,
     },
+    /// A [typed command](commands/index.html) failed to parse its response.
+    InvalidTypedResponse(TypedResponseError),
 }
 
 impl fmt::Display for CommandError {
@@ -30,6 +34,9 @@ impl fmt::Display for CommandError {
         match self {
             CommandError::ConnectionClosed => write!(f, "The connection is closed"),
             CommandError::InvalidMessage(_) => write!(f, "Invalid message"),
+            CommandError::InvalidTypedResponse(_) => {
+                write!(f, "Response was invalid for typed command")
+            }
             CommandError::ErrorResponse {
                 error,
                 succesful_frames,
@@ -48,6 +55,7 @@ impl Error for CommandError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
             CommandError::InvalidMessage(e) => Some(e),
+            CommandError::InvalidTypedResponse(e) => Some(e),
             _ => None,
         }
     }
@@ -81,6 +89,13 @@ impl From<ErrorResponse> for CommandError {
             error,
             succesful_frames: Vec::new(),
         }
+    }
+}
+
+#[doc(hidden)]
+impl From<TypedResponseError> for CommandError {
+    fn from(e: TypedResponseError) -> Self {
+        CommandError::InvalidTypedResponse(e)
     }
 }
 
