@@ -25,8 +25,8 @@ pub use state_changes::Subsystem;
 
 pub use mpd_protocol::{
     command_list,
-    response::{Error, Frame},
-    Command, CommandList, MpdCodecError,
+    response::{Error as ErrorResponse, Frame},
+    Command as RawCommand, CommandList, MpdCodecError,
 };
 
 mod sealed {

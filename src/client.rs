@@ -5,7 +5,7 @@ use futures::{
     sink::SinkExt,
     stream::StreamExt,
 };
-use mpd_protocol::{response::Frame, Command, CommandList, MpdCodec, MpdCodecError, Response};
+use mpd_protocol::{MpdCodec, Response};
 use tokio::{
     io::{AsyncRead, AsyncWrite},
     net::{TcpStream, ToSocketAddrs},
@@ -24,12 +24,9 @@ use tokio::net::UnixStream;
 use std::fmt::Debug;
 use std::path::Path;
 
-use crate::commands;
 use crate::errors::{CommandError, StateChangeError};
 use crate::state_changes::{StateChanges, Subsystem};
-
-static IDLE: &str = "idle";
-static CANCEL_IDLE: &str = "noidle";
+use crate::{commands, CommandList, Frame, MpdCodecError, RawCommand};
 
 type CommandResponder = oneshot::Sender<Result<Response, CommandError>>;
 type StateChangesSender = UnboundedSender<Result<Subsystem, StateChangeError>>;
@@ -155,7 +152,7 @@ impl Client {
     ///
     /// This will return an error if the connection to MPD is closed (cleanly) or a protocol error
     /// occurs (including IO errors), or if the command results in an MPD error.
-    pub async fn raw_command(&self, command: Command) -> Result<Frame, CommandError> {
+    pub async fn raw_command(&self, command: RawCommand) -> Result<Frame, CommandError> {
         self.do_send(CommandList::new(command))
             .await?
             .single_frame()
@@ -211,7 +208,7 @@ impl Client {
         trace!("sending initial idle command");
         let mut connection = MpdCodec::new().framed(connection);
 
-        if let Err(e) = connection.send(Command::new(IDLE)).await {
+        if let Err(e) = connection.send(idle()).await {
             error!(error = ?e, "failed to send initial idle command");
             return Err(e);
         }
@@ -243,6 +240,14 @@ struct State<C> {
 enum LoopState {
     Idling,
     WaitingForCommandReply(CommandResponder),
+}
+
+fn idle() -> RawCommand {
+    RawCommand::new("idle")
+}
+
+fn cancel_idle() -> RawCommand {
+    RawCommand::new("noidle")
 }
 
 async fn run_loop<C>(
@@ -297,7 +302,7 @@ where
                                 let _ = state.state_changes.send(state_change);
                             }
 
-                            if let Err(e) = state.connection.send(Command::new(IDLE)).await {
+                            if let Err(e) = state.connection.send(idle()).await {
                                 error!(error = ?e, "failed to start idling after state change");
                                 let _ = state.state_changes.send(Err(e.into()));
                                 return None;
@@ -319,7 +324,7 @@ where
                     trace!(?command, "command received");
 
                     // Cancel currently ongoing idle
-                    if let Err(e) = state.connection.send(Command::new(CANCEL_IDLE)).await {
+                    if let Err(e) = state.connection.send(cancel_idle()).await {
                         error!(error = ?e, "failed to cancel idle prior to sending command");
                         let _ = responder.send(Err(e.into()));
                         return None;
@@ -382,8 +387,7 @@ where
 
                     // Start idling again
                     state.loop_state = LoopState::Idling;
-                    let idle = Command::new(IDLE);
-                    if let Err(e) = state.connection.send(idle).await {
+                    if let Err(e) = state.connection.send(idle()).await {
                         error!(error = ?e, "failed to start idling after receiving command response");
                         let _ = state.state_changes.send(Err(e.into()));
                         return None;
@@ -452,7 +456,7 @@ mod tests {
         let (client, mut state_changes) = Client::connect(io).await.expect("connect failed");
 
         let response = client
-            .raw_command(Command::new("hello"))
+            .raw_command(RawCommand::new("hello"))
             .await
             .expect("command failed");
 
@@ -481,7 +485,7 @@ mod tests {
         let (client, _state_changes) = Client::connect(io).await.expect("connect failed");
 
         let response = client
-            .raw_command(Command::new("hello"))
+            .raw_command(RawCommand::new("hello"))
             .await
             .expect("command failed");
 
@@ -503,8 +507,8 @@ mod tests {
 
         let (client, _state_changes) = Client::connect(io).await.expect("connect failed");
 
-        let mut commands = CommandList::new(Command::new("foo"));
-        commands.add(Command::new("bar"));
+        let mut commands = CommandList::new(RawCommand::new("foo"));
+        commands.add(RawCommand::new("bar"));
 
         let responses = client.command_list(commands).await.expect("command failed");
 
