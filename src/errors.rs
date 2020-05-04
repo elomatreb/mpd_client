@@ -1,5 +1,3 @@
-//! Errors.
-
 use mpd_protocol::{
     response::{Error as ErrorResponse, Frame},
     MpdCodecError,

@@ -12,13 +12,14 @@
 //! User-friendly async client for [MPD](https://musicpd.org).
 
 mod client;
+mod errors;
 
 pub mod commands;
-pub mod errors;
 pub mod filter;
 pub mod state_changes;
 
 pub use client::Client;
+pub use errors::CommandError;
 pub use filter::Filter;
 pub use state_changes::Subsystem;
 

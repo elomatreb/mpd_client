@@ -6,7 +6,7 @@ use tokio::sync::mpsc::UnboundedReceiver;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
-use crate::errors::StateChangeError;
+pub use crate::errors::StateChangeError;
 
 /// Stream of state change events.
 ///
