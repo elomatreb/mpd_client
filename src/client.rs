@@ -8,7 +8,7 @@ use futures::{
 use mpd_protocol::{response::Frame, Command, CommandList, MpdCodec, MpdCodecError, Response};
 use tokio::{
     io::{AsyncRead, AsyncWrite},
-    net::{TcpStream, ToSocketAddrs, UnixStream},
+    net::{TcpStream, ToSocketAddrs},
     sync::{
         mpsc::{self, error::TryRecvError, Receiver, Sender, UnboundedSender},
         oneshot,
@@ -17,6 +17,9 @@ use tokio::{
 use tokio_util::codec::{Decoder, Framed};
 use tracing::{debug, error, span, trace, warn, Level, Span};
 use tracing_futures::Instrument;
+
+#[cfg(unix)]
+use tokio::net::UnixStream;
 
 use std::fmt::Debug;
 use std::path::Path;
@@ -91,6 +94,7 @@ impl Client {
     /// socket at the given address fails for any reason.
     ///
     /// [`connect`]: #method.connect
+    #[cfg(unix)]
     pub async fn connect_unix<P: AsRef<Path>>(path: P) -> ConnectResult {
         let span = span!(Level::DEBUG, "client connection", unix_addr = ?path.as_ref());
         let connection = UnixStream::connect(path).await?;
