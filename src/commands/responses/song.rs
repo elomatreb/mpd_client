@@ -7,8 +7,48 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 
-use super::{ErrorKind, SongIdentifier, TypedResponseError};
+use super::{ErrorKind, TypedResponseError};
 use crate::commands::{SongId, SongPosition};
+
+/// A [`Song`] in the current queue.
+///
+/// [`Song`]: struct.Song.html
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SongInQueue {
+    /// Position in queue.
+    pub position: SongPosition,
+    /// ID in queue.
+    pub id: SongId,
+    /// The song.
+    pub song: Song,
+}
+
+impl SongInQueue {
+    pub(super) fn parse_frame(
+        frame: Frame,
+        max_count: Option<usize>,
+    ) -> Result<Vec<Self>, TypedResponseError> {
+        let max_count = max_count.unwrap_or(usize::max_value());
+        assert!(max_count > 0);
+
+        let mut fields = frame.into_iter().peekable();
+
+        SongIter {
+            fields: &mut fields,
+        }
+        .take(max_count)
+        .map(|res| {
+            res.and_then(|(song, identifier)| match identifier {
+                Some((position, id)) => Ok(SongInQueue { position, id, song }),
+                None => Err(TypedResponseError {
+                    field: "Id",
+                    kind: ErrorKind::Missing,
+                }),
+            })
+        })
+        .collect()
+    }
+}
 
 /// A single song, as returned by the playlist or current song commands.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -18,8 +58,6 @@ pub struct Song {
     pub file: String,
     /// The `duration` as returned by MPD.
     pub duration: Option<Duration>,
-    /// Identifiers of this song. Depending on the context of the command, this may be `None`.
-    pub identifiers: Option<SongIdentifier>,
     /// Tags in this response.
     pub tags: HashMap<Tag, Vec<String>>,
 }
@@ -44,6 +82,7 @@ impl Song {
             fields: &mut fields,
         }
         .take(max_count)
+        .map(|r| r.map(|(song, _)| song))
         .collect()
     }
 
@@ -51,7 +90,6 @@ impl Song {
         Self {
             file,
             duration: None,
-            identifiers: None,
             tags: HashMap::new(),
         }
     }
@@ -65,7 +103,7 @@ impl<'a, I> Iterator for SongIter<'a, I>
 where
     I: Iterator<Item = (Arc<str>, String)>,
 {
-    type Item = Result<Song, TypedResponseError>;
+    type Item = Result<(Song, Option<(SongPosition, SongId)>), TypedResponseError>;
 
     fn next(&mut self) -> Option<Self::Item> {
         let (key, value) = self.fields.next()?;
@@ -122,11 +160,12 @@ where
             }
         }
 
-        if let (Some(pos), Some(id)) = (song_pos, song_id) {
-            song.identifiers = Some(SongIdentifier { pos, id });
-        }
+        let identifier = match (song_pos, song_id) {
+            (Some(pos), Some(id)) => Some((pos, id)),
+            _ => None,
+        };
 
-        Some(Ok(song))
+        Some(Ok((song, identifier)))
     }
 }
 

@@ -14,7 +14,7 @@ use std::time::Duration;
 
 use crate::commands::{SongId, SongPosition};
 use crate::sealed;
-pub use song::{Song, Tag};
+pub use song::{Song, SongInQueue, Tag};
 
 /// "Marker" trait for responses to commands.
 ///
@@ -85,14 +85,6 @@ impl Response for Empty {
     }
 }
 
-/// Identifier for a song in the queue, consisting of position-dependent index and stable ID.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-#[allow(missing_docs)]
-pub struct SongIdentifier {
-    pub pos: SongPosition,
-    pub id: SongId,
-}
-
 /// Possible playback states.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[allow(missing_docs)]
@@ -123,8 +115,8 @@ pub struct Status {
     pub single: SingleMode,
     pub playlist_version: u32,
     pub playlist_length: usize,
-    pub current_song: Option<SongIdentifier>,
-    pub next_song: Option<SongIdentifier>,
+    pub current_song: Option<(SongPosition, SongId)>,
+    pub next_song: Option<(SongPosition, SongId)>,
     pub elapsed: Option<Duration>,
     pub duration: Option<Duration>,
     pub bitrate: Option<u64>,
@@ -203,18 +195,18 @@ impl Response for Stats {
     }
 }
 
-impl sealed::Sealed for Option<Song> {}
-impl Response for Option<Song> {
+impl sealed::Sealed for Option<SongInQueue> {}
+impl Response for Option<SongInQueue> {
     fn convert(raw: Frame) -> Result<Self, TypedResponseError> {
-        let mut vec = Song::parse_frame(raw, Some(1))?;
+        let mut vec = SongInQueue::parse_frame(raw, Some(1))?;
         Ok(vec.pop())
     }
 }
 
-impl sealed::Sealed for Vec<Song> {}
-impl Response for Vec<Song> {
+impl sealed::Sealed for Vec<SongInQueue> {}
+impl Response for Vec<SongInQueue> {
     fn convert(raw: Frame) -> Result<Self, TypedResponseError> {
-        Ok(Song::parse_frame(raw, None)?)
+        Ok(SongInQueue::parse_frame(raw, None)?)
     }
 }
 

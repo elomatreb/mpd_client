@@ -64,10 +64,7 @@ macro_rules! song_identifier {
             let id = field!($frame, $id integer optional);
 
             match (pos, id) {
-                (Some(pos), Some(id)) => Some(SongIdentifier {
-                    pos: $crate::commands::SongPosition(pos),
-                    id: $crate::commands::SongId(id),
-                }),
+                (Some(pos), Some(id)) => Some((SongPosition(pos), SongId(id))),
                 _ => None,
             }
         }

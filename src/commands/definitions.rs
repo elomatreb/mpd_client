@@ -95,8 +95,8 @@ argless_command!(ClearQueue, "clear", res::Empty);
 argless_command!(Status, "status", res::Status);
 argless_command!(Stats, "stats", res::Stats);
 
-argless_command!(Queue, "playlistinfo", Vec<res::Song>);
-argless_command!(CurrentSong, "currentsong", Option<res::Song>);
+argless_command!(Queue, "playlistinfo", Vec<res::SongInQueue>);
+argless_command!(CurrentSong, "currentsong", Option<res::SongInQueue>);
 
 single_arg_command!(SetRandom, bool, "random", res::Empty);
 single_arg_command!(SetConsume, bool, "consume", res::Empty);

@@ -37,14 +37,18 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
 async fn print_current_song(client: &Client) -> Result<(), Box<dyn Error>> {
     match client.command(commands::CurrentSong).await? {
-        Some(song) => {
+        Some(song_in_queue) => {
             println!(
                 "\"{}\" by \"{}\"",
-                song.tags
+                song_in_queue
+                    .song
+                    .tags
                     .get(&Tag::Title)
                     .map(|values| values.join(", "))
                     .unwrap_or_else(|| "(none)".to_string()),
-                song.tags
+                song_in_queue
+                    .song
+                    .tags
                     .get(&Tag::Artist)
                     .map(|values| values.join(", "))
                     .unwrap_or_else(|| "(none)".to_string()),
