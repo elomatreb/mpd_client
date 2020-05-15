@@ -310,7 +310,13 @@ pub struct Delete(Target);
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Target {
     Id(SongId),
-    Range(usize, Option<usize>),
+    Range(SongRange),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct SongRange {
+    from: usize,
+    to: Option<usize>,
 }
 
 impl Delete {
@@ -321,7 +327,8 @@ impl Delete {
 
     /// Remove the song at the given position from the queue.
     pub fn position(pos: SongPosition) -> Self {
-        Self(Target::Range(pos.0, Some(pos.0 + 1)))
+        let range = SongRange::new(pos..=pos);
+        Self(Target::Range(range))
     }
 
     /// Remove the given range from the queue.
@@ -331,25 +338,25 @@ impl Delete {
     where
         R: RangeBounds<SongPosition>,
     {
-        Self(Target::range(range))
+        Self(Target::Range(SongRange::new(range)))
     }
 }
 
-impl Target {
-    fn range<R: RangeBounds<SongPosition>>(range: R) -> Self {
-        let lower = match range.start_bound() {
-            Bound::Included(pos) => pos.0,
+impl SongRange {
+    fn new<R: RangeBounds<SongPosition>>(range: R) -> Self {
+        let from = match range.start_bound() {
             Bound::Excluded(pos) => pos.0 + 1,
+            Bound::Included(pos) => pos.0,
             Bound::Unbounded => 0,
         };
 
-        let upper = match range.end_bound() {
+        let to = match range.end_bound() {
             Bound::Excluded(pos) => Some(pos.0),
             Bound::Included(pos) => Some(pos.0 + 1),
             Bound::Unbounded => None,
         };
 
-        Self::Range(lower, upper)
+        Self { from, to }
     }
 }
 
@@ -359,8 +366,8 @@ impl Command for Delete {
     fn to_command(self) -> RawCommand {
         match self.0 {
             Target::Id(id) => RawCommand::new("deleteid").argument(id.0.to_string()),
-            Target::Range(from, up_to) => {
-                let range = match up_to {
+            Target::Range(SongRange { from, to }) => {
+                let range = match to {
                     Some(end) => format!("{}:{}", from, end),
                     None => format!("{}:", from),
                 };
@@ -390,7 +397,7 @@ impl Move {
     /// Move the song at the given position to the given position.
     pub fn position(from: SongPosition, to: SongPosition) -> Self {
         Self {
-            from: Target::Range(from.0, Some(from.0 + 1)),
+            from: Target::Range(SongRange::new(from..=from)),
             to: to.0,
         }
     }
@@ -401,7 +408,7 @@ impl Move {
         R: RangeBounds<SongPosition>,
     {
         Self {
-            from: Target::range(range),
+            from: Target::Range(SongRange::new(range)),
             to: to.0,
         }
     }
@@ -415,10 +422,10 @@ impl Command for Move {
             Target::Id(id) => RawCommand::new("moveid")
                 .argument(id.0.to_string())
                 .argument(self.to.to_string()),
-            Target::Range(lower, upper) => RawCommand::new("move")
-                .argument(match upper {
-                    Some(upper) => format!("{}:{}", lower, upper),
-                    None => format!("{}:", lower),
+            Target::Range(SongRange { from, to }) => RawCommand::new("move")
+                .argument(match to {
+                    Some(to) => format!("{}:{}", from, to),
+                    None => format!("{}:", from),
                 })
                 .argument(self.to.to_string()),
         }
