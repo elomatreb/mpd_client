@@ -13,6 +13,7 @@ use std::borrow::Cow;
 use std::error::Error;
 use std::fmt::{self, Debug};
 use std::iter;
+use std::time::Duration;
 
 /// Start a command list, separated with list terminators. Our parser can't separate messages when
 /// the form of command list without terminators is used.
@@ -238,6 +239,22 @@ impl Argument for Cow<'static, str> {
     }
 }
 
+impl Argument for bool {
+    fn render(self) -> Cow<'static, str> {
+        Cow::Borrowed(match self {
+            true => "1",
+            false => "0",
+        })
+    }
+}
+
+impl Argument for Duration {
+    /// Song durations in the format MPD expects. Will round to third decimal place.
+    fn render(self) -> Cow<'static, str> {
+        Cow::Owned(format!("{:.3}", self.as_secs_f64()))
+    }
+}
+
 /// Escape a single argument, prefixing necessary characters (quotes and backslashes) with
 /// backslashes.
 ///
@@ -430,5 +447,14 @@ mod test {
         assert_eq!(escape_argument("Joe's"), "Joe\\'s");
 
         assert_eq!(escape_argument("hello\\world"), "hello\\\\world");
+    }
+
+    #[test]
+    fn argument_rendering() {
+        assert_eq!(true.render(), "1");
+        assert_eq!(false.render(), "0");
+
+        assert_eq!(Duration::from_secs(2).render(), "2.000");
+        assert_eq!(Duration::from_secs_f64(2.34567).render(), "2.346");
     }
 }
