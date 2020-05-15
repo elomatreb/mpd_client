@@ -339,7 +339,8 @@ impl Target {
     fn range<R: RangeBounds<SongPosition>>(range: R) -> Self {
         let lower = match range.start_bound() {
             Bound::Included(pos) => pos.0,
-            _ => panic!("range must have a lower bound"),
+            Bound::Excluded(pos) => pos.0 + 1,
+            Bound::Unbounded => 0,
         };
 
         let upper = match range.end_bound() {
