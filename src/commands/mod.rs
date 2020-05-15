@@ -11,6 +11,10 @@
 mod definitions;
 pub mod responses;
 
+use std::borrow::Cow;
+
+use mpd_protocol::command::Argument;
+
 pub use definitions::*;
 use responses::Response;
 
@@ -24,6 +28,12 @@ impl From<u64> for SongId {
     }
 }
 
+impl Argument for SongId {
+    fn render(self) -> Cow<'static, str> {
+        Cow::Owned(self.0.to_string())
+    }
+}
+
 /// Position of a song in the queue.
 ///
 /// This will change when the queue is modified.
@@ -33,6 +43,12 @@ pub struct SongPosition(pub usize);
 impl From<usize> for SongPosition {
     fn from(pos: usize) -> Self {
         Self(pos)
+    }
+}
+
+impl Argument for SongPosition {
+    fn render(self) -> Cow<'static, str> {
+        Cow::Owned(self.0.to_string())
     }
 }
 

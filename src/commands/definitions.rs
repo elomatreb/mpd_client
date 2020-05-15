@@ -1,7 +1,8 @@
 //! Definitions of commands.
 
-use mpd_protocol::Command as RawCommand;
+use mpd_protocol::{command::Argument, Command as RawCommand};
 
+use std::borrow::Cow;
 use std::cmp::min;
 use std::ops::{Bound, RangeBounds};
 use std::time::Duration;
@@ -155,12 +156,12 @@ impl Command for SeekTo {
     type Response = res::Empty;
 
     fn to_command(self) -> RawCommand {
-        let (command, song_arg) = match self.0 {
-            Song::Id(id) => ("seekid", id.0.to_string()),
-            Song::Position(pos) => ("seek", pos.0.to_string()),
+        let command = match self.0 {
+            Song::Position(pos) => RawCommand::new("seek").argument(pos),
+            Song::Id(id) => RawCommand::new("seekid").argument(id),
         };
 
-        RawCommand::new(command).argument(song_arg).argument(self.1)
+        command.argument(self.1)
     }
 }
 
@@ -220,14 +221,8 @@ impl Command for Play {
     fn to_command(self) -> RawCommand {
         match self.0 {
             None => RawCommand::new("play"),
-            Some(song) => {
-                let (command, arg) = match song {
-                    Song::Position(pos) => ("play", pos.0.to_string()),
-                    Song::Id(id) => ("playid", id.0.to_string()),
-                };
-
-                RawCommand::new(command).argument(arg)
-            }
+            Some(Song::Position(pos)) => RawCommand::new("play").argument(pos),
+            Some(Song::Id(id)) => RawCommand::new("playid").argument(id),
         }
     }
 }
@@ -241,7 +236,7 @@ impl Command for Play {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Add {
     uri: String,
-    position: Option<usize>,
+    position: Option<SongPosition>,
 }
 
 impl Add {
@@ -256,8 +251,8 @@ impl Add {
     }
 
     /// Add the URI at the given position in the queue.
-    pub fn at(mut self, position: usize) -> Self {
-        self.position = Some(position);
+    pub fn at<P: Into<SongPosition>>(mut self, position: P) -> Self {
+        self.position = Some(position.into());
         self
     }
 }
@@ -269,7 +264,7 @@ impl Command for Add {
         let mut command = RawCommand::new("addid").argument(self.uri);
 
         if let Some(pos) = self.position {
-            command.add_argument(pos.to_string()).unwrap();
+            command.add_argument(pos).unwrap();
         }
 
         command
@@ -333,20 +328,22 @@ impl SongRange {
     }
 }
 
+impl Argument for SongRange {
+    fn render(self) -> Cow<'static, str> {
+        Cow::Owned(match self.to {
+            Some(to) => format!("{}:{}", self.from, to),
+            None => format!("{}:", self.from),
+        })
+    }
+}
+
 impl Command for Delete {
     type Response = res::Empty;
 
     fn to_command(self) -> RawCommand {
         match self.0 {
-            Target::Id(id) => RawCommand::new("deleteid").argument(id.0.to_string()),
-            Target::Range(SongRange { from, to }) => {
-                let range = match to {
-                    Some(end) => format!("{}:{}", from, end),
-                    None => format!("{}:", from),
-                };
-
-                RawCommand::new("delete").argument(range)
-            }
+            Target::Id(id) => RawCommand::new("deleteid").argument(id),
+            Target::Range(range) => RawCommand::new("delete").argument(range),
         }
     }
 }
@@ -355,7 +352,7 @@ impl Command for Delete {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Move {
     from: Target,
-    to: usize,
+    to: SongPosition,
 }
 
 impl Move {
@@ -363,7 +360,7 @@ impl Move {
     pub fn id(id: SongId, to: SongPosition) -> Self {
         Self {
             from: Target::Id(id),
-            to: to.0,
+            to,
         }
     }
 
@@ -371,7 +368,7 @@ impl Move {
     pub fn position(from: SongPosition, to: SongPosition) -> Self {
         Self {
             from: Target::Range(SongRange::new(from..=from)),
-            to: to.0,
+            to,
         }
     }
 
@@ -382,7 +379,7 @@ impl Move {
     {
         Self {
             from: Target::Range(SongRange::new(range)),
-            to: to.0,
+            to,
         }
     }
 }
@@ -391,16 +388,11 @@ impl Command for Move {
     type Response = res::Empty;
 
     fn to_command(self) -> RawCommand {
-        match self.from {
-            Target::Id(id) => RawCommand::new("moveid")
-                .argument(id.0.to_string())
-                .argument(self.to.to_string()),
-            Target::Range(SongRange { from, to }) => RawCommand::new("move")
-                .argument(match to {
-                    Some(to) => format!("{}:{}", from, to),
-                    None => format!("{}:", from),
-                })
-                .argument(self.to.to_string()),
-        }
+        let command = match self.from {
+            Target::Id(id) => RawCommand::new("moveid").argument(id),
+            Target::Range(range) => RawCommand::new("move").argument(range),
+        };
+
+        command.argument(self.to)
     }
 }
