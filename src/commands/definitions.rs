@@ -2,7 +2,6 @@
 
 use mpd_protocol::Command as RawCommand;
 
-use std::borrow::Cow;
 use std::cmp::min;
 use std::ops::{Bound, RangeBounds};
 use std::time::Duration;
@@ -57,34 +56,10 @@ macro_rules! single_arg_command {
 
             fn to_command(self) -> RawCommand {
                 RawCommand::new($command)
-                    .argument(self.0.render())
+                    .argument(self.0)
             }
         }
     };
-}
-
-macro_rules! impl_display_argument {
-    ($($type:ty),+) => {
-        $(
-            impl Argument for $type {
-                fn render(self) -> Cow<'static, str> {
-                    Cow::Owned(self.to_string())
-                }
-            }
-        )+
-    };
-}
-
-trait Argument {
-    fn render(self) -> Cow<'static, str>;
-}
-
-impl_display_argument!(u8);
-
-impl Argument for bool {
-    fn render(self) -> Cow<'static, str> {
-        Cow::Borrowed(if self { "1" } else { "0" })
-    }
 }
 
 argless_command!(Next, "next", res::Empty);
@@ -185,9 +160,7 @@ impl Command for SeekTo {
             Song::Position(pos) => ("seek", pos.0.to_string()),
         };
 
-        RawCommand::new(command)
-            .argument(song_arg)
-            .argument(format!("{:.3}", self.1.as_secs_f64()))
+        RawCommand::new(command).argument(song_arg).argument(self.1)
     }
 }
 
