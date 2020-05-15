@@ -8,9 +8,10 @@ use std::ops::{Bound, RangeBounds};
 use std::time::Duration;
 
 use crate::commands::{
-    responses::{self as res, SingleMode},
+    responses::{self as res, SingleMode, Tag},
     Command, SongId, SongPosition,
 };
+use crate::Filter;
 
 macro_rules! argless_command {
     // Utility branch to generate struct with doc expression
@@ -310,20 +311,36 @@ impl Delete {
 }
 
 impl SongRange {
-    fn new<R: RangeBounds<SongPosition>>(range: R) -> Self {
+    fn new_usize<R: RangeBounds<usize>>(range: R) -> Self {
         let from = match range.start_bound() {
-            Bound::Excluded(pos) => pos.0 + 1,
-            Bound::Included(pos) => pos.0,
+            Bound::Excluded(pos) => pos + 1,
+            Bound::Included(pos) => *pos,
             Bound::Unbounded => 0,
         };
 
         let to = match range.end_bound() {
-            Bound::Excluded(pos) => Some(pos.0),
-            Bound::Included(pos) => Some(pos.0 + 1),
+            Bound::Excluded(pos) => Some(*pos),
+            Bound::Included(pos) => Some(pos + 1),
             Bound::Unbounded => None,
         };
 
         Self { from, to }
+    }
+
+    fn new<R: RangeBounds<SongPosition>>(range: R) -> Self {
+        let from = match range.start_bound() {
+            Bound::Excluded(pos) => Bound::Excluded(pos.0),
+            Bound::Included(pos) => Bound::Included(pos.0),
+            Bound::Unbounded => Bound::Unbounded,
+        };
+
+        let to = match range.end_bound() {
+            Bound::Excluded(pos) => Bound::Excluded(pos.0),
+            Bound::Included(pos) => Bound::Included(pos.0),
+            Bound::Unbounded => Bound::Unbounded,
+        };
+
+        Self::new_usize((from, to))
     }
 }
 
@@ -393,5 +410,75 @@ impl Command for Move {
         };
 
         command.argument(self.to)
+    }
+}
+
+/// `find` command.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Find {
+    filter: Filter,
+    sort: Option<Tag>,
+    window: Option<SongRange>,
+}
+
+impl Find {
+    /// Find all songs matching `filter`.
+    pub fn new(filter: Filter) -> Self {
+        Self {
+            filter,
+            sort: None,
+            window: None,
+        }
+    }
+
+    /// Sort the result by the given tag.
+    ///
+    /// This does some special-casing for certain tags, see the [MPD documentation][0] for details.
+    ///
+    /// # Panics
+    ///
+    /// This will panic when sending the command if you pass a malformed value using the [`Other`]
+    /// variant.
+    ///
+    /// [0]: https://www.musicpd.org/doc/html/protocol.html#command-find
+    /// [`Other`]: responses/enum.Tag.html#variant.Other
+    pub fn sort(mut self, sort_by: Tag) -> Self {
+        self.sort = Some(sort_by);
+        self
+    }
+
+    /// Limit the result to the given window.
+    ///
+    /// Note that when the result is not [sorted][0], this may result in an arbitrary subset.
+    ///
+    /// [0]: #method.sort
+    pub fn window<R>(mut self, window: R) -> Self
+    where
+        R: RangeBounds<usize>,
+    {
+        self.window = Some(SongRange::new_usize(window));
+        self
+    }
+}
+
+impl Command for Find {
+    type Response = Vec<res::Song>;
+
+    fn to_command(self) -> RawCommand {
+        let mut command = RawCommand::new("find").argument(self.filter);
+
+        if let Some(sort) = self.sort {
+            command.add_argument("sort").unwrap();
+            command
+                .add_argument(sort.as_argument())
+                .expect("Invalid sort value");
+        }
+
+        if let Some(window) = self.window {
+            command.add_argument("window").unwrap();
+            command.add_argument(window).unwrap();
+        }
+
+        command
     }
 }

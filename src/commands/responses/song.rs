@@ -1,5 +1,6 @@
 use mpd_protocol::response::Frame;
 
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::iter;
 use std::num::ParseIntError;
@@ -240,5 +241,38 @@ impl Tag {
             "Track" => Track,
             _ => Other(raw),
         }
+    }
+
+    pub(crate) fn as_argument(&self) -> Cow<'static, str> {
+        if let Tag::Other(raw) = self {
+            return Cow::Owned(raw.to_string());
+        }
+
+        Cow::Borrowed(match self {
+            Tag::Other(_) => unreachable!(),
+            Tag::Album => "Album",
+            Tag::AlbumSort => "AlbumSort",
+            Tag::AlbumArtist => "AlbumArtist",
+            Tag::AlbumArtistSort => "AlbumArtistSort",
+            Tag::Artist => "Artist",
+            Tag::ArtistSort => "ArtistSort",
+            Tag::Comment => "Comment",
+            Tag::Composer => "Composer",
+            Tag::Date => "Date",
+            Tag::OriginalDate => "OriginalDate",
+            Tag::Disc => "Disc",
+            Tag::Genre => "Genre",
+            Tag::Label => "Label",
+            Tag::MusicBrainzArtistId => "MUSICBRAINZ_ARTISTID",
+            Tag::MusicBrainzRecordingId => "MUSICBRAINZ_TRACKID",
+            Tag::MusicBrainzReleaseArtistId => "MUSICBRAINZ_ALBUMARTISTID",
+            Tag::MusicBrainzReleaseId => "MUSICBRAINZ_ALBUMID",
+            Tag::MusicBrainzTrackId => "MUSICBRAINZ_RELEASETRACKID",
+            Tag::MusicBrainzWorkId => "MUSICBRAINZ_WORKID",
+            Tag::Name => "Name",
+            Tag::Performer => "Performer",
+            Tag::Title => "Title",
+            Tag::Track => "Track",
+        })
     }
 }

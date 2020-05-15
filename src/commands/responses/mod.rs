@@ -210,6 +210,13 @@ impl Response for Vec<SongInQueue> {
     }
 }
 
+impl sealed::Sealed for Vec<Song> {}
+impl Response for Vec<Song> {
+    fn convert(raw: Frame) -> Result<Self, TypedResponseError> {
+        Ok(Song::parse_frame(raw, None)?)
+    }
+}
+
 impl sealed::Sealed for SongId {}
 impl Response for SongId {
     fn convert(mut raw: Frame) -> Result<Self, TypedResponseError> {
