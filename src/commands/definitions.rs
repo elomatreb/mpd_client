@@ -7,11 +7,10 @@ use std::cmp::min;
 use std::ops::{Bound, RangeBounds};
 use std::time::Duration;
 
-use super::{
+use crate::commands::{
     responses::{self as res, SingleMode},
-    Command,
+    Command, SongId, SongPosition,
 };
-use crate::commands::{SongId, SongPosition};
 
 macro_rules! argless_command {
     // Utility branch to generate struct with doc expression
