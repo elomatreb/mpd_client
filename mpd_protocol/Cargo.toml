@@ -16,5 +16,5 @@ categories = ["network-programming"]
 bytes = "0.5.4"
 tokio-util = { version = "0.3.1", features = ["codec"] }
 nom = "5.1.1"
-fnv = "1.0.6"
+fxhash = "0.2.1"
 tracing = "0.1.13"

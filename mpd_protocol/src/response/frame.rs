@@ -1,6 +1,6 @@
 //! A succesful response to a command.
 
-use fnv::FnvHashSet;
+use fxhash::FxHashSet;
 
 use std::fmt;
 use std::iter::FusedIterator;
@@ -134,7 +134,7 @@ impl fmt::Debug for FieldsContainer {
 
 impl From<&[(&str, &str)]> for FieldsContainer {
     fn from(fields: &[(&str, &str)]) -> Self {
-        let mut keys = FnvHashSet::default();
+        let mut keys = FxHashSet::default();
 
         let fields = fields
             .iter()
@@ -145,7 +145,7 @@ impl From<&[(&str, &str)]> for FieldsContainer {
     }
 }
 
-fn simple_intern(store: &mut FnvHashSet<Arc<str>>, value: &str) -> Arc<str> {
+fn simple_intern(store: &mut FxHashSet<Arc<str>>, value: &str) -> Arc<str> {
     match store.get(value) {
         Some(v) => Arc::clone(v),
         None => {
