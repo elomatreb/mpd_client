@@ -482,3 +482,164 @@ impl Command for Find {
         command
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn range_arg() {
+        assert_eq!(SongRange::new_usize(2..4).render(), "2:4");
+        assert_eq!(SongRange::new_usize(3..).render(), "3:");
+        assert_eq!(SongRange::new_usize(2..=5).render(), "2:6");
+        assert_eq!(SongRange::new_usize(..5).render(), "0:5");
+        assert_eq!(SongRange::new_usize(..).render(), "0:");
+    }
+
+    #[test]
+    fn command_crossfade() {
+        assert_eq!(
+            Crossfade(Duration::from_secs_f64(2.345)).to_command(),
+            RawCommand::new("crossfade").argument("2")
+        );
+    }
+
+    #[test]
+    fn command_volume() {
+        assert_eq!(
+            SetVolume(150).to_command(),
+            RawCommand::new("setvol").argument("100")
+        );
+    }
+
+    #[test]
+    fn command_seek_to() {
+        let duration = Duration::from_secs(2);
+
+        assert_eq!(
+            SeekTo(SongId(2).into(), duration).to_command(),
+            RawCommand::new("seekid")
+                .argument(SongId(2))
+                .argument(duration)
+        );
+
+        assert_eq!(
+            SeekTo(SongPosition(2).into(), duration).to_command(),
+            RawCommand::new("seek")
+                .argument(SongPosition(2))
+                .argument(duration)
+        );
+    }
+
+    #[test]
+    fn command_seek() {
+        let duration = Duration::from_secs(1);
+
+        assert_eq!(
+            Seek(SeekMode::Absolute(duration)).to_command(),
+            RawCommand::new("seekcur").argument("1.000")
+        );
+        assert_eq!(
+            Seek(SeekMode::Forward(duration)).to_command(),
+            RawCommand::new("seekcur").argument("+1.000")
+        );
+        assert_eq!(
+            Seek(SeekMode::Backward(duration)).to_command(),
+            RawCommand::new("seekcur").argument("-1.000")
+        );
+    }
+
+    #[test]
+    fn command_play() {
+        assert_eq!(Play::current().to_command(), RawCommand::new("play"));
+        assert_eq!(
+            Play::song(SongPosition(2)).to_command(),
+            RawCommand::new("play").argument(SongPosition(2))
+        );
+        assert_eq!(
+            Play::song(SongId(2)).to_command(),
+            RawCommand::new("playid").argument(SongId(2))
+        );
+    }
+
+    #[test]
+    fn command_add() {
+        let uri = String::from("foo/bar.mp3");
+
+        assert_eq!(
+            Add::uri(uri.clone()).to_command(),
+            RawCommand::new("addid").argument(uri.clone())
+        );
+        assert_eq!(
+            Add::uri(uri.clone()).at(5).to_command(),
+            RawCommand::new("addid").argument(uri.clone()).argument("5")
+        );
+    }
+
+    #[test]
+    fn command_delete() {
+        assert_eq!(
+            Delete::id(SongId(2)).to_command(),
+            RawCommand::new("deleteid").argument(SongId(2))
+        );
+
+        assert_eq!(
+            Delete::position(SongPosition(2)).to_command(),
+            RawCommand::new("delete").argument("2:3")
+        );
+
+        assert_eq!(
+            Delete::range(SongPosition(2)..SongPosition(4)).to_command(),
+            RawCommand::new("delete").argument("2:4")
+        );
+    }
+
+    #[test]
+    fn command_move() {
+        assert_eq!(
+            Move::position(SongPosition(2), SongPosition(4)).to_command(),
+            RawCommand::new("move").argument("2:3").argument("4")
+        );
+
+        assert_eq!(
+            Move::id(SongId(2), SongPosition(4)).to_command(),
+            RawCommand::new("moveid").argument(SongId(2)).argument(SongPosition(4))
+        );
+
+        assert_eq!(
+            Move::range(SongPosition(3)..SongPosition(5), SongPosition(4)).to_command(),
+            RawCommand::new("move").argument("3:5").argument(SongPosition(4))
+        );
+    }
+
+    #[test]
+    fn command_find() {
+        let filter = Filter::equal("Artist", "Foo");
+
+        assert_eq!(
+            Find::new(filter.clone()).to_command(),
+            RawCommand::new("find").argument(filter.clone())
+        );
+
+        assert_eq!(
+            Find::new(filter.clone()).window(..3).to_command(),
+            RawCommand::new("find")
+                .argument(filter.clone())
+                .argument("window")
+                .argument("0:3"),
+        );
+
+        assert_eq!(
+            Find::new(filter.clone())
+                .window(3..)
+                .sort(Tag::Artist)
+                .to_command(),
+            RawCommand::new("find")
+                .argument(filter.clone())
+                .argument("sort")
+                .argument("Artist")
+                .argument("window")
+                .argument("3:")
+        );
+    }
+}
