@@ -8,10 +8,11 @@ use std::ops::{Bound, RangeBounds};
 use std::time::Duration;
 
 use crate::commands::{
-    responses::{self as res, SingleMode, Tag},
+    responses::{self as res, SingleMode},
     Command, SongId, SongPosition,
 };
 use crate::Filter;
+use crate::tag::Tag;
 
 macro_rules! argless_command {
     // Utility branch to generate struct with doc expression
@@ -470,7 +471,7 @@ impl Command for Find {
         if let Some(sort) = self.sort {
             command.add_argument("sort").unwrap();
             command
-                .add_argument(sort.as_argument())
+                .add_argument(sort.as_str())
                 .expect("Invalid sort value");
         }
 
@@ -603,18 +604,22 @@ mod tests {
 
         assert_eq!(
             Move::id(SongId(2), SongPosition(4)).to_command(),
-            RawCommand::new("moveid").argument(SongId(2)).argument(SongPosition(4))
+            RawCommand::new("moveid")
+                .argument(SongId(2))
+                .argument(SongPosition(4))
         );
 
         assert_eq!(
             Move::range(SongPosition(3)..SongPosition(5), SongPosition(4)).to_command(),
-            RawCommand::new("move").argument("3:5").argument(SongPosition(4))
+            RawCommand::new("move")
+                .argument("3:5")
+                .argument(SongPosition(4))
         );
     }
 
     #[test]
     fn command_find() {
-        let filter = Filter::equal("Artist", "Foo");
+        let filter = Filter::tag(Tag::Artist, "Foo");
 
         assert_eq!(
             Find::new(filter.clone()).to_command(),

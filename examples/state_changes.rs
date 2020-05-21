@@ -2,10 +2,7 @@ use std::error::Error;
 use tokio::stream::StreamExt; // for .next()
 use tracing_subscriber::{EnvFilter, FmtSubscriber};
 
-use mpd_client::{
-    commands::{self, responses::Tag},
-    Client, Subsystem,
-};
+use mpd_client::{commands, Client, Subsystem, Tag};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
