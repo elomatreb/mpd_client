@@ -12,12 +12,26 @@ use crate::Tag;
 /// Special tag which checks *all* tag types.
 ///
 /// Provided here to avoid typos.
-pub static ANY: &str = "any";
+///
+/// ```
+/// use mpd_client::{Tag, filter::{Filter, ANY}};
+///
+/// // Filter for songs where *any* tag equals the word "foo".
+/// Filter::tag(ANY, "foo");
+/// ```
+pub const ANY: &str = "any";
 
 /// Magic value which checks for the absence of the tag with which it is used.
 ///
 /// Provided here to have more apparent meaning than a simple empty string literal.
-pub static IS_ABSENT: &str = "";
+///
+/// ```
+/// use mpd_client::{Tag, filter::{Filter, IS_ABSENT}};
+///
+/// // Filter for songs without an Artist tag.
+/// Filter::tag(Tag::Artist, IS_ABSENT);
+/// ```
+pub const IS_ABSENT: &str = "";
 
 /// A [filter expression].
 ///
