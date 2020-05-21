@@ -15,10 +15,7 @@
 //!
 //! [MPD]: https://musicpd.org
 //! [Tokio]: https://tokio.rs
-//! [tokio-codec]: https://docs.rs/tokio-util/0.2.0/tokio_util/codec/index.html
-//! [`codec`]: codec/index.html
-//! [commands]: command/index.html
-//! [filter expressions]: filter/index.html
+//! [tokio-codec]: https://docs.rs/tokio-util/0.3.0/tokio_util/codec/index.html
 
 pub mod codec;
 pub mod command;

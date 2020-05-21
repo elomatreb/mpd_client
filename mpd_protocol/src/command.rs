@@ -65,9 +65,7 @@ pub enum CommandError {
 impl Command {
     /// Start a new command.
     ///
-    /// Same as [`build`], but panics on error instead of returning a result.
-    ///
-    /// [`build`]: #method.build
+    /// Same as [`Command::build`], but panics on error instead of returning a result.
     pub fn new(command: impl Into<Cow<'static, str>>) -> Self {
         Self::build(command).expect("Invalid command")
     }
@@ -91,9 +89,7 @@ impl Command {
 
     /// Add an argument to the command.
     ///
-    /// Same as [`add_argument`], but returns `Self` and panics on error.
-    ///
-    /// [`add_argument`]: #method.add_argument
+    /// Same as [`Command::add_argument`], but returns `Self` and panics on error.
     pub fn argument(mut self, argument: impl Argument) -> Self {
         self.add_argument(argument).expect("Invalid argument");
         self
@@ -164,9 +160,7 @@ impl CommandList {
 
     /// Add another command to the list.
     ///
-    /// Same as [`add`], but takes and returns `self` for chaining.
-    ///
-    /// [`add`]: #method.add
+    /// Same as [`CommandList::add`], but takes and returns `self` for chaining.
     pub fn command(mut self, command: Command) -> Self {
         self.add(command);
         self

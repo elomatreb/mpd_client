@@ -1,4 +1,4 @@
-/// Conveniently generate a command list.
+/// Conveniently generate a [`CommandList`].
 ///
 /// ```
 /// use mpd_protocol::{command_list, Command, CommandList};
@@ -20,6 +20,8 @@
 ///     command_list
 /// };
 /// ```
+///
+/// [`CommandList`]: crate::command::CommandList
 #[macro_export]
 macro_rules! command_list {
     ($first:expr) => {

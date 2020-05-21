@@ -40,9 +40,7 @@ impl Frame {
 
     /// Returns `true` if the frame contains a binary blob.
     ///
-    /// This will return `false` after you remove the binary blob using [`get_binary`].
-    ///
-    /// [`get_binary`]: #method.get_binary
+    /// This will return `false` after you remove the binary blob using [`Frame::get_binary`].
     pub fn has_binary(&self) -> bool {
         self.binary.is_some()
     }
@@ -50,9 +48,7 @@ impl Frame {
     /// Returns an iterator over all key-value pairs in this frame, in the order they appear in the
     /// response.
     ///
-    /// If keys have been removed using [`get`], they will not appear.
-    ///
-    /// [`get`]: #method.get
+    /// If keys have been removed using [`Frame::get`], they will not appear.
     pub fn fields(&self) -> Fields<'_> {
         Fields(self.fields.0.iter())
     }
@@ -70,7 +66,7 @@ impl Frame {
 
     /// Returns a reference to the binary blob in this frame, if there is one.
     ///
-    /// If the binary blob has been removed using [`get_binary`], this will return `None`.
+    /// If the binary blob has been removed using [`Frame::get_binary`], this will return `None`.
     pub fn binary(&self) -> Option<&[u8]> {
         self.binary.as_deref()
     }
@@ -156,9 +152,7 @@ fn simple_intern(store: &mut FxHashSet<Arc<str>>, value: &str) -> Arc<str> {
     }
 }
 
-/// Iterator returned by the [`fields`] method.
-///
-/// [`fields`]: struct.Frame.html#method.fields
+/// Iterator returned by the [`Frame::fields`] method.
 #[derive(Debug)]
 pub struct Fields<'a>(slice::Iter<'a, Option<(Arc<str>, String)>>);
 
@@ -195,9 +189,7 @@ impl<'a> IntoIterator for &'a Frame {
     }
 }
 
-/// Iterator returned by the `IntoIterator` implementation on [`Frame`].
-///
-/// [`Frame`]: struct.Frame.html
+/// Iterator returned by the [`IntoIterator`] implementation on [`Frame`].
 #[derive(Debug)]
 pub struct IntoIter {
     iter: vec::IntoIter<Option<(Arc<str>, String)>>,

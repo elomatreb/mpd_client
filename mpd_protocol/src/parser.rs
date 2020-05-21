@@ -30,9 +30,7 @@ use std::str::{self, FromStr};
 
 /// Initial message sent by MPD on connect.
 ///
-/// Parsed from raw data using [`greeting`].
-///
-/// [`greeting`]: fn.greeting.html
+/// Parsed from raw data using [`greeting()`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Greeting<'a> {
     /// Protocol version reported by MPD.
@@ -41,10 +39,7 @@ pub struct Greeting<'a> {
 
 /// Complete response, either succesful or an error. Succesful responses may be empty.
 ///
-/// Parsed from raw data using [`response`]. See also the notes about [parser support].
-///
-/// [`response`]: fn.response.html
-/// [parser support]: index.html#feature-support
+/// Parsed from raw data using [`response()`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Response<'a> {
     /// Successful response.
@@ -71,8 +66,6 @@ pub enum Response<'a> {
 
 /// Parse a [`Greeting`] line.
 ///
-/// [`Greeting`]: struct.Greeting.html
-///
 /// ```
 /// use mpd_protocol::parser::{Greeting, greeting};
 ///
@@ -88,8 +81,6 @@ pub fn greeting(i: &[u8]) -> IResult<&[u8], Greeting<'_>> {
 
 /// Parse a complete response, resulting in one or more frames if succesful.
 ///
-/// See also the notes about [parser support].
-///
 /// ```
 /// use mpd_protocol::parser::{Response, response};
 ///
@@ -98,8 +89,6 @@ pub fn greeting(i: &[u8]) -> IResult<&[u8], Greeting<'_>> {
 ///     Ok(([].as_ref(), vec![Response::Success { fields: vec![("foo", "bar")], binary: None }]))
 /// );
 /// ```
-///
-/// [parser support]: index.html#feature-support
 pub fn response(i: &[u8]) -> IResult<&[u8], Vec<Response<'_>>> {
     alt((
         map(error, |r| vec![r]),

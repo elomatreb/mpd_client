@@ -17,8 +17,8 @@ pub use frame::Frame;
 ///
 /// Since an error terminates a command list, there can only be one error in a response.
 ///
-/// [frames]: frame/struct.Frame.html
-/// [error]: error/struct.Error.html
+/// [frames]: frame::Frame
+/// [error]: error::Error
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Response {
     /// The sucessful responses.
@@ -27,7 +27,7 @@ pub struct Response {
     error: Option<Error>,
 }
 
-/// Errors returned when attmepting to construct an owned `Response` from a list of parser results
+/// Errors returned when attmepting to construct an owned [`Response`] from a list of parser results
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum OwnedResponseError {
     /// There were further frames after an error frame
@@ -211,9 +211,7 @@ impl<'a> TryFrom<&'a [parser::Response<'_>]> for Response {
     }
 }
 
-/// Iterator over frames in a response, as returned by [`frames()`].
-///
-/// [`frames()`]: struct.Response.html#method.frames
+/// Iterator over frames in a response, as returned by [`Response::frames`].
 #[derive(Copy, Clone, Debug)]
 pub struct FramesRef<'a> {
     response: &'a Response,
@@ -260,9 +258,7 @@ impl<'a> IntoIterator for &'a Response {
     }
 }
 
-/// Iterator over frames in a response, as returned by [`into_frames()`].
-///
-/// [`into_frames()`]: struct.Response.html#method.into_frames
+/// Iterator over frames in a response, as returned by [`Response::into_frames`].
 #[derive(Clone, Debug)]
 pub struct Frames(Response);
 

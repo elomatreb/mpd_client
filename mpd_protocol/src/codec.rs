@@ -6,8 +6,8 @@
 //! See the notes on the [`parser`] module about what responses the codec
 //! supports.
 //!
-//! [Codec]: https://docs.rs/tokio-util/0.2.0/tokio_util/codec/index.html
-//! [`parser`]: ../parser/index.html
+//! [Codec]: https://docs.rs/tokio-util/0.3.0/tokio_util/codec/index.html
+//! [`parser`]: crate::parser
 
 use bytes::{Buf, BytesMut};
 use tokio_util::codec::{Decoder, Encoder};
@@ -24,11 +24,8 @@ use crate::response::Response;
 
 /// [Codec] for MPD protocol.
 ///
-/// The `Encoder` implemention consumes [`CommandList`]s, but single commands can trivially be
-/// converted into lists and won't needlessly be wrapped.
-///
-/// [Codec]: https://docs.rs/tokio-util/0.2.0/tokio_util/codec/index.html
-/// [`CommandList`]: ../command/struct.CommandList.html
+/// [Codec]: https://docs.rs/tokio-util/0.3.0/tokio_util/codec/index.html
+/// [`CommandList`]: crate::command::CommandList
 #[derive(Clone, Debug, Default)]
 pub struct MpdCodec {
     decode_span: Option<Span>,
@@ -173,8 +170,6 @@ impl Decoder for MpdCodec {
 }
 
 /// Errors which can occur during [`MpdCodec`] operation.
-///
-/// [`MpdCodec`]: struct.MpdCodec.html
 #[derive(Debug)]
 pub enum MpdCodecError {
     /// IO error occured
@@ -199,6 +194,7 @@ impl fmt::Display for MpdCodecError {
     }
 }
 
+#[doc(hidden)]
 impl From<io::Error> for MpdCodecError {
     fn from(e: io::Error) -> Self {
         MpdCodecError::Io(e)

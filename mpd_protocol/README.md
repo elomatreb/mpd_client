@@ -20,4 +20,4 @@ This project is licensed under the GNU General Public License Version 3 or later
 
 [mpd]: https://musicpd.org
 [tokio]: https://tokio.rs
-[tokio-codec]: https://docs.rs/tokio-util/0.2.0/tokio_util/codec/index.html
+[tokio-codec]: https://docs.rs/tokio-util/0.3.0/tokio_util/codec/index.html
