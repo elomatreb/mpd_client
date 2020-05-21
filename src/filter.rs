@@ -39,21 +39,6 @@ pub const IS_ABSENT: &str = "";
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Filter(FilterType);
 
-/// Operators which can be used in filter expressions.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Operator {
-    /// Equality (`==`)
-    Equal,
-    /// Negated equality (`!=`)
-    NotEqual,
-    /// Substring matching (`contains`)
-    Contain,
-    /// Perl-style regex matching (`=~`)
-    Match,
-    /// Negated Perl-style regex matching (`!~`)
-    NotMatch,
-}
-
 /// Internal filter variant type
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum FilterType {
@@ -183,18 +168,6 @@ impl Not for Filter {
     }
 }
 
-impl Operator {
-    fn to_str(self) -> &'static str {
-        match self {
-            Operator::Equal => "==",
-            Operator::NotEqual => "!=",
-            Operator::Contain => "contains",
-            Operator::Match => "=~",
-            Operator::NotMatch => "!~",
-        }
-    }
-}
-
 impl FilterType {
     fn render(self) -> String {
         match self {
@@ -205,7 +178,7 @@ impl FilterType {
             } => format!(
                 "({} {} \"{}\")",
                 tag.as_str(),
-                operator.to_str(),
+                operator.as_str(),
                 escape_argument(&value)
             ),
             FilterType::Not(inner) => format!("(!{})", inner.render()),
@@ -239,6 +212,33 @@ impl FilterType {
 
                 out
             }
+        }
+    }
+}
+
+/// Operators which can be used in filter expressions.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Operator {
+    /// Equality (`==`)
+    Equal,
+    /// Negated equality (`!=`)
+    NotEqual,
+    /// Substring matching (`contains`)
+    Contain,
+    /// Perl-style regex matching (`=~`)
+    Match,
+    /// Negated Perl-style regex matching (`!~`)
+    NotMatch,
+}
+
+impl Operator {
+    fn as_str(&self) -> &'static str {
+        match self {
+            Operator::Equal => "==",
+            Operator::NotEqual => "!=",
+            Operator::Contain => "contains",
+            Operator::Match => "=~",
+            Operator::NotMatch => "!~",
         }
     }
 }
