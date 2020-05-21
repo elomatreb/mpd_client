@@ -52,7 +52,7 @@ enum FilterType {
 }
 
 impl Filter {
-    /// Create a filter which selects on the given [`tag`], using the given [`operator`], for the
+    /// Create a filter which selects on the given `tag`, using the given `operator`, for the
     /// given `value`.
     ///
     /// An error is returned when the given `tag` is empty, but `value` may be empty (which results
@@ -70,10 +70,7 @@ impl Filter {
     /// );
     /// ```
     ///
-    /// [`tag`]: ../enum.Tag.html
-    /// [`operator`]: enum.Operator.html
-    /// [`IS_ABSENT`]: static.IS_ABSENT.html
-    /// [`any`]: static.ANY.html
+    /// [`any`]: ANY
     pub fn new(tag: Tag, operator: Operator, value: impl Into<Cow<'static, str>>) -> Self {
         Self(FilterType::Tag {
             tag,

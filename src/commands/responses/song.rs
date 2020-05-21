@@ -13,8 +13,6 @@ use crate::commands::{SongId, SongPosition};
 use crate::tag::Tag;
 
 /// A [`Song`] in the current queue.
-///
-/// [`Song`]: struct.Song.html
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SongInQueue {
     /// Position in queue.

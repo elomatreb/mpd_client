@@ -11,8 +11,8 @@ use crate::commands::{
     responses::{self as res, SingleMode},
     Command, SongId, SongPosition,
 };
-use crate::Filter;
 use crate::tag::Tag;
+use crate::Filter;
 
 macro_rules! argless_command {
     // Utility branch to generate struct with doc expression
@@ -230,10 +230,8 @@ impl Command for Play {
 
 /// `addid` command.
 ///
-/// Add a song to the queue, returning its ID. If [`at`] is not used, the song will be appended to
+/// Add a song to the queue, returning its ID. If [`Add::at`] is not used, the song will be appended to
 /// the queue.
-///
-/// [`at`]: #method.at
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Add {
     uri: String,
@@ -438,21 +436,18 @@ impl Find {
     ///
     /// # Panics
     ///
-    /// This will panic when sending the command if you pass a malformed value using the [`Other`]
+    /// This will panic when sending the command if you pass a malformed value using the
+    /// [`Other` variant][error].
     /// variant.
     ///
     /// [0]: https://www.musicpd.org/doc/html/protocol.html#command-find
-    /// [`Other`]: responses/enum.Tag.html#variant.Other
+    /// [error]: crate::tag::Tag
     pub fn sort(mut self, sort_by: Tag) -> Self {
         self.sort = Some(sort_by);
         self
     }
 
     /// Limit the result to the given window.
-    ///
-    /// Note that when the result is not [sorted][0], this may result in an arbitrary subset.
-    ///
-    /// [0]: #method.sort
     pub fn window<R>(mut self, window: R) -> Self
     where
         R: RangeBounds<usize>,

@@ -64,14 +64,12 @@ impl Client {
     ///
     /// # Panics
     ///
-    /// This panics for the same reasons as [`connect`].
+    /// This panics for the same reasons as [`Client::connect`].
     ///
     /// # Errors
     ///
-    /// This returns errors in the same conditions as [`connect`], and if connecting to the given
+    /// This returns errors in the same conditions as [`Client::connect`], and if connecting to the given
     /// TCP address fails for any reason.
-    ///
-    /// [`connect`]: #method.connect
     pub async fn connect_to<A: ToSocketAddrs + Debug>(address: A) -> ConnectResult {
         let span = span!(Level::DEBUG, "client connection", tcp_addr = ?address);
         let connection = TcpStream::connect(address).await?;
@@ -83,14 +81,12 @@ impl Client {
     ///
     /// # Panics
     ///
-    /// This panics for the same reasons as [`connect`].
+    /// This panics for the same reasons as [`Client::connect`].
     ///
     /// # Errors
     ///
-    /// This returns errors in the same conditions as [`connect`], and if connecting to the Unix
+    /// This returns errors in the same conditions as [`Client::connect`], and if connecting to the Unix
     /// socket at the given address fails for any reason.
-    ///
-    /// [`connect`]: #method.connect
     #[cfg(unix)]
     pub async fn connect_unix<P: AsRef<Path>>(path: P) -> ConnectResult {
         let span = span!(Level::DEBUG, "client connection", unix_addr = ?path.as_ref());
@@ -104,7 +100,7 @@ impl Client {
     /// Since this method is generic over the connection type it can be used to connect to either a
     /// TCP or Unix socket dynamically or e.g. use a proxy.
     ///
-    /// See also [`connect_to`] and [`connect_unix`] for the common connection case.
+    /// See also [`Client::connect_to`] and [`Client::connect_unix`] for the common connection case.
     ///
     /// # Panics
     ///
@@ -113,9 +109,6 @@ impl Client {
     /// # Errors
     ///
     /// This will return an error if sending the initial commands over the given transport fails.
-    ///
-    /// [`connect_to`]: #method.connect_to
-    /// [`connect_unix`]: #method.connect_unix
     pub async fn connect<C>(connection: C) -> ConnectResult
     where
         C: AsyncRead + AsyncWrite + Send + Unpin + 'static,
@@ -129,11 +122,10 @@ impl Client {
     ///
     /// # Errors
     ///
-    /// This returns errors in the same conditions as [`raw_command`], and additionally if the
+    /// This returns errors in the same conditions as [`Client::raw_command`], and additionally if the
     /// response fails to convert to the expected type.
     ///
-    /// [command]: commands/index.html
-    /// [`raw_command`]: #method.raw_command
+    /// [command]: super::commands
     pub async fn command<C>(&self, cmd: C) -> Result<C::Response, CommandError>
     where
         C: commands::Command,
@@ -163,12 +155,13 @@ impl Client {
     ///
     /// # Errors
     ///
-    /// Errors will be returned in the same conditions as with [`command`], but if *any* of the
-    /// commands in the list return an error condition, the entire list will be treated as an
-    /// error. You may recover possible succesful fields in a response from the [error variant].
+    /// Errors will be returned in the same conditions as with [`Client::raw_command`], but if
+    /// *any* of the commands in the list return an error condition, the entire list will be
+    /// treated as an error.
     ///
-    /// [`command`]: #method.command
-    /// [error variant]: ../errors/enum.CommandError.html#variant.ErrorResponse
+    /// You may recover possible succesful fields in a response from the [error].
+    ///
+    /// [error]: crate::errors::CommandError::ErrorResponse
     pub async fn command_list(&self, commands: CommandList) -> Result<Vec<Frame>, CommandError> {
         let res = self.do_send(commands).await?;
         let mut frames = Vec::with_capacity(res.len());

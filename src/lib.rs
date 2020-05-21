@@ -1,10 +1,11 @@
 #![warn(
+    intra_doc_link_resolution_failure,
     missing_debug_implementations,
     missing_docs,
     rust_2018_idioms,
     unreachable_pub,
     unused_import_braces,
-    unused_qualifications
+    unused_qualifications,
 )]
 #![forbid(unsafe_code)]
 

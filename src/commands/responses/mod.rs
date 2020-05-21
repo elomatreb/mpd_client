@@ -24,7 +24,9 @@ pub trait Response: Sized + sealed::Sealed {
     fn convert(frame: Frame) -> Result<Self, TypedResponseError>;
 }
 
-/// Error returned when failing to convert a raw `Frame` into the proper typed response.
+/// Error returned when failing to convert a raw [`Frame`] into the proper typed response.
+///
+/// [`Frame`]: crate::Frame
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TypedResponseError {
     field: &'static str,

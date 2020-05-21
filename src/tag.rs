@@ -13,7 +13,7 @@ use std::fmt;
 /// **Manually** constructing a tag with the `Other` variant may result in protocols errors if the
 /// tag is invalid. Use the `TryFrom` implementation for checked conversion.
 ///
-/// [`Song`]: ../commands/responses/struct.Song.html
+/// [`Song`]: crate::commands::responses::Song
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 #[allow(missing_docs)]
 pub enum Tag {
@@ -134,7 +134,7 @@ impl<'a> TryFrom<&'a str> for Tag {
 
 /// Errors that may occur when attempting to create a [`Tag`].
 ///
-/// [`Tag`]: enum.Tag.html
+/// [`Tag`]: crate::tag::Tag
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TagError {
     /// The raw tag was empty.

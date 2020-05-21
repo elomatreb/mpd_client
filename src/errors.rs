@@ -23,7 +23,7 @@ pub enum CommandError {
         /// Possible sucessful frames in the same response, empty if not in a command list
         succesful_frames: Vec<Frame>,
     },
-    /// A [typed command](commands/index.html) failed to parse its response.
+    /// A [typed command](crate::commands) failed to parse its response.
     InvalidTypedResponse(TypedResponseError),
 }
 
