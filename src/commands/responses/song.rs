@@ -71,6 +71,36 @@ impl Song {
         Path::new(&self.url)
     }
 
+    /// Get all artists of the song.
+    pub fn artists(&self) -> &[String] {
+        self.tag_values(&Tag::Artist)
+    }
+
+    /// Get all album artists of the song.
+    pub fn album_artists(&self) -> &[String] {
+        self.tag_values(&Tag::AlbumArtist)
+    }
+
+    /// Get the album of the song.
+    pub fn album(&self) -> Option<&str> {
+        self.single_tag_value(&Tag::Album)
+    }
+
+    /// Get the title of the song.
+    pub fn title(&self) -> Option<&str> {
+        self.single_tag_value(&Tag::Title)
+    }
+
+    /// Get the track and disc number of the song.
+    ///
+    /// If either are not set on the song, 0 is returned. This is a utility for sorting.
+    pub fn number(&self) -> (u64, u64) {
+        let track = parse_number(self.single_tag_value(&Tag::Track));
+        let disc = parse_number(self.single_tag_value(&Tag::Disc));
+
+        (track, disc)
+    }
+
     pub(super) fn parse_frame(
         frame: Frame,
         max_count: Option<usize>,
@@ -94,6 +124,27 @@ impl Song {
             duration: None,
             tags: HashMap::new(),
         }
+    }
+
+    fn tag_values(&self, tag: &Tag) -> &[String] {
+        match self.tags.get(tag) {
+            Some(v) => v.as_slice(),
+            None => &[],
+        }
+    }
+
+    fn single_tag_value(&self, tag: &Tag) -> Option<&str> {
+        match self.tag_values(tag) {
+            [] => None,
+            [v, ..] => Some(v),
+        }
+    }
+}
+
+fn parse_number(val: Option<&str>) -> u64 {
+    match val {
+        None => 0,
+        Some(v) => v.parse().unwrap_or(0),
     }
 }
 

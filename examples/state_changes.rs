@@ -2,7 +2,7 @@ use std::error::Error;
 use tokio::stream::StreamExt; // for .next()
 use tracing_subscriber::{EnvFilter, FmtSubscriber};
 
-use mpd_client::{commands, Client, Subsystem, Tag};
+use mpd_client::{commands, Client, Subsystem};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -37,18 +37,8 @@ async fn print_current_song(client: &Client) -> Result<(), Box<dyn Error>> {
         Some(song_in_queue) => {
             println!(
                 "\"{}\" by \"{}\"",
-                song_in_queue
-                    .song
-                    .tags
-                    .get(&Tag::Title)
-                    .map(|values| values.join(", "))
-                    .unwrap_or_else(|| "(none)".to_string()),
-                song_in_queue
-                    .song
-                    .tags
-                    .get(&Tag::Artist)
-                    .map(|values| values.join(", "))
-                    .unwrap_or_else(|| "(none)".to_string()),
+                song_in_queue.song.title().unwrap_or(""),
+                song_in_queue.song.artists().join(", "),
             );
         }
         None => println!("(none)"),
