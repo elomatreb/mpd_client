@@ -53,9 +53,11 @@ impl SongInQueue {
 /// A single song, as returned by the playlist or current song commands.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Song {
-    /// Raw `file` key as returned by MPD. This may be a file path relative to the library root, or
-    /// a full URL to some remote resource.
-    pub file: String,
+    /// Unique identifier of the song. May be a file path relative to the library root, or an URL
+    /// to a remote resource.
+    ///
+    /// This is the `file` key as returned by MPD.
+    pub url: String,
     /// The `duration` as returned by MPD.
     pub duration: Option<Duration>,
     /// Tags in this response.
@@ -66,7 +68,7 @@ impl Song {
     /// Get the file as a `Path`. Note that if the file is a remote URL, operations on the result
     /// will give unexpected results.
     pub fn file_path(&self) -> &Path {
-        Path::new(&self.file)
+        Path::new(&self.url)
     }
 
     pub(super) fn parse_frame(
@@ -86,9 +88,9 @@ impl Song {
         .collect()
     }
 
-    fn new(file: String) -> Self {
+    fn new(url: String) -> Self {
         Self {
-            file,
+            url,
             duration: None,
             tags: HashMap::new(),
         }
