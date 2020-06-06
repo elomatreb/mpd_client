@@ -196,7 +196,7 @@ impl Client {
         C: AsyncRead + AsyncWrite + Unpin + Send + 'static,
     {
         let (state_changes_sender, state_changes) = mpsc::unbounded_channel();
-        let (commands_sender, commands_receiver) = mpsc::channel(1);
+        let (commands_sender, commands_receiver) = mpsc::channel(2);
 
         trace!("sending initial idle command");
         let mut connection = MpdCodec::new().framed(connection);
