@@ -5,8 +5,6 @@ mod util_macros;
 
 mod song;
 
-use mpd_protocol::response::Frame;
-
 use std::error::Error;
 use std::fmt;
 use std::num::{ParseFloatError, ParseIntError};
@@ -14,6 +12,7 @@ use std::time::Duration;
 
 use crate::commands::{SongId, SongPosition};
 use crate::sealed;
+use crate::raw::Frame;
 pub use song::{Song, SongInQueue};
 
 /// "Marker" trait for responses to commands.
@@ -26,7 +25,7 @@ pub trait Response: Sized + sealed::Sealed {
 
 /// Error returned when failing to convert a raw [`Frame`] into the proper typed response.
 ///
-/// [`Frame`]: crate::Frame
+/// [`Frame`]: crate::raw::Frame
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TypedResponseError {
     field: &'static str,

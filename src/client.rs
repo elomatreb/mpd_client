@@ -26,8 +26,8 @@ use std::path::Path;
 
 use crate::commands::{responses::Response, Command};
 use crate::errors::{CommandError, StateChangeError};
+use crate::raw::{Frame, MpdCodecError, RawCommand, RawCommandList};
 use crate::state_changes::{StateChanges, Subsystem};
-use crate::{CommandList, Frame, MpdCodecError, RawCommand};
 
 type CommandResponder = oneshot::Sender<Result<RawResponse, CommandError>>;
 type StateChangesSender = UnboundedSender<Result<Subsystem, StateChangeError>>;
@@ -56,7 +56,7 @@ pub type ConnectResult = Result<(Client, StateChanges), MpdCodecError>;
 /// ```
 #[derive(Clone, Debug)]
 pub struct Client {
-    commands_sender: Sender<(CommandList, CommandResponder)>,
+    commands_sender: Sender<(RawCommandList, CommandResponder)>,
     span: Span,
 }
 
@@ -154,7 +154,7 @@ impl Client {
         let mut commands = list.into_iter().map(|c| c.to_command());
 
         let mut command_list = match commands.next() {
-            Some(c) => CommandList::new(c),
+            Some(c) => RawCommandList::new(c),
             None => return Ok(Vec::new()),
         };
 
@@ -176,7 +176,7 @@ impl Client {
     /// This will return an error if the connection to MPD is closed (cleanly) or a protocol error
     /// occurs (including IO errors), or if the command results in an MPD error.
     pub async fn raw_command(&self, command: RawCommand) -> Result<Frame, CommandError> {
-        self.do_send(CommandList::new(command))
+        self.do_send(RawCommandList::new(command))
             .await?
             .single_frame()
             .map_err(Into::into)
@@ -195,7 +195,7 @@ impl Client {
     /// [error]: crate::errors::CommandError::ErrorResponse
     pub async fn raw_command_list(
         &self,
-        commands: CommandList,
+        commands: RawCommandList,
     ) -> Result<Vec<Frame>, CommandError> {
         let res = self.do_send(commands).await?;
         let mut frames = Vec::with_capacity(res.len());
@@ -215,7 +215,7 @@ impl Client {
         Ok(frames)
     }
 
-    async fn do_send(&self, commands: CommandList) -> Result<RawResponse, CommandError> {
+    async fn do_send(&self, commands: RawCommandList) -> Result<RawResponse, CommandError> {
         trace!(?commands, "do_send");
         let (tx, rx) = oneshot::channel();
 
@@ -259,7 +259,7 @@ impl Client {
 struct State<C> {
     loop_state: LoopState,
     connection: Framed<C, MpdCodec>,
-    commands: Receiver<(CommandList, CommandResponder)>,
+    commands: Receiver<(RawCommandList, CommandResponder)>,
     state_changes: StateChangesSender,
 }
 
@@ -279,7 +279,7 @@ fn cancel_idle() -> RawCommand {
 
 async fn run_loop<C>(
     connection: Framed<C, MpdCodec>,
-    commands: Receiver<(CommandList, CommandResponder)>,
+    commands: Receiver<(RawCommandList, CommandResponder)>,
     state_changes: StateChangesSender,
 ) where
     C: AsyncRead + AsyncWrite + Unpin,
@@ -534,7 +534,7 @@ mod tests {
 
         let (client, _state_changes) = Client::connect(io).await.expect("connect failed");
 
-        let mut commands = CommandList::new(RawCommand::new("foo"));
+        let mut commands = RawCommandList::new(RawCommand::new("foo"));
         commands.add(RawCommand::new("bar"));
 
         let responses = client

@@ -1,6 +1,6 @@
 //! Definitions of commands.
 
-use mpd_protocol::{command::Argument, Command as RawCommand};
+use mpd_protocol::command::Argument;
 
 use std::borrow::Cow;
 use std::cmp::min;
@@ -11,6 +11,7 @@ use crate::commands::{
     responses::{self as res, SingleMode},
     Command, SongId, SongPosition,
 };
+use crate::raw::RawCommand;
 use crate::tag::Tag;
 use crate::Filter;
 

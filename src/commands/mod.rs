@@ -15,6 +15,8 @@ use std::borrow::Cow;
 
 use mpd_protocol::command::Argument;
 
+use crate::raw::RawCommand;
+
 pub use definitions::*;
 use responses::Response;
 
@@ -58,5 +60,5 @@ pub trait Command {
     type Response: Response;
 
     /// Create the "raw" command representation for transmission.
-    fn to_command(self) -> mpd_protocol::Command;
+    fn to_command(self) -> RawCommand;
 }

@@ -1,13 +1,10 @@
-use mpd_protocol::{
-    response::{Error as ErrorResponse, Frame},
-    MpdCodecError,
-};
 use tokio::sync::{mpsc::error::SendError, oneshot::error::RecvError};
 
 use std::error::Error;
 use std::fmt;
 
 use crate::commands::responses::TypedResponseError;
+use crate::raw::{ErrorResponse, Frame, MpdCodecError};
 
 /// Errors which can occur when issuing a command.
 #[derive(Debug)]

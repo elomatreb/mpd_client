@@ -5,7 +5,7 @@
     rust_2018_idioms,
     unreachable_pub,
     unused_import_braces,
-    unused_qualifications,
+    unused_qualifications
 )]
 #![forbid(unsafe_code)]
 
@@ -25,11 +25,13 @@ pub use filter::Filter;
 pub use state_changes::Subsystem;
 pub use tag::Tag;
 
-pub use mpd_protocol::{
-    command_list,
-    response::{Error as ErrorResponse, Frame},
-    Command as RawCommand, CommandList, MpdCodecError,
-};
+/// Protocol-level types.
+pub mod raw {
+    pub use mpd_protocol::{
+        response::{Error as ErrorResponse, Frame},
+        Command as RawCommand, CommandList as RawCommandList, MpdCodecError,
+    };
+}
 
 mod sealed {
     pub trait Sealed {}
