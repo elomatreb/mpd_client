@@ -5,7 +5,7 @@ use futures::{
     sink::SinkExt,
     stream::StreamExt,
 };
-use mpd_protocol::{MpdCodec, Response};
+use mpd_protocol::{MpdCodec, Response as RawResponse};
 use tokio::{
     io::{AsyncRead, AsyncWrite},
     net::{TcpStream, ToSocketAddrs},
@@ -24,11 +24,12 @@ use tokio::net::UnixStream;
 use std::fmt::Debug;
 use std::path::Path;
 
+use crate::commands::{responses::Response, Command};
 use crate::errors::{CommandError, StateChangeError};
 use crate::state_changes::{StateChanges, Subsystem};
-use crate::{commands, CommandList, Frame, MpdCodecError, RawCommand};
+use crate::{CommandList, Frame, MpdCodecError, RawCommand};
 
-type CommandResponder = oneshot::Sender<Result<Response, CommandError>>;
+type CommandResponder = oneshot::Sender<Result<RawResponse, CommandError>>;
 type StateChangesSender = UnboundedSender<Result<Subsystem, StateChangeError>>;
 
 /// Result returned by a connection attempt.
@@ -128,14 +129,44 @@ impl Client {
     /// [command]: super::commands
     pub async fn command<C>(&self, cmd: C) -> Result<C::Response, CommandError>
     where
-        C: commands::Command,
+        C: Command,
     {
-        use crate::commands::responses::Response;
-
         let command = cmd.to_command();
         let frame = self.raw_command(command).await?;
 
         Ok(Response::convert(frame)?)
+    }
+
+    /// Send the given command list, and return the (typed) responses.
+    ///
+    /// The results will be returned in the same order as the input commands. If the input is
+    /// empty, this will return an empty `Vec` immediately.
+    ///
+    /// # Errors
+    ///
+    /// This returns errors in the same conditions as [`Client::raw_command_list`], and
+    /// additionally if the response type conversion fails.
+    pub async fn command_list<L, C>(&self, list: L) -> Result<Vec<C::Response>, CommandError>
+    where
+        L: IntoIterator<Item = C>,
+        C: Command,
+    {
+        let mut commands = list.into_iter().map(|c| c.to_command());
+
+        let mut command_list = match commands.next() {
+            Some(c) => CommandList::new(c),
+            None => return Ok(Vec::new()),
+        };
+
+        command_list.extend(commands);
+
+        let frames = self.raw_command_list(command_list).await?;
+
+        frames
+            .into_iter()
+            .map(Response::convert)
+            .collect::<Result<_, _>>()
+            .map_err(Into::into)
     }
 
     /// Send the given command, and return the response to it.
@@ -151,7 +182,7 @@ impl Client {
             .map_err(Into::into)
     }
 
-    /// Send the given command list, and return the responses to the contained commands.
+    /// Send the given command list, and return the raw response frames to the contained commands.
     ///
     /// # Errors
     ///
@@ -162,7 +193,10 @@ impl Client {
     /// You may recover possible succesful fields in a response from the [error].
     ///
     /// [error]: crate::errors::CommandError::ErrorResponse
-    pub async fn command_list(&self, commands: CommandList) -> Result<Vec<Frame>, CommandError> {
+    pub async fn raw_command_list(
+        &self,
+        commands: CommandList,
+    ) -> Result<Vec<Frame>, CommandError> {
         let res = self.do_send(commands).await?;
         let mut frames = Vec::with_capacity(res.len());
 
@@ -181,7 +215,7 @@ impl Client {
         Ok(frames)
     }
 
-    async fn do_send(&self, commands: CommandList) -> Result<Response, CommandError> {
+    async fn do_send(&self, commands: CommandList) -> Result<RawResponse, CommandError> {
         trace!(?commands, "do_send");
         let (tx, rx) = oneshot::channel();
 
@@ -394,7 +428,7 @@ where
     Some(state)
 }
 
-fn response_to_subsystem(res: Response) -> Result<Option<Subsystem>, StateChangeError> {
+fn response_to_subsystem(res: RawResponse) -> Result<Option<Subsystem>, StateChangeError> {
     let mut frame = res.single_frame()?;
 
     Ok(match frame.get("changed") {
@@ -503,7 +537,10 @@ mod tests {
         let mut commands = CommandList::new(RawCommand::new("foo"));
         commands.add(RawCommand::new("bar"));
 
-        let responses = client.command_list(commands).await.expect("command failed");
+        let responses = client
+            .raw_command_list(commands)
+            .await
+            .expect("command failed");
 
         assert_eq!(responses.len(), 2);
         assert_eq!(responses[0].find("foo"), Some("asdf"));
