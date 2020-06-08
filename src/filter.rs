@@ -9,29 +9,7 @@ use mpd_protocol::command::{escape_argument, Argument};
 
 use crate::Tag;
 
-/// Special tag which checks *all* tag types.
-///
-/// Provided here to avoid typos.
-///
-/// ```
-/// use mpd_client::{Tag, filter::{Filter, ANY}};
-///
-/// // Filter for songs where *any* tag equals the word "foo".
-/// Filter::tag(ANY, "foo");
-/// ```
-pub const ANY: &str = "any";
-
-/// Magic value which checks for the absence of the tag with which it is used.
-///
-/// Provided here to have more apparent meaning than a simple empty string literal.
-///
-/// ```
-/// use mpd_client::{Tag, filter::{Filter, IS_ABSENT}};
-///
-/// // Filter for songs without an Artist tag.
-/// Filter::tag(Tag::Artist, IS_ABSENT);
-/// ```
-pub const IS_ABSENT: &str = "";
+const TAG_IS_ABSENT: &str = "";
 
 /// A [filter expression].
 ///
@@ -55,10 +33,7 @@ impl Filter {
     /// Create a filter which selects on the given `tag`, using the given `operator`, for the
     /// given `value`.
     ///
-    /// An error is returned when the given `tag` is empty, but `value` may be empty (which results
-    /// in the filter only matching if the `tag` is **not** present, see also [`IS_ABSENT`]).
-    ///
-    /// The magic value [`any`] checks for the value in any tag.
+    /// See also [`Tag::any()`].
     ///
     /// ```
     /// use mpd_protocol::command::Argument;
@@ -69,8 +44,6 @@ impl Filter {
     ///     "(Artist == \"foo\\\'s bar\\\"\")"
     /// );
     /// ```
-    ///
-    /// [`any`]: ANY
     pub fn new(tag: Tag, operator: Operator, value: impl Into<Cow<'static, str>>) -> Self {
         Self(FilterType::Tag {
             tag,
@@ -94,6 +67,16 @@ impl Filter {
     /// ```
     pub fn tag(tag: Tag, value: impl Into<Cow<'static, str>>) -> Self {
         Filter::new(tag, Operator::Equal, value)
+    }
+
+    /// Create a filter which checks for the existence of `tag` (with any value).
+    pub fn tag_exists(tag: Tag) -> Self {
+        Filter::new(tag, Operator::NotEqual, TAG_IS_ABSENT)
+    }
+
+    /// Create a filter which checks for the absence of `tag`.
+    pub fn tag_absent(tag: Tag) -> Self {
+        Filter::new(tag, Operator::Equal, TAG_IS_ABSENT)
     }
 
     /// Negate the filter.

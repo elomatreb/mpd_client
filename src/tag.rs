@@ -10,6 +10,8 @@ use std::fmt;
 /// MusicBrainz tags are named differently from how they appear in the protocol to better reflect
 /// their actual purpose.
 ///
+/// # Tag validity
+///
 /// **Manually** constructing a tag with the `Other` variant may result in protocols errors if the
 /// tag is invalid. Use the `TryFrom` implementation for checked conversion.
 ///
@@ -44,6 +46,13 @@ pub enum Tag {
 }
 
 impl Tag {
+    /// Creates a tag for [filtering] which will match *any* tag.
+    ///
+    /// [filtering]: crate::filter::Filter
+    pub fn any() -> Self {
+        Self::Other("any".into())
+    }
+
     pub(crate) fn as_str(&self) -> Cow<'static, str> {
         if let Tag::Other(raw) = self {
             return Cow::Owned(raw.to_string());
