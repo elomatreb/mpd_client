@@ -15,9 +15,16 @@ use std::fmt;
 /// **Manually** constructing a tag with the `Other` variant may result in protocols errors if the
 /// tag is invalid. Use the `TryFrom` implementation for checked conversion.
 ///
+/// # Unknown tags
+///
+/// When parsing or constructing responses, tags not recognized by this type will be stored as they
+/// are encountered using the `Other` variant. Additionally the enum is marked as non-exhaustive,
+/// so additional tags may be added without breaking compatibility.
+///
 /// [`Song`]: crate::commands::responses::Song
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 #[allow(missing_docs)]
+#[non_exhaustive]
 pub enum Tag {
     Album,
     AlbumSort,
