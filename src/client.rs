@@ -134,7 +134,7 @@ impl Client {
         let command = cmd.to_command();
         let frame = self.raw_command(command).await?;
 
-        Ok(Response::convert(frame)?)
+        Ok(Response::from_frame(frame)?)
     }
 
     /// Send the given command list, and return the (typed) responses.
@@ -164,7 +164,7 @@ impl Client {
 
         frames
             .into_iter()
-            .map(Response::convert)
+            .map(Response::from_frame)
             .collect::<Result<_, _>>()
             .map_err(Into::into)
     }

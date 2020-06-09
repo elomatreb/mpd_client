@@ -19,8 +19,8 @@ pub use song::{Song, SongInQueue};
 ///
 /// This is sealed, so it cannot be implemented.
 pub trait Response: Sized + sealed::Sealed {
-    #[doc(hidden)]
-    fn convert(frame: Frame) -> Result<Self, TypedResponseError>;
+    /// Attempt to convert the raw [`Frame`] into the response type.
+    fn from_frame(frame: Frame) -> Result<Self, TypedResponseError>;
 }
 
 /// Error returned when failing to convert a raw [`Frame`] into the proper typed response.
@@ -80,7 +80,7 @@ pub type Empty = ();
 
 impl sealed::Sealed for Empty {}
 impl Response for Empty {
-    fn convert(_: Frame) -> Result<Self, TypedResponseError> {
+    fn from_frame(_: Frame) -> Result<Self, TypedResponseError> {
         // silently ignore any actually existing fields
         Ok(())
     }
@@ -128,7 +128,7 @@ pub struct Status {
 
 impl sealed::Sealed for Status {}
 impl Response for Status {
-    fn convert(mut raw: Frame) -> Result<Self, TypedResponseError> {
+    fn from_frame(mut raw: Frame) -> Result<Self, TypedResponseError> {
         let single = match raw.get("single") {
             None => SingleMode::Disabled,
             Some(val) => match val.as_str() {
@@ -183,7 +183,7 @@ pub struct Stats {
 
 impl sealed::Sealed for Stats {}
 impl Response for Stats {
-    fn convert(mut raw: Frame) -> Result<Self, TypedResponseError> {
+    fn from_frame(mut raw: Frame) -> Result<Self, TypedResponseError> {
         Ok(Self {
             artists: field!(raw, "artists" integer),
             albums: field!(raw, "albums" integer),
@@ -198,7 +198,7 @@ impl Response for Stats {
 
 impl sealed::Sealed for Option<SongInQueue> {}
 impl Response for Option<SongInQueue> {
-    fn convert(raw: Frame) -> Result<Self, TypedResponseError> {
+    fn from_frame(raw: Frame) -> Result<Self, TypedResponseError> {
         let mut vec = SongInQueue::parse_frame(raw, Some(1))?;
         Ok(vec.pop())
     }
@@ -206,21 +206,21 @@ impl Response for Option<SongInQueue> {
 
 impl sealed::Sealed for Vec<SongInQueue> {}
 impl Response for Vec<SongInQueue> {
-    fn convert(raw: Frame) -> Result<Self, TypedResponseError> {
+    fn from_frame(raw: Frame) -> Result<Self, TypedResponseError> {
         Ok(SongInQueue::parse_frame(raw, None)?)
     }
 }
 
 impl sealed::Sealed for Vec<Song> {}
 impl Response for Vec<Song> {
-    fn convert(raw: Frame) -> Result<Self, TypedResponseError> {
+    fn from_frame(raw: Frame) -> Result<Self, TypedResponseError> {
         Ok(Song::parse_frame(raw, None)?)
     }
 }
 
 impl sealed::Sealed for SongId {}
 impl Response for SongId {
-    fn convert(mut raw: Frame) -> Result<Self, TypedResponseError> {
+    fn from_frame(mut raw: Frame) -> Result<Self, TypedResponseError> {
         Ok(SongId(field!(raw, "Id" integer)))
     }
 }
