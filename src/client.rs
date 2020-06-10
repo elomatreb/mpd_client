@@ -465,7 +465,6 @@ fn response_to_subsystem(res: RawResponse) -> Result<Option<Subsystem>, StateCha
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::time::Duration;
     use tokio_test::{assert_ok, io::Builder as MockBuilder};
 
     static GREETING: &[u8] = b"OK MPD 0.21.11\n";
@@ -523,7 +522,6 @@ mod tests {
             .read(b"OK\n")
             .write(b"hello\n")
             .read(b"foo: bar\n")
-            .wait(Duration::from_secs(2))
             .read(b"baz: qux\nOK\n")
             .write(b"idle\n")
             .build();
