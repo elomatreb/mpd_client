@@ -24,7 +24,7 @@ use tokio::net::UnixStream;
 use std::fmt::Debug;
 use std::path::Path;
 
-use crate::commands::{responses::Response, Command};
+use crate::commands::{self as cmds, responses::Response, Command};
 use crate::errors::{CommandError, StateChangeError};
 use crate::raw::{Frame, MpdCodecError, RawCommand, RawCommandList};
 use crate::state_changes::{StateChanges, Subsystem};
@@ -167,6 +167,25 @@ impl Client {
             .map(Response::from_frame)
             .collect::<Result<_, _>>()
             .map_err(Into::into)
+    }
+
+    /// Send the connection password, if necessary.
+    ///
+    /// If the MPD instance the `Client` is connected to is protected by a password, sending
+    /// commands may result in "Permission denied" errors prior to sending the correct password.
+    ///
+    /// This will not send anything if `None` is passed.
+    ///
+    /// # Errors
+    ///
+    /// Sending an incorrect password will result in a [`CommandError::ErrorResponse`], any other
+    /// errors are returned in the same conditions as [`Client::raw_command`].
+    pub async fn password(&self, password: Option<String>) -> Result<(), CommandError> {
+        if let Some(pw) = password {
+            self.command(cmds::Password(pw)).await
+        } else {
+            Ok(())
+        }
     }
 
     /// Send the given command, and return the response to it.

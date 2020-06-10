@@ -81,6 +81,8 @@ single_arg_command!(SetConsume, bool, "consume", res::Empty);
 single_arg_command!(SetRepeat, bool, "repeat", res::Empty);
 single_arg_command!(SetPause, bool, "pause", res::Empty);
 
+single_arg_command!(Password, String, "password", res::Empty);
+
 /// `crossfade` command.
 ///
 /// The given duration is truncated to the seconds.
