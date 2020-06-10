@@ -11,8 +11,8 @@ use std::num::{ParseFloatError, ParseIntError};
 use std::time::Duration;
 
 use crate::commands::{SongId, SongPosition};
-use crate::sealed;
 use crate::raw::Frame;
+use crate::sealed;
 pub use song::{Song, SongInQueue};
 
 /// "Marker" trait for responses to commands.

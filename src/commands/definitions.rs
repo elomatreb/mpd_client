@@ -9,7 +9,7 @@ use std::time::Duration;
 
 use crate::commands::{
     responses::{self as res, SingleMode},
-    Command, SongId, SongPosition,
+    Command, SeekMode, Song, SongId, SongPosition,
 };
 use crate::raw::RawCommand;
 use crate::tag::Tag;
@@ -131,27 +131,6 @@ impl Command for SetSingle {
     }
 }
 
-/// Modes to target a song with a command.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Song {
-    /// By ID
-    Id(SongId),
-    /// By position in the queue.
-    Position(SongPosition),
-}
-
-impl From<SongId> for Song {
-    fn from(id: SongId) -> Self {
-        Self::Id(id)
-    }
-}
-
-impl From<SongPosition> for Song {
-    fn from(pos: SongPosition) -> Self {
-        Self::Position(pos)
-    }
-}
-
 /// `seek` and `seekid` commands.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SeekTo(pub Song, pub Duration);
@@ -167,17 +146,6 @@ impl Command for SeekTo {
 
         command.argument(self.1)
     }
-}
-
-/// Possible ways to seek in the current song.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum SeekMode {
-    /// Forwards from current position.
-    Forward(Duration),
-    /// Backwards from current position.
-    Backward(Duration),
-    /// To the absolute position in the current song.
-    Absolute(Duration),
 }
 
 /// `seekcur` command.

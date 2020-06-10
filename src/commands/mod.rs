@@ -8,10 +8,11 @@
 //!
 //! [0]: https://www.musicpd.org/doc/html/protocol.html#command-reference
 
-mod definitions;
+pub mod definitions;
 pub mod responses;
 
 use std::borrow::Cow;
+use std::time::Duration;
 
 use mpd_protocol::command::Argument;
 
@@ -51,6 +52,38 @@ impl From<usize> for SongPosition {
 impl Argument for SongPosition {
     fn render(self) -> Cow<'static, str> {
         Cow::Owned(self.0.to_string())
+    }
+}
+
+/// Possible ways to seek in the current song.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SeekMode {
+    /// Forwards from current position.
+    Forward(Duration),
+    /// Backwards from current position.
+    Backward(Duration),
+    /// To the absolute position in the current song.
+    Absolute(Duration),
+}
+
+/// Modes to target a song with a command.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Song {
+    /// By ID
+    Id(SongId),
+    /// By position in the queue.
+    Position(SongPosition),
+}
+
+impl From<SongId> for Song {
+    fn from(id: SongId) -> Self {
+        Self::Id(id)
+    }
+}
+
+impl From<SongPosition> for Song {
+    fn from(pos: SongPosition) -> Self {
+        Self::Position(pos)
     }
 }
 
