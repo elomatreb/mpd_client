@@ -13,7 +13,8 @@ use std::time::Duration;
 use crate::commands::{SongId, SongPosition};
 use crate::raw::Frame;
 use crate::sealed;
-pub use song::{Song, SongInQueue};
+
+pub use song::{Song, SongInQueue, SongRange};
 
 /// "Marker" trait for responses to commands.
 ///

@@ -1,5 +1,6 @@
 use mpd_protocol::response::Frame;
 
+use std::cmp;
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::iter;
@@ -19,8 +20,19 @@ pub struct SongInQueue {
     pub position: SongPosition,
     /// ID in queue.
     pub id: SongId,
+    /// The range of the song that will be played.
+    pub range: Option<SongRange>,
     /// The song.
     pub song: Song,
+}
+
+/// Range used when playing only part of a [`Song`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SongRange {
+    /// Start playback at this timestamp.
+    pub from: Duration,
+    /// End at this timestamp (if the end is known).
+    pub to: Option<Duration>,
 }
 
 impl SongInQueue {
@@ -39,7 +51,16 @@ impl SongInQueue {
         .take(max_count)
         .map(|res| {
             res.and_then(|(song, identifier)| match identifier {
-                Some((position, id)) => Ok(SongInQueue { position, id, song }),
+                Some(SongQueueData {
+                    position,
+                    id,
+                    range,
+                }) => Ok(SongInQueue {
+                    position,
+                    id,
+                    song,
+                    range,
+                }),
                 None => Err(TypedResponseError {
                     field: "Id",
                     kind: ErrorKind::Missing,
@@ -152,11 +173,18 @@ struct SongIter<'a, I: Iterator> {
     fields: &'a mut iter::Peekable<I>,
 }
 
+/// Utility struct that holds the intermediate results for a [`SongInQueue`].
+struct SongQueueData {
+    position: SongPosition,
+    id: SongId,
+    range: Option<SongRange>,
+}
+
 impl<'a, I> Iterator for SongIter<'a, I>
 where
     I: Iterator<Item = (Arc<str>, String)>,
 {
-    type Item = Result<(Song, Option<(SongPosition, SongId)>), TypedResponseError>;
+    type Item = Result<(Song, Option<SongQueueData>), TypedResponseError>;
 
     fn next(&mut self) -> Option<Self::Item> {
         let (key, value) = self.fields.next()?;
@@ -172,6 +200,7 @@ where
 
         let mut song_pos = None;
         let mut song_id = None;
+        let mut range = None;
 
         loop {
             match self.fields.peek() {
@@ -196,8 +225,14 @@ where
                         }))
                     }
                 },
+                "Range" => {
+                    range = match parse_range_field(value) {
+                        Ok(r) => Some(r),
+                        Err(e) => return Some(Err(e)),
+                    }
+                }
                 // Ignored keys for now
-                "Last-Modified" | "Time" | "Range" | "Format" => (),
+                "Last-Modified" | "Time" | "Format" => (),
                 "Pos" => match value.parse() {
                     Ok(v) => song_pos = Some(SongPosition(v)),
                     Err(e) => return Some(Err(parse_field_error("Pos", e))),
@@ -214,18 +249,95 @@ where
             }
         }
 
-        let identifier = match (song_pos, song_id) {
-            (Some(pos), Some(id)) => Some((pos, id)),
+        let range = range.map(|(from, to)| {
+            // Clamp range to end of song if known
+            let to = cmp::max(to, song.duration);
+
+            SongRange { from, to }
+        });
+
+        let queue_data = match (song_pos, song_id) {
+            (Some(position), Some(id)) => Some(SongQueueData {
+                position,
+                id,
+                range,
+            }),
             _ => None,
         };
 
-        Some(Ok((song, identifier)))
+        Some(Ok((song, queue_data)))
     }
+}
+
+fn parse_range_field(raw: String) -> Result<(Duration, Option<Duration>), TypedResponseError> {
+    // The range follows the form "<start>-<end?>"
+    let sep = match raw.find('-') {
+        Some(s) => s,
+        None => {
+            return Err(TypedResponseError {
+                field: "Range",
+                kind: ErrorKind::InvalidValue(raw),
+            })
+        }
+    };
+
+    let from = raw[..sep].parse().map_err(|e| TypedResponseError {
+        field: "Range",
+        kind: ErrorKind::MalformedFloat(e),
+    })?;
+
+    let to = &raw[(sep + 1)..];
+
+    let to = if to.is_empty() {
+        None
+    } else {
+        let parsed = to.parse().map_err(|e| TypedResponseError {
+            field: "Range",
+            kind: ErrorKind::MalformedFloat(e),
+        })?;
+
+        Some(parsed)
+    };
+
+    Ok((
+        Duration::from_secs_f64(from),
+        to.map(Duration::from_secs_f64),
+    ))
 }
 
 fn parse_field_error(field: &'static str, error: ParseIntError) -> TypedResponseError {
     TypedResponseError {
         field,
         kind: ErrorKind::MalformedInteger(error),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_range() {
+        assert_eq!(
+            parse_range_field(String::from("1.500-5.642")),
+            Ok((
+                Duration::from_secs_f64(1.5),
+                Some(Duration::from_secs_f64(5.642))
+            ))
+        );
+
+        assert_eq!(
+            parse_range_field(String::from("1.500-")),
+            Ok((Duration::from_secs_f64(1.5), None))
+        );
+
+        let err_string = String::from("foo");
+        assert_eq!(
+            parse_range_field(err_string.clone()),
+            Err(TypedResponseError {
+                field: "Range",
+                kind: ErrorKind::InvalidValue(err_string),
+            })
+        );
     }
 }
