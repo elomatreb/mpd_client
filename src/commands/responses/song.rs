@@ -83,6 +83,8 @@ pub struct Song {
     pub duration: Option<Duration>,
     /// Tags in this response.
     pub tags: HashMap<Tag, Vec<String>>,
+    /// The `format` as returned by MPD.
+    pub format: Option<String>,
 }
 
 impl Song {
@@ -143,6 +145,7 @@ impl Song {
         Self {
             url,
             duration: None,
+            format: None,
             tags: HashMap::new(),
         }
     }
@@ -233,8 +236,9 @@ where
                         Err(e) => return Some(Err(e)),
                     }
                 }
+                "Format" => song.format = Some(value),
                 // Ignored keys for now
-                "Last-Modified" | "Format" => (),
+                "Last-Modified" => (),
                 "Pos" => match value.parse() {
                     Ok(v) => song_pos = Some(SongPosition(v)),
                     Err(e) => return Some(Err(parse_field_error("Pos", e))),
