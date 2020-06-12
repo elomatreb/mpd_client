@@ -5,6 +5,8 @@ mod util_macros;
 
 mod song;
 
+use chrono::ParseError;
+
 use std::error::Error;
 use std::fmt;
 use std::num::{ParseFloatError, ParseIntError};
@@ -46,6 +48,8 @@ enum ErrorKind {
     MalformedInteger(ParseIntError),
     /// A field containing a float (duration) failed to parse.
     MalformedFloat(ParseFloatError),
+    /// A field containing a timestamp failed to parse.
+    MalformedTimestamp(ParseError),
 }
 
 impl fmt::Display for TypedResponseError {
@@ -62,6 +66,9 @@ impl fmt::Display for TypedResponseError {
             }
             ErrorKind::MalformedInteger(_) => write!(f, "field {:?} is not an integer", self.field),
             ErrorKind::MalformedFloat(_) => write!(f, "field {:?} is not a float", self.field),
+            ErrorKind::MalformedTimestamp(_) => {
+                write!(f, "field {:?} is not a timestamp", self.field)
+            }
         }
     }
 }
@@ -71,6 +78,7 @@ impl Error for TypedResponseError {
         match &self.kind {
             ErrorKind::MalformedFloat(e) => Some(e),
             ErrorKind::MalformedInteger(e) => Some(e),
+            ErrorKind::MalformedTimestamp(e) => Some(e),
             _ => None,
         }
     }

@@ -1,3 +1,4 @@
+use chrono::{DateTime, FixedOffset};
 use mpd_protocol::response::Frame;
 
 use std::cmp;
@@ -85,6 +86,8 @@ pub struct Song {
     pub tags: HashMap<Tag, Vec<String>>,
     /// The `format` as returned by MPD.
     pub format: Option<String>,
+    /// Last modification date of the underlying file.
+    pub last_modified: Option<DateTime<FixedOffset>>,
 }
 
 impl Song {
@@ -147,6 +150,7 @@ impl Song {
             duration: None,
             format: None,
             tags: HashMap::new(),
+            last_modified: None,
         }
     }
 
@@ -237,8 +241,19 @@ where
                     }
                 }
                 "Format" => song.format = Some(value),
-                // Ignored keys for now
-                "Last-Modified" => (),
+                "Last-Modified" => {
+                    let ts = match DateTime::parse_from_rfc3339(&value) {
+                        Ok(ts) => ts,
+                        Err(e) => {
+                            return Some(Err(TypedResponseError {
+                                field: "Last-Modified",
+                                kind: ErrorKind::MalformedTimestamp(e),
+                            }))
+                        }
+                    };
+
+                    song.last_modified = Some(ts);
+                }
                 "Pos" => match value.parse() {
                     Ok(v) => song_pos = Some(SongPosition(v)),
                     Err(e) => return Some(Err(parse_field_error("Pos", e))),
