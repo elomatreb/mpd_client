@@ -225,6 +225,8 @@ where
                         }))
                     }
                 },
+                // Just a worse "duration" field.
+                "Time" => (),
                 "Range" => {
                     range = match parse_range_field(value) {
                         Ok(r) => Some(r),
@@ -232,7 +234,7 @@ where
                     }
                 }
                 // Ignored keys for now
-                "Last-Modified" | "Time" | "Format" => (),
+                "Last-Modified" | "Format" => (),
                 "Pos" => match value.parse() {
                     Ok(v) => song_pos = Some(SongPosition(v)),
                     Err(e) => return Some(Err(parse_field_error("Pos", e))),
