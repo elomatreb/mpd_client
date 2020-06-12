@@ -23,6 +23,8 @@ pub struct SongInQueue {
     pub id: SongId,
     /// The range of the song that will be played.
     pub range: Option<SongRange>,
+    /// The priority.
+    pub priority: u8,
     /// The song.
     pub song: Song,
 }
@@ -56,11 +58,13 @@ impl SongInQueue {
                     position,
                     id,
                     range,
+                    priority,
                 }) => Ok(SongInQueue {
                     position,
                     id,
                     song,
                     range,
+                    priority,
                 }),
                 None => Err(TypedResponseError {
                     field: "Id",
@@ -185,6 +189,7 @@ struct SongQueueData {
     position: SongPosition,
     id: SongId,
     range: Option<SongRange>,
+    priority: u8,
 }
 
 impl<'a, I> Iterator for SongIter<'a, I>
@@ -208,6 +213,7 @@ where
         let mut song_pos = None;
         let mut song_id = None;
         let mut range = None;
+        let mut priority = 0;
 
         loop {
             match self.fields.peek() {
@@ -254,6 +260,10 @@ where
 
                     song.last_modified = Some(ts);
                 }
+                "Prio" => match value.parse() {
+                    Ok(v) => priority = v,
+                    Err(e) => return Some(Err(parse_field_error("Prio", e))),
+                },
                 "Pos" => match value.parse() {
                     Ok(v) => song_pos = Some(SongPosition(v)),
                     Err(e) => return Some(Err(parse_field_error("Pos", e))),
@@ -282,6 +292,7 @@ where
                 position,
                 id,
                 range,
+                priority,
             }),
             _ => None,
         };
