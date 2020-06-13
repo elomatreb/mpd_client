@@ -1,5 +1,4 @@
 use chrono::{DateTime, FixedOffset};
-use mpd_protocol::response::Frame;
 
 use std::cmp;
 use std::collections::HashMap;
@@ -38,9 +37,11 @@ pub struct SongRange {
     pub to: Option<Duration>,
 }
 
+type KeyValuePair = (Arc<str>, String);
+
 impl SongInQueue {
     pub(super) fn parse_frame(
-        frame: Frame,
+        frame: impl IntoIterator<Item = KeyValuePair>,
         max_count: Option<usize>,
     ) -> Result<Vec<Self>, TypedResponseError> {
         let max_count = max_count.unwrap_or(usize::max_value());
@@ -132,7 +133,7 @@ impl Song {
     }
 
     pub(super) fn parse_frame(
-        frame: Frame,
+        frame: impl IntoIterator<Item = KeyValuePair>,
         max_count: Option<usize>,
     ) -> Result<Vec<Self>, TypedResponseError> {
         let max_count = max_count.unwrap_or(usize::max_value());
@@ -194,7 +195,7 @@ struct SongQueueData {
 
 impl<'a, I> Iterator for SongIter<'a, I>
 where
-    I: Iterator<Item = (Arc<str>, String)>,
+    I: Iterator<Item = KeyValuePair>,
 {
     type Item = Result<(Song, Option<SongQueueData>), TypedResponseError>;
 
@@ -347,6 +348,103 @@ fn parse_field_error(field: &'static str, error: ParseIntError) -> TypedResponse
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn key_value_pairs(
+        raw: Vec<(&'static str, &'static str)>,
+    ) -> impl Iterator<Item = KeyValuePair> {
+        raw.into_iter().map(|(k, v)| (Arc::from(k), v.to_owned()))
+    }
+
+    #[test]
+    fn song_parser() {
+        let ts = "2020-06-12T17:53:00Z";
+        let input = key_value_pairs(vec![
+            ("file", "test.flac"),
+            ("duration", "123.456"),
+            ("Last-Modified", ts),
+            ("Artist", "Foo"),
+            ("Artist", "Bar"),
+            ("UnknownTag", "spooky value"),
+            ("file", "foo/bar.baz"),
+            ("file", "this/one/should/be.ignored"),
+        ]);
+
+        let songs = Song::parse_frame(input, Some(2)).unwrap();
+
+        assert_eq!(songs.len(), 2);
+
+        assert_eq!(songs[0].url, "test.flac");
+        assert_eq!(songs[0].duration, Some(Duration::from_secs_f64(123.456)));
+        assert_eq!(songs[0].format, None);
+        assert_eq!(
+            songs[0].last_modified,
+            Some(DateTime::parse_from_rfc3339(ts).unwrap())
+        );
+        assert_eq!(songs[0].artists(), &["Foo", "Bar"]);
+        assert_eq!(songs[0].title(), None);
+        assert_eq!(
+            songs[0].tags.get(&Tag::Other("UnknownTag".into())),
+            Some(&vec![String::from("spooky value")])
+        );
+
+        assert_eq!(songs[1].url, "foo/bar.baz");
+        assert_eq!(songs[1].tags.len(), 0);
+        assert_eq!(songs[1].duration, None);
+        assert_eq!(songs[1].last_modified, None);
+        assert_eq!(songs[1].format, None);
+    }
+
+    #[test]
+    fn song_in_queue_parser() {
+        let ts = "2020-06-12T17:53:00Z";
+        let input = key_value_pairs(vec![
+            ("file", "test.flac"),
+            ("duration", "123.456"),
+            ("Last-Modified", ts),
+            ("Artist", "Foo"),
+            ("Artist", "Bar"),
+            ("UnknownTag", "spooky value"),
+            ("Pos", "2"),
+            ("Id", "1234"),
+            ("file", "foo/bar.baz"),
+            ("Prio", "101"),
+            ("Pos", "3"),
+            ("Id", "1337"),
+        ]);
+
+        let songs = SongInQueue::parse_frame(input, None).unwrap();
+
+        assert_eq!(songs.len(), 2);
+
+        assert_eq!(songs[0].id, 1234.into());
+        assert_eq!(songs[0].position, 2.into());
+        assert_eq!(songs[0].priority, 0);
+        assert_eq!(songs[0].song.url, "test.flac");
+        assert_eq!(
+            songs[0].song.duration,
+            Some(Duration::from_secs_f64(123.456))
+        );
+        assert_eq!(songs[0].song.format, None);
+        assert_eq!(
+            songs[0].song.last_modified,
+            Some(DateTime::parse_from_rfc3339(ts).unwrap())
+        );
+        assert_eq!(songs[0].song.artists(), &["Foo", "Bar"]);
+        assert_eq!(songs[0].song.title(), None);
+        assert_eq!(
+            songs[0].song.tags.get(&Tag::Other("UnknownTag".into())),
+            Some(&vec![String::from("spooky value")])
+        );
+
+        assert_eq!(songs[1].id, 1337.into());
+        assert_eq!(songs[1].position, 3.into());
+        assert_eq!(songs[1].priority, 101);
+        assert_eq!(songs[1].song.url, "foo/bar.baz");
+        assert_eq!(songs[1].song.tags.len(), 0);
+        assert_eq!(songs[1].song.duration, None);
+        assert_eq!(songs[1].song.last_modified, None);
+        assert_eq!(songs[1].song.format, None);
+    }
 
     #[test]
     fn parse_range() {
