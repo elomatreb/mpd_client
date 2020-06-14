@@ -76,6 +76,8 @@ argless_command!(Stats, "stats", res::Stats);
 argless_command!(Queue, "playlistinfo", Vec<res::SongInQueue>);
 argless_command!(CurrentSong, "currentsong", Option<res::SongInQueue>);
 
+argless_command!(GetPlaylists, "listplaylists", Vec<res::Playlist>);
+
 single_arg_command!(SetRandom, bool, "random", res::Empty);
 single_arg_command!(SetConsume, bool, "consume", res::Empty);
 single_arg_command!(SetRepeat, bool, "repeat", res::Empty);

@@ -3,6 +3,7 @@
 #[macro_use]
 mod util_macros;
 
+mod playlist;
 mod song;
 
 use chrono::ParseError;
@@ -16,6 +17,7 @@ use crate::commands::{SongId, SongPosition};
 use crate::raw::Frame;
 use crate::sealed;
 
+pub use playlist::Playlist;
 pub use song::{Song, SongInQueue, SongRange};
 
 /// "Marker" trait for responses to commands.
@@ -231,5 +233,13 @@ impl sealed::Sealed for SongId {}
 impl Response for SongId {
     fn from_frame(mut raw: Frame) -> Result<Self, TypedResponseError> {
         Ok(SongId(field!(raw, "Id" integer)))
+    }
+}
+
+impl sealed::Sealed for Vec<Playlist> {}
+impl Response for Vec<Playlist> {
+    fn from_frame(raw: Frame) -> Result<Self, TypedResponseError> {
+        let fields_count = raw.fields_len();
+        Ok(Playlist::parse_frame(raw, fields_count)?)
     }
 }
