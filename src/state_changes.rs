@@ -51,6 +51,7 @@ impl Stream for StateChanges {
 /// Derived from [the documentation](https://www.musicpd.org/doc/html/protocol.html#command-idle),
 /// but also includes a catch-all to remain forward-compatible.
 #[allow(missing_docs)]
+#[non_exhaustive]
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Subsystem {
     Database,
@@ -69,7 +70,7 @@ pub enum Subsystem {
 
     /// Catch-all variant used when the above variants do not match. Includes the raw subsystem
     /// from the MPD response.
-    Other(String),
+    Other(Box<str>),
 }
 
 impl Subsystem {
@@ -87,7 +88,7 @@ impl Subsystem {
             "stored_playlist" => Subsystem::StoredPlaylist,
             "subscription" => Subsystem::Subscription,
             "update" => Subsystem::Update,
-            _ => Subsystem::Other(raw),
+            _ => Subsystem::Other(raw.into()),
         }
     }
 }
