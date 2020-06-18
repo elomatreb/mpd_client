@@ -124,7 +124,7 @@ impl Decoder for MpdCodec {
             let msg_end = self.cursor + terminator + 3;
             trace!(end = msg_end, "potential response end");
 
-            let parser_result = parser::response(&src[..]);
+            let parser_result = parser::response(&src[..msg_end]);
             trace!("completed parsing");
 
             match parser_result {
@@ -275,6 +275,16 @@ mod tests {
         assert_eq!(frame.find("bar"), Some("1234"));
 
         assert!(buf.is_empty());
+    }
+
+    #[test]
+    fn decoder_ignores_trailing_data() {
+        let codec = &mut MpdCodec::new();
+        let buf = &mut init_buffer(b"foo: OK\nOK\ntrailing_stuff");
+
+        let _ = codec.decode(buf).unwrap();
+
+        assert_eq!(buf, "trailing_stuff");
     }
 
     #[test]
