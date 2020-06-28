@@ -24,7 +24,7 @@ use tokio::net::UnixStream;
 use std::fmt::Debug;
 use std::path::Path;
 
-use crate::commands::{self as cmds, responses::Response, Command};
+use crate::commands::{self as cmds, responses::Response, Command, CommandList};
 use crate::errors::{CommandError, StateChangeError};
 use crate::raw::{Frame, MpdCodecError, RawCommand, RawCommandList};
 use crate::state_changes::{StateChanges, Subsystem};
@@ -139,34 +139,20 @@ impl Client {
 
     /// Send the given command list, and return the (typed) responses.
     ///
-    /// The results will be returned in the same order as the input commands. If the input is
-    /// empty, this will return an empty `Vec` immediately.
-    ///
     /// # Errors
     ///
     /// This returns errors in the same conditions as [`Client::raw_command_list`], and
     /// additionally if the response type conversion fails.
-    pub async fn command_list<L, C>(&self, list: L) -> Result<Vec<C::Response>, CommandError>
+    pub async fn command_list<L>(&self, list: L) -> Result<L::Response, CommandError>
     where
-        L: IntoIterator<Item = C>,
-        C: Command,
+        L: CommandList,
     {
-        let mut commands = list.into_iter().map(|c| c.to_command());
-
-        let mut command_list = match commands.next() {
-            Some(c) => RawCommandList::new(c),
-            None => return Ok(Vec::new()),
+        let frames = match list.to_raw_command_list() {
+            Some(cmds) => self.raw_command_list(cmds).await?,
+            None => Vec::new(),
         };
 
-        command_list.extend(commands);
-
-        let frames = self.raw_command_list(command_list).await?;
-
-        frames
-            .into_iter()
-            .map(Response::from_frame)
-            .collect::<Result<_, _>>()
-            .map_err(Into::into)
+        <L as CommandList>::parse_responses(frames).map_err(Into::into)
     }
 
     /// Send the connection password, if necessary.

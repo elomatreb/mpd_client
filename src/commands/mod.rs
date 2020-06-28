@@ -11,15 +11,18 @@
 pub mod definitions;
 pub mod responses;
 
+mod command_list;
+
 use std::borrow::Cow;
 use std::time::Duration;
 
 use mpd_protocol::command::Argument;
 
 use crate::raw::RawCommand;
-
-pub use definitions::*;
 use responses::Response;
+
+pub use command_list::CommandList;
+pub use definitions::*;
 
 /// Stable identifier of a song in the queue.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
