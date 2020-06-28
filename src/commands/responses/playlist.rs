@@ -42,15 +42,13 @@ impl Playlist {
                         kind: ErrorKind::UnexpectedField(key.as_ref().to_owned()),
                     });
                 }
+            } else if key.as_ref() == "playlist" {
+                current_name = Some(value);
             } else {
-                if key.as_ref() == "playlist" {
-                    current_name = Some(value);
-                } else {
-                    return Err(TypedResponseError {
-                        field: "playlist",
-                        kind: ErrorKind::UnexpectedField(key.as_ref().to_owned()),
-                    });
-                }
+                return Err(TypedResponseError {
+                    field: "playlist",
+                    kind: ErrorKind::UnexpectedField(key.as_ref().to_owned()),
+                });
             }
         }
 
