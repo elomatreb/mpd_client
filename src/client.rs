@@ -202,6 +202,8 @@ impl Client {
         &self,
         commands: RawCommandList,
     ) -> Result<Vec<Frame>, CommandError> {
+        debug!(?commands, "sending command");
+
         let res = self.do_send(commands).await?;
         let mut frames = Vec::with_capacity(res.len());
 
@@ -221,7 +223,6 @@ impl Client {
     }
 
     async fn do_send(&self, commands: RawCommandList) -> Result<RawResponse, CommandError> {
-        trace!(?commands, "do_send");
         let (tx, rx) = oneshot::channel();
 
         let mut commands_sender = self.commands_sender.clone();
