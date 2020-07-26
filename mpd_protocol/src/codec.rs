@@ -110,7 +110,6 @@ impl Decoder for MpdCodec {
     type Item = Response;
     type Error = MpdCodecError;
 
-    #[allow(clippy::cognitive_complexity)]
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
         if self.decode_span.is_none() {
             self.decode_span = Some(span!(Level::DEBUG, "decode_command"));
