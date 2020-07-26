@@ -220,10 +220,7 @@ mod test {
     fn greeting() {
         assert_eq!(
             super::greeting(b"OK MPD 0.21.11\n"),
-            Ok((
-                EMPTY,
-                super::Greeting { version: "0.21.11" },
-            ))
+            Ok((EMPTY, super::Greeting { version: "0.21.11" },))
         );
     }
 

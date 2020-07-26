@@ -10,7 +10,8 @@
 //! [`parser`]: crate::parser
 
 use bytes::{Buf, BytesMut};
-use tokio_util::codec::{Decoder, Encoder};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite};
+use tokio_util::codec::{Decoder, Encoder, Framed};
 use tracing::{debug, error, info, span, trace, Level, Span};
 
 use std::convert::TryFrom;
@@ -26,23 +27,57 @@ use crate::response::Response;
 ///
 /// [Codec]: https://docs.rs/tokio-util/0.3.0/tokio_util/codec/index.html
 /// [`CommandList`]: crate::command::CommandList
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct MpdCodec {
     decode_span: Option<Span>,
     cursor: usize,
-    protocol_version: Option<String>,
+    protocol_version: Box<str>,
 }
 
 impl MpdCodec {
-    /// Creates a new `MpdCodec`.
-    pub fn new() -> Self {
-        Self::default()
+    /// Connect using the given IO object.
+    ///
+    /// This reads the initial handshake from the server that contains the protocol version, which
+    /// is then available using the [`MpdCodec::protocol_version()`] method.
+    ///
+    /// # Errors
+    ///
+    /// This returns an error when reading from the given IO object returns an error, or if the
+    /// data read from it fails to parse as a valid server handshake.
+    pub async fn connect<IO>(mut io: IO) -> Result<Framed<IO, Self>, ConnectError>
+    where
+        IO: AsyncRead + AsyncWrite + Unpin,
+    {
+        let mut greeting = [0u8; 32];
+        let mut read = 0;
+
+        loop {
+            read += io.read(&mut greeting).await?;
+
+            match parser::greeting(&greeting[..read]) {
+                Ok((_, parser::Greeting { version })) => {
+                    info!(protocol_version = version, "connected successfully");
+
+                    let codec = Self {
+                        decode_span: None,
+                        cursor: 0,
+                        protocol_version: version.into(),
+                    };
+
+                    break Ok(Framed::new(io, codec));
+                }
+                Err(e) => {
+                    if !e.is_incomplete() || read == greeting.len() - 1 {
+                        break Err(ConnectError::InvalidGreeting(greeting[..read].into()));
+                    }
+                }
+            }
+        }
     }
 
-    /// Returns the protocol version the server is speaking if this decoder instance already
-    /// received a greeting, `None` otherwise.
-    pub fn protocol_version(&self) -> Option<&str> {
-        self.protocol_version.as_deref()
+    /// Returns the protocol version the server is speaking.
+    pub fn protocol_version(&self) -> &str {
+        &self.protocol_version
     }
 }
 
@@ -82,37 +117,6 @@ impl Decoder for MpdCodec {
         }
 
         let enter = self.decode_span.as_ref().unwrap().enter();
-
-        trace!(
-            buffer_length = src.len(),
-            greeted = self.protocol_version.is_some()
-        );
-
-        if self.protocol_version.is_none() {
-            match parser::greeting(src) {
-                Ok((rem, greeting)) => {
-                    info!(protocol_version = greeting.version);
-                    self.protocol_version = Some(greeting.version.to_owned());
-
-                    // Drop the part of the buffer containing the greeting
-                    let new_start = src.len() - rem.len();
-                    src.advance(new_start);
-                    trace!(buffer_after_greeting = src.len());
-                }
-                Err(e) => {
-                    if e.is_incomplete() {
-                        trace!("greeting incomplete");
-                        return Ok(None);
-                    } else {
-                        // We got a malformed greeting
-                        error!(error = ?e, "error parsing greeting");
-                        let err = src.split();
-                        self.cursor = 0;
-                        return Err(MpdCodecError::InvalidGreeting(Vec::from(&err[..])));
-                    }
-                }
-            }
-        }
 
         trace!(self.cursor);
 
@@ -169,13 +173,45 @@ impl Decoder for MpdCodec {
     }
 }
 
+/// Errors which can occur when initially connecting an [`MpdCodec`].
+#[derive(Debug)]
+pub enum ConnectError {
+    /// IO error
+    Io(io::Error),
+    /// Invalid greeting message
+    InvalidGreeting(Box<[u8]>),
+}
+
+impl fmt::Display for ConnectError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Io(_) => write!(f, "IO error"),
+            Self::InvalidGreeting(_) => write!(f, "Invalid greeting"),
+        }
+    }
+}
+
+#[doc(hidden)]
+impl From<io::Error> for ConnectError {
+    fn from(e: io::Error) -> Self {
+        Self::Io(e)
+    }
+}
+
+impl Error for ConnectError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            Self::Io(e) => Some(e),
+            _ => None,
+        }
+    }
+}
+
 /// Errors which can occur during [`MpdCodec`] operation.
 #[derive(Debug)]
 pub enum MpdCodecError {
     /// IO error occured
     Io(io::Error),
-    /// Did not get expected greeting as first message (`OK MPD <protocol version>`)
-    InvalidGreeting(Vec<u8>),
     /// A message could not be parsed succesfully.
     InvalidResponse(Vec<u8>),
 }
@@ -184,9 +220,6 @@ impl fmt::Display for MpdCodecError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             MpdCodecError::Io(_) => write!(f, "IO error"),
-            MpdCodecError::InvalidGreeting(greeting) => {
-                write!(f, "invalid greeting: {:?}", greeting)
-            }
             MpdCodecError::InvalidResponse(response) => {
                 write!(f, "invalid response: {:?}", response)
             }
@@ -213,16 +246,23 @@ impl Error for MpdCodecError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::Cursor;
+
+    fn dummy_codec() -> MpdCodec {
+        MpdCodec {
+            decode_span: None,
+            cursor: 0,
+            protocol_version: "".into(),
+        }
+    }
 
     fn init_buffer(msg: &[u8]) -> BytesMut {
-        let mut buf = BytesMut::from("OK MPD 0.21.11\n");
-        buf.extend_from_slice(msg);
-        buf
+        BytesMut::from(msg)
     }
 
     #[test]
     fn encoder() {
-        let mut codec = MpdCodec::new();
+        let mut codec = dummy_codec();
         let buf = &mut BytesMut::new();
 
         let command = CommandList::new(Command::build("status").unwrap());
@@ -232,23 +272,25 @@ mod tests {
         assert_eq!(&b"status\n"[..], buf);
     }
 
-    #[test]
-    fn greeting() {
-        let codec = &mut MpdCodec::new();
-        let buf = &mut BytesMut::from("OK MPD 0.21.11"); // Note missing newline
+    #[tokio::test]
+    async fn connect() {
+        let mut buf = Vec::from(&b"OK MPD 0.21.11\n"[..]);
+        let buf_len = buf.len() as u64;
 
-        assert_eq!(None, codec.decode(buf).unwrap());
-        assert_eq!(None, codec.protocol_version());
+        let codec = MpdCodec::connect(Cursor::new(&mut buf)).await.unwrap();
 
-        buf.extend_from_slice(b"\n");
+        assert_eq!(codec.get_ref().position(), buf_len);
+        assert_eq!(codec.codec().protocol_version(), "0.21.11");
 
-        assert_eq!(None, codec.decode(buf).unwrap());
-        assert_eq!(Some("0.21.11"), codec.protocol_version());
+        let parts = codec.into_parts();
+
+        assert!(parts.read_buf.is_empty());
+        assert!(parts.write_buf.is_empty());
     }
 
     #[test]
     fn empty_response() {
-        let codec = &mut MpdCodec::new();
+        let mut codec = dummy_codec();
         let buf = &mut init_buffer(b"OK");
 
         assert_eq!(None, codec.decode(buf).unwrap());
@@ -260,7 +302,7 @@ mod tests {
 
     #[test]
     fn simple_response() {
-        let codec = &mut MpdCodec::new();
+        let mut codec = dummy_codec();
         let buf = &mut init_buffer(b"hello: world\nfoo: OK\nbar: 1234\nOK");
 
         assert_eq!(None, codec.decode(buf).unwrap());
@@ -279,7 +321,7 @@ mod tests {
 
     #[test]
     fn decoder_ignores_trailing_data() {
-        let codec = &mut MpdCodec::new();
+        let mut codec = dummy_codec();
         let buf = &mut init_buffer(b"foo: OK\nOK\ntrailing_stuff");
 
         let _ = codec.decode(buf).unwrap();
@@ -289,7 +331,7 @@ mod tests {
 
     #[test]
     fn command_list() {
-        let codec = &mut MpdCodec::new();
+        let mut codec = dummy_codec();
         let buf = &mut init_buffer(b"list_OK\nfoo: bar\nlist_OK\nbinary: 6\nBINARY\nlist_OK\nOK");
 
         assert_eq!(None, codec.decode(buf).unwrap());
@@ -318,7 +360,7 @@ mod tests {
 
     #[test]
     fn binary_response() {
-        let codec = &mut MpdCodec::new();
+        let mut codec = dummy_codec();
         let buf = &mut init_buffer(b"binary: 16\nHELLO \nOK\n");
 
         assert_eq!(None, codec.decode(buf).unwrap());
@@ -336,7 +378,7 @@ mod tests {
 
     #[test]
     fn multiple_messages() {
-        let codec = &mut MpdCodec::new();
+        let mut codec = dummy_codec();
         let buf = &mut init_buffer(b"foo: bar\nOK\nhello: world\nOK\n");
 
         let response = codec.decode(buf).expect("failed to decode").unwrap();
@@ -354,7 +396,7 @@ mod tests {
 
     #[test]
     fn cursor_reset() {
-        let codec = &mut MpdCodec::new();
+        let mut codec = dummy_codec();
         let buf = &mut init_buffer(b"hello: world\nOK");
 
         assert_eq!(None, codec.decode(buf).unwrap());
