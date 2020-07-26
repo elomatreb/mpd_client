@@ -183,7 +183,7 @@ pub enum MpdCodecError {
 impl fmt::Display for MpdCodecError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            MpdCodecError::Io(e) => write!(f, "{}", e),
+            MpdCodecError::Io(_) => write!(f, "IO error"),
             MpdCodecError::InvalidGreeting(greeting) => {
                 write!(f, "invalid greeting: {:?}", greeting)
             }
