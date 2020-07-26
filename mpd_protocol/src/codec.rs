@@ -44,7 +44,7 @@ impl MpdCodec {
     ///
     /// This returns an error when reading from the given IO object returns an error, or if the
     /// data read from it fails to parse as a valid server handshake.
-    pub async fn connect<IO>(mut io: IO) -> Result<Framed<IO, Self>, ConnectError>
+    pub async fn connect<IO>(mut io: IO) -> Result<Framed<IO, Self>, MpdCodecError>
     where
         IO: AsyncRead + AsyncWrite + Unpin,
     {
@@ -68,7 +68,7 @@ impl MpdCodec {
                 }
                 Err(e) => {
                     if !e.is_incomplete() || read == greeting.len() - 1 {
-                        break Err(ConnectError::InvalidGreeting(greeting[..read].into()));
+                        break Err(MpdCodecError::InvalidMessage(greeting[..read].into()));
                     }
                 }
             }
@@ -155,7 +155,7 @@ impl Decoder for MpdCodec {
                         error!(error = ?e, "error parsing response");
                         let err = src.split();
                         self.cursor = 0;
-                        return Err(MpdCodecError::InvalidResponse(err.as_ref().into()));
+                        return Err(MpdCodecError::InvalidMessage(err.as_ref().into()));
                     } else {
                         trace!("response incomplete");
                     }
@@ -172,54 +172,20 @@ impl Decoder for MpdCodec {
     }
 }
 
-/// Errors which can occur when initially connecting an [`MpdCodec`].
-#[derive(Debug)]
-pub enum ConnectError {
-    /// IO error
-    Io(io::Error),
-    /// Invalid greeting message
-    InvalidGreeting(Box<[u8]>),
-}
-
-impl fmt::Display for ConnectError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Io(_) => write!(f, "IO error"),
-            Self::InvalidGreeting(_) => write!(f, "Invalid greeting"),
-        }
-    }
-}
-
-#[doc(hidden)]
-impl From<io::Error> for ConnectError {
-    fn from(e: io::Error) -> Self {
-        Self::Io(e)
-    }
-}
-
-impl Error for ConnectError {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        match self {
-            Self::Io(e) => Some(e),
-            _ => None,
-        }
-    }
-}
-
 /// Errors which can occur during [`MpdCodec`] operation.
 #[derive(Debug)]
 pub enum MpdCodecError {
     /// IO error occured
     Io(io::Error),
     /// A message could not be parsed succesfully.
-    InvalidResponse(Box<[u8]>),
+    InvalidMessage(Box<[u8]>),
 }
 
 impl fmt::Display for MpdCodecError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             MpdCodecError::Io(_) => write!(f, "IO error"),
-            MpdCodecError::InvalidResponse(_) => write!(f, "Invalid response"),
+            MpdCodecError::InvalidMessage(_) => write!(f, "Invalid message"),
         }
     }
 }
