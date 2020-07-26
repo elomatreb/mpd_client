@@ -14,7 +14,7 @@ use tokio::{
         oneshot,
     },
 };
-use tokio_util::codec::{Decoder, Framed};
+use tokio_util::codec::Framed;
 use tracing::{debug, error, span, trace, warn, Level, Span};
 use tracing_futures::Instrument;
 
@@ -238,9 +238,9 @@ impl Client {
         let (state_changes_sender, state_changes) = mpsc::unbounded_channel();
         let (commands_sender, commands_receiver) = mpsc::channel(2);
 
-        trace!("sending initial idle command");
-        let mut connection = MpdCodec::new().framed(connection);
+        let mut connection = MpdCodec::connect(connection).await?;
 
+        trace!("sending initial idle command");
         if let Err(e) = connection.send(idle()).await {
             error!(error = ?e, "failed to send initial idle command");
             return Err(e);
