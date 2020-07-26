@@ -16,7 +16,7 @@ use nom::{
     branch::alt,
     bytes::streaming::{tag, take, take_while, take_while1},
     character::{
-        is_alphabetic, is_digit,
+        is_alphabetic,
         streaming::{char, digit1, newline},
     },
     combinator::{cut, map, map_res, not, opt},
@@ -74,7 +74,11 @@ pub enum Response<'a> {
 /// ```
 pub fn greeting(i: &[u8]) -> IResult<&[u8], Greeting<'_>> {
     map(
-        delimited(tag("OK MPD "), version_number, char('\n')),
+        delimited(
+            tag("OK MPD "),
+            utf8(take_while1(|c| c != b'\n')),
+            char('\n'),
+        ),
         |version| Greeting { version },
     )(i)
 }
@@ -109,12 +113,6 @@ where
 /// Recognize and parse an unsigned ASCII-encoded number
 fn number<O: FromStr>(i: &[u8]) -> IResult<&[u8], O> {
     map_res(utf8(digit1), str::parse)(i)
-}
-
-/// Recognize a version number.
-fn version_number(i: &[u8]) -> IResult<&[u8], &str> {
-    // TODO: This accepts version numbers consisting of only dots or ones starting/ending with dots
-    utf8(take_while1(|b| is_digit(b) || b == b'.'))(i)
 }
 
 /// Parse an error response.
@@ -216,13 +214,16 @@ fn command_list_terminator(i: &[u8]) -> IResult<&[u8], Option<Response<'_>>> {
 mod test {
     use super::Response;
 
-    static EMPTY: &[u8] = &[];
+    const EMPTY: &[u8] = &[];
 
     #[test]
-    fn version_number() {
+    fn greeting() {
         assert_eq!(
-            super::version_number(b"0.21.11\n"),
-            Ok((&b"\n"[..], "0.21.11"))
+            super::greeting(b"OK MPD 0.21.11\n"),
+            Ok((
+                EMPTY,
+                super::Greeting { version: "0.21.11" },
+            ))
         );
     }
 
