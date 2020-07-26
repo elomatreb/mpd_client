@@ -156,7 +156,7 @@ impl Decoder for MpdCodec {
                         error!(error = ?e, "error parsing response");
                         let err = src.split();
                         self.cursor = 0;
-                        return Err(MpdCodecError::InvalidResponse(Vec::from(&err[..])));
+                        return Err(MpdCodecError::InvalidResponse(err.as_ref().into()));
                     } else {
                         trace!("response incomplete");
                     }
@@ -213,16 +213,14 @@ pub enum MpdCodecError {
     /// IO error occured
     Io(io::Error),
     /// A message could not be parsed succesfully.
-    InvalidResponse(Vec<u8>),
+    InvalidResponse(Box<[u8]>),
 }
 
 impl fmt::Display for MpdCodecError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             MpdCodecError::Io(_) => write!(f, "IO error"),
-            MpdCodecError::InvalidResponse(response) => {
-                write!(f, "invalid response: {:?}", response)
-            }
+            MpdCodecError::InvalidResponse(_) => write!(f, "Invalid response"),
         }
     }
 }
