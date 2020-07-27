@@ -25,7 +25,7 @@ macro_rules! argless_command {
     };
     ($name:ident, $command:literal, $response:ty) => {
         argless_command!(
-            #[doc = concat!("`", $command, "` command")],
+            #[doc = concat!("`", $command, "` command.")],
             pub struct $name;
         );
 
@@ -50,7 +50,7 @@ macro_rules! single_arg_command {
     };
     ($name:ident, $argtype:ty, $command:literal, $response:ty) => {
         single_arg_command!(
-            #[doc = concat!("`", $command, "` command")],
+            #[doc = concat!("`", $command, "` command.")],
             pub struct $name(pub $argtype);
         );
 
@@ -84,6 +84,11 @@ single_arg_command!(SetRepeat, bool, "repeat", res::Empty);
 single_arg_command!(SetPause, bool, "pause", res::Empty);
 
 single_arg_command!(Password, String, "password", res::Empty);
+
+single_arg_command!(SaveQueueAsPlaylist, String, "save", res::Empty);
+single_arg_command!(DeletePlaylist, String, "rm", res::Empty);
+single_arg_command!(GetPlaylist, String, "listplaylistinfo", Vec<res::Song>);
+single_arg_command!(ClearPlaylist, String, "playlistclear", res::Empty);
 
 /// `crossfade` command.
 ///
@@ -449,6 +454,144 @@ impl Command for Find {
         }
 
         command
+    }
+}
+
+/// `rename` command.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RenamePlaylist {
+    from: String,
+    to: String,
+}
+
+impl RenamePlaylist {
+    /// Rename the playlist named `from` to `to`.
+    pub fn new(from: String, to: String) -> Self {
+        Self { from, to }
+    }
+}
+
+impl Command for RenamePlaylist {
+    type Response = res::Empty;
+
+    fn to_command(self) -> RawCommand {
+        RawCommand::new("rename")
+            .argument(self.from)
+            .argument(self.to)
+    }
+}
+
+/// `load` command.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LoadPlaylist {
+    name: String,
+    range: Option<SongRange>,
+}
+
+impl LoadPlaylist {
+    /// Load the playlist with the given name into the queue.
+    pub fn name(name: String) -> Self {
+        Self { name, range: None }
+    }
+
+    /// Limit the loaded playlist to the given window.
+    pub fn range<R>(mut self, range: R) -> Self
+    where
+        R: RangeBounds<usize>,
+    {
+        self.range = Some(SongRange::new_usize(range));
+        self
+    }
+}
+
+impl Command for LoadPlaylist {
+    type Response = res::Empty;
+
+    fn to_command(self) -> RawCommand {
+        let mut command = RawCommand::new("load").argument(self.name);
+
+        if let Some(range) = self.range {
+            command.add_argument(range).unwrap();
+        }
+
+        command
+    }
+}
+
+/// `playlistadd` command.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AddToPlaylist {
+    playlist: String,
+    song_url: String,
+}
+
+impl AddToPlaylist {
+    /// Add `song_url` to `playlist`.
+    pub fn new(playlist: String, song_url: String) -> Self {
+        Self { playlist, song_url }
+    }
+}
+
+impl Command for AddToPlaylist {
+    type Response = res::Empty;
+
+    fn to_command(self) -> RawCommand {
+        RawCommand::new("playlistadd")
+            .argument(self.playlist)
+            .argument(self.song_url)
+    }
+}
+
+/// `playlistdelete` command.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RemoveFromPlaylist {
+    playlist: String,
+    song_position: usize,
+}
+
+impl RemoveFromPlaylist {
+    /// Delete the song at `song_position` from `playlist`.
+    pub fn new(playlist: String, song_position: usize) -> Self {
+        RemoveFromPlaylist {
+            playlist,
+            song_position,
+        }
+    }
+}
+
+impl Command for RemoveFromPlaylist {
+    type Response = res::Empty;
+
+    fn to_command(self) -> RawCommand {
+        RawCommand::new("playlistdelete")
+            .argument(self.playlist)
+            .argument(self.song_position.to_string())
+    }
+}
+
+/// `playlistmove` command.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MoveInPlaylist {
+    playlist: String,
+    from: usize,
+    to: usize,
+}
+
+impl MoveInPlaylist {
+    /// Move the song at `from` to `to` in the playlist named `playlist`.
+    pub fn new(playlist: String, from: usize, to: usize) -> Self {
+        Self { playlist, from, to }
+    }
+}
+
+impl Command for MoveInPlaylist {
+    type Response = res::Empty;
+
+    fn to_command(self) -> RawCommand {
+        RawCommand::new("playlistmove")
+            .argument(self.playlist)
+            .argument(self.from.to_string())
+            .argument(self.to.to_string())
     }
 }
 
