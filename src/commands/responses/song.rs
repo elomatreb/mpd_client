@@ -200,7 +200,20 @@ where
     type Item = Result<(Song, Option<SongQueueData>), TypedResponseError>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let (key, value) = self.fields.next()?;
+        let (mut key, mut value) = self.fields.next()?;
+
+        // Skip directory entries, encountered when using e.g. the `listallinfo` command.
+        if key.as_ref() == "directory" {
+            loop {
+                let next = self.fields.next()?;
+
+                if next.0.as_ref() != "directory" {
+                    key = next.0;
+                    value = next.1;
+                    break;
+                }
+            }
+        }
 
         let mut song = if key.as_ref() == "file" {
             Song::new(value)
@@ -220,7 +233,7 @@ where
             match self.fields.peek() {
                 Some((k, _)) => {
                     // If the next key starts another file, the current iteration is done
-                    if k.as_ref() == "file" {
+                    if k.as_ref() == "file" || k.as_ref() == "directory" {
                         break;
                     }
                 }
@@ -365,8 +378,13 @@ mod tests {
             ("Artist", "Foo"),
             ("Artist", "Bar"),
             ("UnknownTag", "spooky value"),
+            ("directory", "foo"),
             ("file", "foo/bar.baz"),
+            ("directory", "this"),
+            ("directory", "this/one"),
+            ("directory", "this/one/should"),
             ("file", "this/one/should/be.ignored"),
+            ("directory", "empty_dir"),
         ]);
 
         let songs = Song::parse_frame(input, Some(2)).unwrap();
@@ -406,6 +424,7 @@ mod tests {
             ("UnknownTag", "spooky value"),
             ("Pos", "2"),
             ("Id", "1234"),
+            ("directory", "foo"),
             ("file", "foo/bar.baz"),
             ("Prio", "101"),
             ("Pos", "3"),
