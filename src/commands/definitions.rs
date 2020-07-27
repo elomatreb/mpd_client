@@ -595,6 +595,40 @@ impl Command for MoveInPlaylist {
     }
 }
 
+/// `listallinfo` command.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ListAllSongs {
+    directory: String,
+}
+
+impl ListAllSongs {
+    /// List all songs in the library.
+    pub fn new() -> Self {
+        Self {
+            directory: String::new(),
+        }
+    }
+
+    /// List all songs beneath the given directory.
+    pub fn directory(directory: String) -> Self {
+        Self { directory }
+    }
+}
+
+impl Command for ListAllSongs {
+    type Response = Vec<res::Song>;
+
+    fn to_command(self) -> RawCommand {
+        let mut command = RawCommand::new("listallinfo");
+
+        if !self.directory.is_empty() {
+            command.add_argument(self.directory).unwrap();
+        }
+
+        command
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -756,6 +790,19 @@ mod tests {
                 .argument("Artist")
                 .argument("window")
                 .argument("3:")
+        );
+    }
+
+    #[test]
+    fn command_listallinfo() {
+        assert_eq!(
+            ListAllSongs::new().to_command(),
+            RawCommand::new("listallinfo")
+        );
+
+        assert_eq!(
+            ListAllSongs::directory(String::from("foo")).to_command(),
+            RawCommand::new("listallinfo").argument("foo")
         );
     }
 }
