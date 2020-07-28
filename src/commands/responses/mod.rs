@@ -3,6 +3,7 @@
 #[macro_use]
 mod util_macros;
 
+mod list;
 mod playlist;
 mod song;
 
@@ -11,14 +12,18 @@ use chrono::ParseError;
 use std::error::Error;
 use std::fmt;
 use std::num::{ParseFloatError, ParseIntError};
+use std::sync::Arc;
 use std::time::Duration;
 
 use crate::commands::{SongId, SongPosition};
 use crate::raw::Frame;
 use crate::sealed;
 
+pub use list::List;
 pub use playlist::Playlist;
 pub use song::{Song, SongInQueue, SongRange};
+
+type KeyValuePair = (Arc<str>, String);
 
 /// "Marker" trait for responses to commands.
 ///
@@ -241,5 +246,12 @@ impl Response for Vec<Playlist> {
     fn from_frame(raw: Frame) -> Result<Self, TypedResponseError> {
         let fields_count = raw.fields_len();
         Ok(Playlist::parse_frame(raw, fields_count)?)
+    }
+}
+
+impl sealed::Sealed for List {}
+impl Response for List {
+    fn from_frame(frame: Frame) -> Result<Self, TypedResponseError> {
+        Ok(List::from_frame(frame))
     }
 }

@@ -6,10 +6,9 @@ use std::convert::TryFrom;
 use std::iter;
 use std::num::ParseIntError;
 use std::path::Path;
-use std::sync::Arc;
 use std::time::Duration;
 
-use super::{ErrorKind, TypedResponseError};
+use super::{ErrorKind, KeyValuePair, TypedResponseError};
 use crate::commands::{SongId, SongPosition};
 use crate::tag::Tag;
 
@@ -36,8 +35,6 @@ pub struct SongRange {
     /// End at this timestamp (if the end is known).
     pub to: Option<Duration>,
 }
-
-type KeyValuePair = (Arc<str>, String);
 
 impl SongInQueue {
     pub(super) fn parse_frame(
@@ -361,6 +358,7 @@ fn parse_field_error(field: &'static str, error: ParseIntError) -> TypedResponse
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Arc;
 
     fn key_value_pairs(
         raw: Vec<(&'static str, &'static str)>,

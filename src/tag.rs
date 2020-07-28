@@ -5,6 +5,8 @@ use std::convert::TryFrom;
 use std::error::Error;
 use std::fmt;
 
+use mpd_protocol::command::Argument;
+
 /// Tags which can be set on a [`Song`].
 ///
 /// MusicBrainz tags are named differently from how they appear in the protocol to better reflect
@@ -145,6 +147,12 @@ impl<'a> TryFrom<&'a str> for Tag {
         }
 
         Ok(Self::Other(raw.into()))
+    }
+}
+
+impl Argument for Tag {
+    fn render(self) -> Cow<'static, str> {
+        self.as_str()
     }
 }
 

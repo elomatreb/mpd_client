@@ -457,6 +457,55 @@ impl Command for Find {
     }
 }
 
+/// `list` command.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct List {
+    tag: Tag,
+    filter: Option<Filter>,
+    group_by: Option<Tag>,
+}
+
+impl List {
+    /// List distinct values of `tag`.
+    pub fn new(tag: Tag) -> Self {
+        List {
+            tag,
+            filter: None,
+            group_by: None,
+        }
+    }
+
+    /// Filter the songs being considered using the given `filter`.
+    pub fn filter(mut self, filter: Filter) -> Self {
+        self.filter = Some(filter);
+        self
+    }
+
+    /// Group results by the given tag.
+    pub fn group_by(mut self, group_by: Tag) -> Self {
+        self.group_by = Some(group_by);
+        self
+    }
+}
+
+impl Command for List {
+    type Response = res::List;
+
+    fn to_command(self) -> RawCommand {
+        let mut command = RawCommand::new("list").argument(self.tag);
+
+        if let Some(filter) = self.filter {
+            command.add_argument(filter).unwrap();
+        }
+
+        if let Some(group_by) = self.group_by {
+            command.add_argument(group_by).unwrap();
+        }
+
+        command
+    }
+}
+
 /// `rename` command.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RenamePlaylist {
