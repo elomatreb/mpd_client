@@ -1,10 +1,11 @@
+use std::error::Error;
 use tokio::stream::StreamExt; // for .next()
 use tracing_subscriber::{EnvFilter, FmtSubscriber};
 
-use mpd_client::{Client, Command, Frame, Subsystem};
+use mpd_client::{commands, Client, Subsystem};
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> Result<(), Box<dyn Error>> {
     FmtSubscriber::builder()
         .with_env_filter(EnvFilter::from_default_env())
         .init();
@@ -17,30 +18,31 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // let (client, mut state_changes) = Client::connect_unix("/run/user/1000/mpd").await?;
 
     // Get the song playing right as we connect
-    let initial = client.command(Command::new("currentsong")).await?;
-    print_current_song(initial);
+    print_current_song(&client).await?;
 
     // Wait for state change notifications being emitted by MPD
     while let Some(subsys) = state_changes.next().await {
         let subsys = subsys?;
 
         if subsys == Subsystem::Player {
-            let current = client.command(Command::new("currentsong")).await?;
-            print_current_song(current);
+            print_current_song(&client).await?;
         }
     }
 
     Ok(())
 }
 
-fn print_current_song(response: Frame) {
-    if response.is_empty() {
-        println!("(none)");
-    } else {
-        println!(
-            "\"{}\" by \"{}\"",
-            response.find("Title").unwrap_or("(no title"),
-            response.find("Artist").unwrap_or("(no artist)")
-        );
+async fn print_current_song(client: &Client) -> Result<(), Box<dyn Error>> {
+    match client.command(commands::CurrentSong).await? {
+        Some(song_in_queue) => {
+            println!(
+                "\"{}\" by \"{}\"",
+                song_in_queue.song.title().unwrap_or(""),
+                song_in_queue.song.artists().join(", "),
+            );
+        }
+        None => println!("(none)"),
     }
+
+    Ok(())
 }

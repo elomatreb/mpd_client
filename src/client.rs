@@ -5,73 +5,73 @@ use futures::{
     sink::SinkExt,
     stream::StreamExt,
 };
-use mpd_protocol::{response::Frame, Command, CommandList, MpdCodec, MpdCodecError, Response};
+use mpd_protocol::{MpdCodec, Response as RawResponse};
 use tokio::{
     io::{AsyncRead, AsyncWrite},
-    net::{TcpStream, ToSocketAddrs, UnixStream},
+    net::{TcpStream, ToSocketAddrs},
     sync::{
         mpsc::{self, error::TryRecvError, Receiver, Sender, UnboundedSender},
         oneshot,
     },
 };
-use tokio_util::codec::{Decoder, Framed};
+use tokio_util::codec::Framed;
 use tracing::{debug, error, span, trace, warn, Level, Span};
 use tracing_futures::Instrument;
 
+#[cfg(unix)]
+use tokio::net::UnixStream;
+
 use std::fmt::Debug;
 use std::path::Path;
-use std::sync::Arc;
 
+use crate::commands::{self as cmds, responses::Response, Command, CommandList};
 use crate::errors::{CommandError, StateChangeError};
+use crate::raw::{Frame, MpdCodecError, RawCommand, RawCommandList};
 use crate::state_changes::{StateChanges, Subsystem};
 
-static IDLE: &str = "idle";
-static CANCEL_IDLE: &str = "noidle";
+type CommandResponder = oneshot::Sender<Result<RawResponse, CommandError>>;
+type StateChangesSender = UnboundedSender<Result<Subsystem, StateChangeError>>;
 
-type CommandResponder = oneshot::Sender<Result<Response, CommandError>>;
+/// Result returned by a connection attempt.
+pub type ConnectResult = Result<(Client, StateChanges), MpdCodecError>;
 
 /// Client for MPD.
 ///
 /// You can use this to send commands to the MPD server, and wait for the response.
 ///
-/// Dropping the `Client` (all clients if you clonewill close the connection. You can clone this
-/// cheaply, which will result in the connection closing after *all* of the `Client`s are dropped.
+/// Dropping the `Client` (all clients if it is cloned) will close the connection. You can clone
+/// this cheaply, which will result in the connection closing after *all* of the `Client`s are
+/// dropped.
 ///
 /// ```no_run
-/// use mpd_client::{Command, Client};
+/// use mpd_client::{commands::Play, Client};
 ///
 /// #[tokio::main]
 /// async fn main() -> Result<(), Box<dyn std::error::Error>> {
 ///     let (client, _state_changes) = Client::connect_to("localhost:6600").await?;
 ///
-///     client.command(Command::new("play")).await?;
+///     client.command(Play::current()).await?;
 ///     Ok(())
 /// }
 /// ```
 #[derive(Clone, Debug)]
 pub struct Client {
-    commands_sender: Sender<(CommandList, CommandResponder)>,
-    span: Arc<Span>,
+    commands_sender: Sender<(RawCommandList, CommandResponder)>,
+    span: Span,
 }
 
 impl Client {
     /// Connect to an MPD server at the given TCP address.
     ///
-    /// See [`connect`] for details of the result.
-    ///
     /// # Panics
     ///
-    /// This panics for the same reasons as [`connect`].
+    /// This panics for the same reasons as [`Client::connect`].
     ///
     /// # Errors
     ///
-    /// This returns errors in the same conditions as [`connect`], and if connecting to the given
+    /// This returns errors in the same conditions as [`Client::connect`], and if connecting to the given
     /// TCP address fails for any reason.
-    ///
-    /// [`connect`]: #method.connect
-    pub async fn connect_to<A: ToSocketAddrs + Debug>(
-        address: A,
-    ) -> Result<(Client, StateChanges), MpdCodecError> {
+    pub async fn connect_to<A: ToSocketAddrs + Debug>(address: A) -> ConnectResult {
         let span = span!(Level::DEBUG, "client connection", tcp_addr = ?address);
         let connection = TcpStream::connect(address).await?;
 
@@ -80,21 +80,16 @@ impl Client {
 
     /// Connect to an MPD server using the Unix socket at the given path.
     ///
-    /// See [`connect`] for details of the result.
-    ///
     /// # Panics
     ///
-    /// This panics for the same reasons as [`connect`].
+    /// This panics for the same reasons as [`Client::connect`].
     ///
     /// # Errors
     ///
-    /// This returns errors in the same conditions as [`connect`], and if connecting to the Unix
+    /// This returns errors in the same conditions as [`Client::connect`], and if connecting to the Unix
     /// socket at the given address fails for any reason.
-    ///
-    /// [`connect`]: #method.connect
-    pub async fn connect_unix<P: AsRef<Path>>(
-        path: P,
-    ) -> Result<(Client, StateChanges), MpdCodecError> {
+    #[cfg(unix)]
+    pub async fn connect_unix<P: AsRef<Path>>(path: P) -> ConnectResult {
         let span = span!(Level::DEBUG, "client connection", unix_addr = ?path.as_ref());
         let connection = UnixStream::connect(path).await?;
 
@@ -103,13 +98,10 @@ impl Client {
 
     /// Connect to the MPD server using the given connection.
     ///
-    /// Returns a `Client` you can use to issue commands, and a stream of state change events as
-    /// returned by MPD.
+    /// Since this method is generic over the connection type it can be used to connect to either a
+    /// TCP or Unix socket dynamically or e.g. use a proxy.
     ///
-    /// Since this is generic over the connection type, you can use it with both TCP and Unix
-    /// socket connections.
-    ///
-    /// See also [`connect_to`] and [`connect_unix`] for the common connection case.
+    /// See also [`Client::connect_to`] and [`Client::connect_unix`] for the common connection case.
     ///
     /// # Panics
     ///
@@ -118,14 +110,68 @@ impl Client {
     /// # Errors
     ///
     /// This will return an error if sending the initial commands over the given transport fails.
-    ///
-    /// [`connect_to`]: #method.connect_to
-    /// [`connect_unix`]: #method.connect_unix
-    pub async fn connect<C>(connection: C) -> Result<(Client, StateChanges), MpdCodecError>
+    pub async fn connect<C>(connection: C) -> ConnectResult
     where
         C: AsyncRead + AsyncWrite + Send + Unpin + 'static,
     {
         Self::do_connect(connection, span!(Level::DEBUG, "client connection")).await
+    }
+
+    /// Send a [command].
+    ///
+    /// This will automatically parse the response to a proper type.
+    ///
+    /// # Errors
+    ///
+    /// This returns errors in the same conditions as [`Client::raw_command`], and additionally if the
+    /// response fails to convert to the expected type.
+    ///
+    /// [command]: super::commands
+    pub async fn command<C>(&self, cmd: C) -> Result<C::Response, CommandError>
+    where
+        C: Command,
+    {
+        let command = cmd.to_command();
+        let frame = self.raw_command(command).await?;
+
+        Ok(Response::from_frame(frame)?)
+    }
+
+    /// Send the given command list, and return the (typed) responses.
+    ///
+    /// # Errors
+    ///
+    /// This returns errors in the same conditions as [`Client::raw_command_list`], and
+    /// additionally if the response type conversion fails.
+    pub async fn command_list<L>(&self, list: L) -> Result<L::Response, CommandError>
+    where
+        L: CommandList,
+    {
+        let frames = match list.to_raw_command_list() {
+            Some(cmds) => self.raw_command_list(cmds).await?,
+            None => Vec::new(),
+        };
+
+        <L as CommandList>::parse_responses(frames).map_err(Into::into)
+    }
+
+    /// Send the connection password, if necessary.
+    ///
+    /// If the MPD instance the `Client` is connected to is protected by a password, sending
+    /// commands may result in "Permission denied" errors prior to sending the correct password.
+    ///
+    /// This will not send anything if `None` is passed.
+    ///
+    /// # Errors
+    ///
+    /// Sending an incorrect password will result in a [`CommandError::ErrorResponse`], any other
+    /// errors are returned in the same conditions as [`Client::raw_command`].
+    pub async fn password(&self, password: Option<String>) -> Result<(), CommandError> {
+        if let Some(pw) = password {
+            self.command(cmds::Password(pw)).await
+        } else {
+            Ok(())
+        }
     }
 
     /// Send the given command, and return the response to it.
@@ -134,24 +180,30 @@ impl Client {
     ///
     /// This will return an error if the connection to MPD is closed (cleanly) or a protocol error
     /// occurs (including IO errors), or if the command results in an MPD error.
-    pub async fn command(&self, command: Command) -> Result<Frame, CommandError> {
-        self.do_send(CommandList::new(command))
+    pub async fn raw_command(&self, command: RawCommand) -> Result<Frame, CommandError> {
+        self.do_send(RawCommandList::new(command))
             .await?
             .single_frame()
             .map_err(Into::into)
     }
 
-    /// Send the given command list, and return the responses to the contained commands.
+    /// Send the given command list, and return the raw response frames to the contained commands.
     ///
     /// # Errors
     ///
-    /// Errors will be returned in the same conditions as with [`command`], but if *any* of the
-    /// commands in the list return an error condition, the entire list will be treated as an
-    /// error. You may recover possible succesful fields in a response from the [error variant].
+    /// Errors will be returned in the same conditions as with [`Client::raw_command`], but if
+    /// *any* of the commands in the list return an error condition, the entire list will be
+    /// treated as an error.
     ///
-    /// [`command`]: #method.command
-    /// [error variant]: ../errors/enum.CommandError.html#variant.ErrorResponse
-    pub async fn command_list(&self, commands: CommandList) -> Result<Vec<Frame>, CommandError> {
+    /// You may recover possible succesful fields in a response from the [error].
+    ///
+    /// [error]: crate::errors::CommandError::ErrorResponse
+    pub async fn raw_command_list(
+        &self,
+        commands: RawCommandList,
+    ) -> Result<Vec<Frame>, CommandError> {
+        debug!(?commands, "sending command");
+
         let res = self.do_send(commands).await?;
         let mut frames = Vec::with_capacity(res.len());
 
@@ -170,8 +222,7 @@ impl Client {
         Ok(frames)
     }
 
-    async fn do_send(&self, commands: CommandList) -> Result<Response, CommandError> {
-        trace!(?commands, "do_send");
+    async fn do_send(&self, commands: RawCommandList) -> Result<RawResponse, CommandError> {
         let (tx, rx) = oneshot::channel();
 
         let mut commands_sender = self.commands_sender.clone();
@@ -185,12 +236,12 @@ impl Client {
         C: AsyncRead + AsyncWrite + Unpin + Send + 'static,
     {
         let (state_changes_sender, state_changes) = mpsc::unbounded_channel();
-        let (commands_sender, commands_receiver) = mpsc::channel(1);
+        let (commands_sender, commands_receiver) = mpsc::channel(2);
+
+        let mut connection = MpdCodec::connect(connection).await?;
 
         trace!("sending initial idle command");
-        let mut connection = MpdCodec::new().framed(connection);
-
-        if let Err(e) = connection.send(Command::new(IDLE)).await {
+        if let Err(e) = connection.send(idle()).await {
             error!(error = ?e, "failed to send initial idle command");
             return Err(e);
         }
@@ -203,7 +254,7 @@ impl Client {
 
         let client = Self {
             commands_sender,
-            span: Arc::new(span),
+            span,
         };
 
         let state_changes = StateChanges { rx: state_changes };
@@ -214,8 +265,8 @@ impl Client {
 struct State<C> {
     loop_state: LoopState,
     connection: Framed<C, MpdCodec>,
-    commands: Receiver<(CommandList, CommandResponder)>,
-    state_changes: UnboundedSender<Result<Subsystem, StateChangeError>>,
+    commands: Receiver<(RawCommandList, CommandResponder)>,
+    state_changes: StateChangesSender,
 }
 
 #[derive(Debug)]
@@ -224,10 +275,18 @@ enum LoopState {
     WaitingForCommandReply(CommandResponder),
 }
 
+fn idle() -> RawCommand {
+    RawCommand::new("idle")
+}
+
+fn cancel_idle() -> RawCommand {
+    RawCommand::new("noidle")
+}
+
 async fn run_loop<C>(
     connection: Framed<C, MpdCodec>,
-    commands: Receiver<(CommandList, CommandResponder)>,
-    state_changes: UnboundedSender<Result<Subsystem, StateChangeError>>,
+    commands: Receiver<(RawCommandList, CommandResponder)>,
+    state_changes: StateChangesSender,
 ) where
     C: AsyncRead + AsyncWrite + Unpin,
 {
@@ -276,7 +335,7 @@ where
                                 let _ = state.state_changes.send(state_change);
                             }
 
-                            if let Err(e) = state.connection.send(Command::new(IDLE)).await {
+                            if let Err(e) = state.connection.send(idle()).await {
                                 error!(error = ?e, "failed to start idling after state change");
                                 let _ = state.state_changes.send(Err(e.into()));
                                 return None;
@@ -298,7 +357,7 @@ where
                     trace!(?command, "command received");
 
                     // Cancel currently ongoing idle
-                    if let Err(e) = state.connection.send(Command::new(CANCEL_IDLE)).await {
+                    if let Err(e) = state.connection.send(cancel_idle()).await {
                         error!(error = ?e, "failed to cancel idle prior to sending command");
                         let _ = responder.send(Err(e.into()));
                         return None;
@@ -361,8 +420,7 @@ where
 
                     // Start idling again
                     state.loop_state = LoopState::Idling;
-                    let idle = Command::new(IDLE);
-                    if let Err(e) = state.connection.send(idle).await {
+                    if let Err(e) = state.connection.send(idle()).await {
                         error!(error = ?e, "failed to start idling after receiving command response");
                         let _ = state.state_changes.send(Err(e.into()));
                         return None;
@@ -376,7 +434,7 @@ where
     Some(state)
 }
 
-fn response_to_subsystem(res: Response) -> Result<Option<Subsystem>, StateChangeError> {
+fn response_to_subsystem(res: RawResponse) -> Result<Option<Subsystem>, StateChangeError> {
     let mut frame = res.single_frame()?;
 
     Ok(match frame.get("changed") {
@@ -394,7 +452,6 @@ fn response_to_subsystem(res: Response) -> Result<Option<Subsystem>, StateChange
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::time::Duration;
     use tokio_test::{assert_ok, io::Builder as MockBuilder};
 
     static GREETING: &[u8] = b"OK MPD 0.21.11\n";
@@ -431,7 +488,7 @@ mod tests {
         let (client, mut state_changes) = Client::connect(io).await.expect("connect failed");
 
         let response = client
-            .command(Command::new("hello"))
+            .raw_command(RawCommand::new("hello"))
             .await
             .expect("command failed");
 
@@ -452,7 +509,6 @@ mod tests {
             .read(b"OK\n")
             .write(b"hello\n")
             .read(b"foo: bar\n")
-            .wait(Duration::from_secs(2))
             .read(b"baz: qux\nOK\n")
             .write(b"idle\n")
             .build();
@@ -460,7 +516,7 @@ mod tests {
         let (client, _state_changes) = Client::connect(io).await.expect("connect failed");
 
         let response = client
-            .command(Command::new("hello"))
+            .raw_command(RawCommand::new("hello"))
             .await
             .expect("command failed");
 
@@ -482,10 +538,13 @@ mod tests {
 
         let (client, _state_changes) = Client::connect(io).await.expect("connect failed");
 
-        let mut commands = CommandList::new(Command::new("foo"));
-        commands.add(Command::new("bar"));
+        let mut commands = RawCommandList::new(RawCommand::new("foo"));
+        commands.add(RawCommand::new("bar"));
 
-        let responses = client.command_list(commands).await.expect("command failed");
+        let responses = client
+            .raw_command_list(commands)
+            .await
+            .expect("command failed");
 
         assert_eq!(responses.len(), 2);
         assert_eq!(responses[0].find("foo"), Some("asdf"));

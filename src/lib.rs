@@ -1,5 +1,5 @@
 #![warn(
-    missing_copy_implementations,
+    intra_doc_link_resolution_failure,
     missing_debug_implementations,
     missing_docs,
     rust_2018_idioms,
@@ -12,17 +12,27 @@
 //! User-friendly async client for [MPD](https://musicpd.org).
 
 mod client;
+mod errors;
 
-pub mod errors;
+pub mod commands;
 pub mod filter;
 pub mod state_changes;
+pub mod tag;
 
-pub use client::Client;
+pub use client::{Client, ConnectResult};
+pub use errors::CommandError;
 pub use filter::Filter;
 pub use state_changes::Subsystem;
+pub use tag::Tag;
 
-pub use mpd_protocol::{
-    command_list,
-    response::{Error, Frame},
-    Command, CommandList, MpdCodecError,
-};
+/// Protocol-level types.
+pub mod raw {
+    pub use mpd_protocol::{
+        response::{Error as ErrorResponse, Frame},
+        Command as RawCommand, CommandList as RawCommandList, MpdCodecError,
+    };
+}
+
+mod sealed {
+    pub trait Sealed {}
+}
