@@ -124,13 +124,24 @@ impl Decoder for MpdCodec {
                 }
                 Ok((remaining, parsed_item)) => {
                     let mut ret = None;
+                    let msg_end = src.len() - remaining.len();
 
                     match parsed_item {
                         ParsedComponent::Field { key, value } => {
                             self.current_response.push_field(key, value.to_owned())
                         }
                         ParsedComponent::BinaryField(bin) => {
-                            self.current_response.push_binary(bin.to_owned())
+                            let bin_start = bin.as_ptr() as usize;
+                            let bin_len = bin.len();
+
+                            let mut binary = src.split_to(msg_end);
+                            let prefix_len = bin_start - binary.as_ptr() as usize;
+
+                            binary.advance(prefix_len);
+                            binary.truncate(bin_len);
+
+                            self.current_response.push_binary(binary);
+                            continue;
                         }
                         ParsedComponent::EndOfFrame => self.current_response.finish_frame(),
                         ParsedComponent::EndOfResponse => {
@@ -143,8 +154,7 @@ impl Decoder for MpdCodec {
                         }
                     }
 
-                    let advance = src.len() - remaining.len();
-                    src.advance(advance);
+                    src.advance(msg_end);
 
                     if let Some(response) = ret {
                         break Ok(Some(response));
@@ -301,7 +311,7 @@ mod tests {
         assert_eq!(second.find("foo"), Some("bar"));
 
         assert_eq!(third.find("binary"), None);
-        assert_eq!(third.get_binary(), Some(Vec::from("BINARY")));
+        assert_eq!(third.get_binary(), Some(BytesMut::from("BINARY")));
     }
 
     #[test]
@@ -317,7 +327,10 @@ mod tests {
         let mut frame = response.single_frame().unwrap();
 
         assert_eq!(frame.fields_len(), 0);
-        assert_eq!(frame.get_binary(), Some(Vec::from("HELLO \nOK\n WORLD")));
+        assert_eq!(
+            frame.get_binary(),
+            Some(BytesMut::from("HELLO \nOK\n WORLD"))
+        );
 
         assert!(buf.is_empty());
     }

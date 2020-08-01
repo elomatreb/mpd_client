@@ -1,5 +1,7 @@
 //! A succesful response to a command.
 
+use bytes::BytesMut;
+
 use std::fmt;
 use std::iter::FusedIterator;
 use std::slice;
@@ -13,7 +15,7 @@ use std::vec;
 #[derive(Clone, PartialEq, Eq)]
 pub struct Frame {
     pub(super) fields: FieldsContainer,
-    pub(super) binary: Option<Vec<u8>>,
+    pub(super) binary: Option<BytesMut>,
 }
 
 impl Frame {
@@ -93,7 +95,7 @@ impl Frame {
     /// Get the binary blob contained in this frame, if present.
     ///
     /// This will remove it from the frame, future calls to this method will return `None`.
-    pub fn get_binary(&mut self) -> Option<Vec<u8>> {
+    pub fn get_binary(&mut self) -> Option<BytesMut> {
         self.binary.take()
     }
 }
@@ -173,14 +175,14 @@ impl<'a> IntoIterator for &'a Frame {
 #[derive(Debug)]
 pub struct IntoIter {
     iter: vec::IntoIter<Option<(Arc<str>, String)>>,
-    binary: Option<Vec<u8>>,
+    binary: Option<BytesMut>,
 }
 
 impl IntoIter {
     /// Get the binary blob contained in this frame, if present.
     ///
     /// This will remove it from the frame, future calls to this method will return `None`.
-    pub fn get_binary(&mut self) -> Option<Vec<u8>> {
+    pub fn get_binary(&mut self) -> Option<BytesMut> {
         self.binary.take()
     }
 }
@@ -235,7 +237,7 @@ mod tests {
                 Some((Arc::from("hello"), String::from("world"))),
                 Some((Arc::from("foo"), String::from("bar"))),
             ]),
-            binary: Some(Vec::from("hello world")),
+            binary: Some(BytesMut::from("hello world")),
         };
 
         assert_eq!(frame.fields_len(), 2);
@@ -245,12 +247,12 @@ mod tests {
     fn binary() {
         let mut frame = Frame {
             fields: FieldsContainer(Vec::new()),
-            binary: Some(Vec::from("hello world")),
+            binary: Some(BytesMut::from("hello world")),
         };
 
         assert!(frame.has_binary());
         assert!(!frame.is_empty());
-        assert_eq!(frame.get_binary(), Some(Vec::from("hello world")));
+        assert_eq!(frame.get_binary(), Some(BytesMut::from("hello world")));
         assert_eq!(frame.get_binary(), None);
         assert!(!frame.has_binary());
     }

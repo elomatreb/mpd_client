@@ -3,6 +3,7 @@
 pub mod error;
 pub mod frame;
 
+use bytes::BytesMut;
 use fxhash::FxHashSet;
 
 use std::iter::FusedIterator;
@@ -185,7 +186,7 @@ impl ResponseBuilder {
         self.current_frame().fields.push_field(key, value);
     }
 
-    pub(crate) fn push_binary(&mut self, binary: Vec<u8>) {
+    pub(crate) fn push_binary(&mut self, binary: BytesMut) {
         self.current_frame().binary = Some(binary);
     }
 
