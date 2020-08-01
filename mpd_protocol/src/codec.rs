@@ -3,25 +3,22 @@
 //! The codec accepts sending arbitrary (single) messages, it is up to you to make sure they are
 //! valid.
 //!
-//! See the notes on the [`parser`] module about what responses the codec
-//! supports.
-//!
 //! [Codec]: https://docs.rs/tokio-util/0.3.0/tokio_util/codec/index.html
-//! [`parser`]: crate::parser
 
 use bytes::{Buf, BytesMut};
+use nom::{Err as NomErr, Needed};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite};
 use tokio_util::codec::{Decoder, Encoder, Framed};
-use tracing::{debug, error, info, span, trace, Level, Span};
+use tracing::{info, span, trace, Level, Span};
 
-use std::convert::TryFrom;
-use std::error::Error;
+use std::error::Error as StdError;
 use std::fmt;
 use std::io;
+use std::mem;
 
 use crate::command::{Command, CommandList};
-use crate::parser;
-use crate::response::Response;
+use crate::parser::{self, ParsedComponent};
+use crate::response::{error::Error, Response, ResponseBuilder};
 
 /// [Codec] for MPD protocol.
 ///
@@ -30,7 +27,7 @@ use crate::response::Response;
 #[derive(Clone, Debug)]
 pub struct MpdCodec {
     decode_span: Option<Span>,
-    cursor: usize,
+    current_response: ResponseBuilder,
     protocol_version: Box<str>,
 }
 
@@ -55,12 +52,12 @@ impl MpdCodec {
             read += io.read(&mut greeting).await?;
 
             match parser::greeting(&greeting[..read]) {
-                Ok((_, parser::Greeting { version })) => {
+                Ok((_, version)) => {
                     info!(protocol_version = version, "connected successfully");
 
                     let codec = Self {
                         decode_span: None,
-                        cursor: 0,
+                        current_response: ResponseBuilder::new(),
                         protocol_version: version.into(),
                     };
 
@@ -111,64 +108,50 @@ impl Decoder for MpdCodec {
     type Error = MpdCodecError;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
-        if self.decode_span.is_none() {
-            self.decode_span = Some(span!(Level::DEBUG, "decode_command"));
-        }
+        loop {
+            let parsed = ParsedComponent::parse(&src);
 
-        let enter = self.decode_span.as_ref().unwrap().enter();
+            match parsed {
+                Err(NomErr::Incomplete(needed)) => {
+                    if let Needed::Size(n) = needed {
+                        src.reserve(n.saturating_sub(src.len()));
+                    }
 
-        trace!(self.cursor);
-
-        for (terminator, _) in src[self.cursor..]
-            .windows(3)
-            .enumerate()
-            .filter(|(_, w)| w == b"OK\n")
-        {
-            let msg_end = self.cursor + terminator + 3;
-            trace!(end = msg_end, "potential response end");
-
-            let parser_result = parser::response(&src[..msg_end]);
-            trace!("completed parsing");
-
-            match parser_result {
-                Ok((_remainder, response)) => {
-                    // The errors returned by the TryFrom impl are not possible when operating
-                    // directly on the results of our parser
-                    let r = Response::try_from(response.as_slice()).unwrap();
-
-                    src.advance(msg_end);
-
-                    debug!(
-                        response = ?r,
-                        remaining_buffer = src.len(),
-                        "response complete",
-                    );
-
-                    drop(enter);
-                    self.cursor = 0;
-                    self.decode_span = None;
-
-                    return Ok(Some(r));
+                    break Ok(None);
                 }
-                Err(e) => {
-                    if !e.is_incomplete() {
-                        error!(error = ?e, "error parsing response");
-                        let err = src.split();
-                        self.cursor = 0;
-                        return Err(MpdCodecError::InvalidMessage(err.as_ref().into()));
-                    } else {
-                        trace!("response incomplete");
+                Err(_) => {
+                    break Err(MpdCodecError::InvalidMessage(src[..].into()));
+                }
+                Ok((remaining, parsed_item)) => {
+                    let mut ret = None;
+
+                    match parsed_item {
+                        ParsedComponent::Field { key, value } => {
+                            self.current_response.push_field(key, value.to_owned())
+                        }
+                        ParsedComponent::BinaryField(bin) => {
+                            self.current_response.push_binary(bin.to_owned())
+                        }
+                        ParsedComponent::EndOfFrame => self.current_response.finish_frame(),
+                        ParsedComponent::EndOfResponse => {
+                            let response_builder = mem::take(&mut self.current_response);
+                            ret = Some(response_builder.finish());
+                        }
+                        ParsedComponent::Error(e) => {
+                            let response_builder = mem::take(&mut self.current_response);
+                            ret = Some(response_builder.error(Error::from_parsed(e)));
+                        }
+                    }
+
+                    let advance = src.len() - remaining.len();
+                    src.advance(advance);
+
+                    if let Some(response) = ret {
+                        break Ok(Some(response));
                     }
                 }
             }
         }
-
-        // We didn't find a terminator or the message was incomplete
-
-        // Subtract two in case the terminator was already partially in the buffer
-        self.cursor = src.len().saturating_sub(2);
-
-        Ok(None)
     }
 }
 
@@ -197,8 +180,8 @@ impl From<io::Error> for MpdCodecError {
     }
 }
 
-impl Error for MpdCodecError {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
+impl StdError for MpdCodecError {
+    fn source(&self) -> Option<&(dyn StdError + 'static)> {
         match self {
             MpdCodecError::Io(e) => Some(e),
             _ => None,
@@ -214,7 +197,7 @@ mod tests {
     fn dummy_codec() -> MpdCodec {
         MpdCodec {
             decode_span: None,
-            cursor: 0,
+            current_response: ResponseBuilder::new(),
             protocol_version: "".into(),
         }
     }

@@ -1,7 +1,5 @@
 //! A succesful response to a command.
 
-use fxhash::FxHashSet;
-
 use std::fmt;
 use std::iter::FusedIterator;
 use std::slice;
@@ -122,33 +120,15 @@ impl fmt::Debug for Frame {
 #[derive(Clone, PartialEq, Eq)]
 pub(super) struct FieldsContainer(Vec<Option<(Arc<str>, String)>>);
 
+impl FieldsContainer {
+    pub(super) fn push_field(&mut self, key: Arc<str>, value: String) {
+        self.0.push(Some((key, value)));
+    }
+}
+
 impl fmt::Debug for FieldsContainer {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_map().entries(Fields(self.0.iter())).finish()
-    }
-}
-
-impl From<&[(&str, &str)]> for FieldsContainer {
-    fn from(fields: &[(&str, &str)]) -> Self {
-        let mut keys = FxHashSet::default();
-
-        let fields = fields
-            .iter()
-            .map(|&(k, v)| Some((simple_intern(&mut keys, k), v.to_owned())))
-            .collect();
-
-        Self(fields)
-    }
-}
-
-fn simple_intern(store: &mut FxHashSet<Arc<str>>, value: &str) -> Arc<str> {
-    match store.get(value) {
-        Some(v) => Arc::clone(v),
-        None => {
-            let v = Arc::from(value);
-            store.insert(Arc::clone(&v));
-            v
-        }
     }
 }
 
@@ -297,7 +277,7 @@ mod tests {
     }
 
     #[test]
-    fn iters() {
+    fn iter() {
         let frame = Frame {
             fields: FieldsContainer(vec![
                 Some((Arc::from("hello"), String::from("first value"))),
@@ -317,23 +297,22 @@ mod tests {
     }
 
     #[test]
-    fn conversion() {
-        let fields = vec![
-            ("hello", "first value"),
-            ("foo", "bar"),
-            ("hello", "second value"),
-        ];
+    fn owned_iter() {
+        let frame = Frame {
+            fields: FieldsContainer(vec![
+                Some((Arc::from("hello"), String::from("first value"))),
+                Some((Arc::from("foo"), String::from("bar"))),
+                Some((Arc::from("hello"), String::from("second value"))),
+            ]),
+            binary: None,
+        };
+        let mut iter = frame.into_iter();
 
-        let mut converted = FieldsContainer::from(fields.as_slice());
+        assert_eq!(iter.next(), Some(("hello".into(), "first value".into())));
+        assert_eq!(iter.next(), Some(("foo".into(), "bar".into())));
+        assert_eq!(iter.next(), Some(("hello".into(), "second value".into())));
 
-        let c = converted.0.pop().unwrap().unwrap();
-        let b = converted.0.pop().unwrap().unwrap();
-        let a = converted.0.pop().unwrap().unwrap();
-
-        assert_eq!(a, (Arc::from("hello"), String::from("first value")));
-        assert_eq!(b, (Arc::from("foo"), String::from("bar")));
-        assert_eq!(c, (Arc::from("hello"), String::from("second value")));
-
-        assert!(Arc::ptr_eq(&a.0, &c.0)); // Same allocation
+        assert_eq!(iter.next(), None);
+        assert_eq!(iter.next(), None);
     }
 }

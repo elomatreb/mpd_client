@@ -3,11 +3,11 @@
 pub mod error;
 pub mod frame;
 
-use std::convert::TryFrom;
-use std::fmt;
-use std::iter::FusedIterator;
+use fxhash::FxHashSet;
 
-use crate::parser;
+use std::iter::FusedIterator;
+use std::sync::Arc;
+use std::vec;
 
 pub use error::Error;
 pub use frame::Frame;
@@ -25,15 +25,6 @@ pub struct Response {
     frames: Vec<Frame>,
     /// The error, if one occured.
     error: Option<Error>,
-}
-
-/// Errors returned when attmepting to construct an owned [`Response`] from a list of parser results
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum OwnedResponseError {
-    /// There were further frames after an error frame
-    FramesAfterError,
-    /// An empty slice was provided (A response needs at least one frame or error)
-    Empty,
 }
 
 #[allow(clippy::len_without_is_empty)]
@@ -159,55 +150,83 @@ impl Response {
 
     /// Creates an iterator over all frames and errors in the response.
     pub fn into_frames(self) -> Frames {
-        Frames(self)
+        Frames {
+            frames: self.frames.into_iter(),
+            error: self.error,
+        }
     }
 }
 
-impl<'a> TryFrom<&'a [parser::Response<'_>]> for Response {
-    type Error = OwnedResponseError;
+#[derive(Clone, Debug)]
+pub(crate) struct ResponseBuilder {
+    field_keys: FxHashSet<Arc<str>>,
+    current_frame: Option<Frame>,
+    frames: Vec<Frame>,
+}
 
-    fn try_from(raw_frames: &'a [parser::Response<'_>]) -> Result<Self, Self::Error> {
-        if raw_frames.is_empty() {
-            return Err(OwnedResponseError::Empty);
+impl ResponseBuilder {
+    pub(crate) fn new() -> Self {
+        Self {
+            field_keys: FxHashSet::default(),
+            current_frame: Some(Frame::empty()),
+            frames: Vec::new(),
+        }
+    }
+
+    pub(crate) fn push_field(&mut self, key: &str, value: String) {
+        let key = if let Some(v) = self.field_keys.get(key) {
+            Arc::clone(v)
+        } else {
+            let v = Arc::from(key);
+            self.field_keys.insert(Arc::clone(&v));
+            v
+        };
+
+        self.current_frame().fields.push_field(key, value);
+    }
+
+    pub(crate) fn push_binary(&mut self, binary: Vec<u8>) {
+        self.current_frame().binary = Some(binary);
+    }
+
+    pub(crate) fn finish_frame(&mut self) {
+        if let Some(frame) = self.current_frame.take() {
+            self.frames.push(frame);
+        } else {
+            self.frames.push(Frame::empty());
+        }
+    }
+
+    pub(crate) fn finish(mut self) -> Response {
+        if let Some(frame) = self.current_frame {
+            self.frames.push(frame);
         }
 
-        // Optimistically pre-allocated Vec
-        let mut frames = Vec::with_capacity(raw_frames.len());
-        let mut error = None;
+        Response {
+            frames: self.frames,
+            error: None,
+        }
+    }
 
-        for frame in raw_frames.iter().rev() {
-            match frame {
-                parser::Response::Success { fields, binary } => {
-                    let binary = binary.map(Vec::from);
-
-                    frames.push(Frame {
-                        fields: frame::FieldsContainer::from(fields.as_slice()),
-                        binary,
-                    });
-                }
-                parser::Response::Error {
-                    code,
-                    command_index,
-                    current_command,
-                    message,
-                } => {
-                    if !frames.is_empty() {
-                        // If we already saw succesful frames, the error would not have been the
-                        // final element
-                        return Err(OwnedResponseError::FramesAfterError);
-                    }
-
-                    error = Some(Error {
-                        code: *code,
-                        command_index: *command_index,
-                        current_command: current_command.map(String::from),
-                        message: (*message).to_owned(),
-                    });
-                }
-            }
+    pub(crate) fn error(mut self, error: Error) -> Response {
+        if let Some(frame) = self.current_frame {
+            self.frames.push(frame);
         }
 
-        Ok(Response { frames, error })
+        Response {
+            frames: self.frames,
+            error: Some(error),
+        }
+    }
+
+    fn current_frame(&mut self) -> &mut Frame {
+        self.current_frame.get_or_insert_with(Frame::empty)
+    }
+}
+
+impl Default for ResponseBuilder {
+    fn default() -> Self {
+        ResponseBuilder::new()
     }
 }
 
@@ -260,16 +279,19 @@ impl<'a> IntoIterator for &'a Response {
 
 /// Iterator over frames in a response, as returned by [`Response::into_frames`].
 #[derive(Clone, Debug)]
-pub struct Frames(Response);
+pub struct Frames {
+    frames: vec::IntoIter<Frame>,
+    error: Option<Error>,
+}
 
 impl Iterator for Frames {
     type Item = Result<Frame, Error>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if let Some(frame) = self.0.frames.pop() {
-            Some(Ok(frame))
-        } else if let Some(error) = self.0.error.take() {
-            Some(Err(error))
+        if let Some(f) = self.frames.next() {
+            Some(Ok(f))
+        } else if let Some(e) = self.error.take() {
+            Some(Err(e))
         } else {
             None
         }
@@ -277,7 +299,7 @@ impl Iterator for Frames {
 
     fn size_hint(&self) -> (usize, Option<usize>) {
         // .len() returns the number of succesful frames, add 1 if there is also an error
-        let len = self.0.len() + if self.0.is_error() { 1 } else { 0 };
+        let len = self.frames.len() + if self.error.is_some() { 1 } else { 0 };
 
         (len, Some(len))
     }
@@ -294,20 +316,6 @@ impl IntoIterator for Response {
         self.into_frames()
     }
 }
-impl fmt::Display for OwnedResponseError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            OwnedResponseError::FramesAfterError => {
-                write!(f, "Error frame was not the final element of response")
-            }
-            OwnedResponseError::Empty => {
-                write!(f, "Attempted to construct response with no values")
-            }
-        }
-    }
-}
-
-impl std::error::Error for OwnedResponseError {}
 
 #[cfg(test)]
 mod test {

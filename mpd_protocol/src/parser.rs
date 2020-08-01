@@ -1,4 +1,4 @@
-//! [`nom`]-based parsers for MPD responses.
+//! Parsers for MPD responses.
 //!
 //! # Feature support
 //!
@@ -7,10 +7,7 @@
 //!
 //! If the command list was initiated with the regular `command_list_begin` command, the individual
 //! responses are not separated from each other, which causes the responses to be treated as a
-//! single large one, resulting in an error if any but the last response in the list contain
-//! binary fields.
-//!
-//! [`nom`]: https://crates.io/crates/nom
+//! single large one.
 
 use nom::{
     branch::alt,
@@ -19,86 +16,49 @@ use nom::{
         is_alphabetic,
         streaming::{char, digit1, newline},
     },
-    combinator::{cut, map, map_res, not, opt},
+    combinator::{cut, map, map_res, opt},
     error::ParseError,
-    multi::{many0, many_till},
-    sequence::{delimited, pair, separated_pair, terminated, tuple},
+    sequence::{delimited, separated_pair, terminated, tuple},
     IResult,
 };
 
 use std::str::{self, FromStr};
 
-/// Initial message sent by MPD on connect.
-///
-/// Parsed from raw data using [`greeting()`].
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Greeting<'a> {
-    /// Protocol version reported by MPD.
-    pub version: &'a str,
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum ParsedComponent<'raw> {
+    EndOfFrame,
+    EndOfResponse,
+    Error(Error<'raw>),
+    Field { key: &'raw str, value: &'raw str },
+    BinaryField(&'raw [u8]),
 }
 
-/// Complete response, either succesful or an error. Succesful responses may be empty.
-///
-/// Parsed from raw data using [`response()`].
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Response<'a> {
-    /// Successful response.
-    Success {
-        /// Key-value pairs. Keys may occur any number of times.
-        fields: Vec<(&'a str, &'a str)>,
-        /// Binary field.
-        binary: Option<&'a [u8]>,
-    },
-    /// Error response.
-    Error {
-        /// Error code, as [defined by MPD][mpd-error-def].
-        ///
-        /// [mpd-error-def]: https://github.com/MusicPlayerDaemon/MPD/blob/master/src/protocol/Ack.hxx
-        code: u64,
-        /// Index of command that caused this error in a command list.
-        command_index: u64,
-        /// Command that caused this error, if any.
-        current_command: Option<&'a str>,
-        /// Message describing the nature of the error.
-        message: &'a str,
-    },
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) struct Error<'raw> {
+    pub(crate) code: u64,
+    pub(crate) command_index: u64,
+    pub(crate) current_command: Option<&'raw str>,
+    pub(crate) message: &'raw str,
 }
 
-/// Parse a [`Greeting`] line.
-///
-/// ```
-/// use mpd_protocol::parser::{Greeting, greeting};
-///
-/// let g = Greeting { version: "0.21.11" };
-/// assert_eq!(greeting(b"OK MPD 0.21.11\n"), Ok((&b""[..], g)));
-/// ```
-pub fn greeting(i: &[u8]) -> IResult<&[u8], Greeting<'_>> {
-    map(
-        delimited(
-            tag("OK MPD "),
-            utf8(take_while1(|c| c != b'\n')),
-            char('\n'),
-        ),
-        |version| Greeting { version },
-    )(i)
+impl<'raw> ParsedComponent<'raw> {
+    pub(crate) fn parse(i: &'raw [u8]) -> IResult<&[u8], ParsedComponent<'_>> {
+        alt((
+            map(tag("OK\n"), |_| ParsedComponent::EndOfResponse),
+            map(tag("list_OK\n"), |_| ParsedComponent::EndOfFrame),
+            map(error, ParsedComponent::Error),
+            map(binary_field, |bin| ParsedComponent::BinaryField(bin)),
+            map(key_value_field, |(key, value)| ParsedComponent::Field {
+                key,
+                value,
+            }),
+        ))(i)
+    }
 }
 
-/// Parse a complete response, resulting in one or more frames if succesful.
-///
-/// ```
-/// use mpd_protocol::parser::{Response, response};
-///
-/// assert_eq!(
-///     response(b"foo: bar\nOK\n"),
-///     Ok(([].as_ref(), vec![Response::Success { fields: vec![("foo", "bar")], binary: None }]))
-/// );
-/// ```
-pub fn response(i: &[u8]) -> IResult<&[u8], Vec<Response<'_>>> {
-    alt((
-        map(error, |r| vec![r]),
-        map(terminated(single_response_frame, tag("OK\n")), |r| vec![r]),
-        command_list,
-    ))(i)
+/// Recognize a server greeting, returning the protocol version.
+pub(crate) fn greeting(i: &[u8]) -> IResult<&[u8], &str> {
+    delimited(tag("OK MPD "), utf8(take_while1(|c| c != b'\n')), newline)(i)
 }
 
 /// Apply the given parser and try to interpret its result as UTF-8 encoded bytes.
@@ -116,7 +76,7 @@ fn number<O: FromStr>(i: &[u8]) -> IResult<&[u8], O> {
 }
 
 /// Parse an error response.
-fn error(i: &[u8]) -> IResult<&[u8], Response<'_>> {
+fn error(i: &[u8]) -> IResult<&[u8], Error<'_>> {
     let (remaining, ((code, index), command, message)) = delimited(
         tag("ACK "),
         tuple((
@@ -129,21 +89,13 @@ fn error(i: &[u8]) -> IResult<&[u8], Response<'_>> {
 
     Ok((
         remaining,
-        Response::Error {
+        Error {
             code,
             message,
             command_index: index,
             current_command: command,
         },
     ))
-}
-
-/// Recognize a single succesful response.
-fn single_response_frame(i: &[u8]) -> IResult<&[u8], Response<'_>> {
-    map(
-        pair(many0(key_value_field), opt(binary_field)),
-        |(fields, binary)| Response::Success { fields, binary },
-    )(i)
 }
 
 /// Recognize `[<error code>@<command index>]`.
@@ -166,9 +118,6 @@ fn error_current_command(i: &[u8]) -> IResult<&[u8], Option<&str>> {
 
 /// Recognize a single key-value pair
 fn key_value_field(i: &[u8]) -> IResult<&[u8], (&str, &str)> {
-    // Don't parse a binary field header as a key-value pair
-    not(binary_prefix)(i)?;
-
     separated_pair(
         utf8(take_while1(|b| is_alphabetic(b) || b == b'_' || b == b'-')),
         tag(": "),
@@ -188,221 +137,120 @@ fn binary_field(i: &[u8]) -> IResult<&[u8], &[u8]> {
     cut(terminated(take(length), newline))(i)
 }
 
-/// Recognize a command list, consisting of one or more responses and/or an error
-fn command_list(i: &[u8]) -> IResult<&[u8], Vec<Response<'_>>> {
-    map(
-        many_till(
-            terminated(single_response_frame, tag("list_OK\n")),
-            command_list_terminator,
-        ),
-        |(mut responses, terminator)| {
-            if let Some(error) = terminator {
-                responses.push(error);
-            }
-
-            responses
-        },
-    )(i)
-}
-
-/// Recognize a terminator for a command list, either the final OK or an error message
-fn command_list_terminator(i: &[u8]) -> IResult<&[u8], Option<Response<'_>>> {
-    alt((map(tag("OK\n"), |_| None), map(error, Some)))(i)
-}
-
 #[cfg(test)]
 mod test {
-    use super::Response;
+    use super::{Error, ParsedComponent};
+    use nom::{Err as NomErr, Needed};
 
     const EMPTY: &[u8] = &[];
 
     #[test]
     fn greeting() {
+        assert_eq!(super::greeting(b"OK MPD 0.21.11\n"), Ok((EMPTY, "0.21.11")));
+        assert!(super::greeting(b"OK MPD 0.21.11")
+            .unwrap_err()
+            .is_incomplete());
+    }
+
+    #[test]
+    fn end_markers() {
         assert_eq!(
-            super::greeting(b"OK MPD 0.21.11\n"),
-            Ok((EMPTY, super::Greeting { version: "0.21.11" },))
+            ParsedComponent::parse(b"OK\n"),
+            Ok((EMPTY, ParsedComponent::EndOfResponse))
+        );
+
+        assert_eq!(
+            ParsedComponent::parse(b"OK"),
+            Err(NomErr::Incomplete(Needed::Size(3)))
+        );
+
+        assert_eq!(
+            ParsedComponent::parse(b"list_OK\n"),
+            Ok((EMPTY, ParsedComponent::EndOfFrame))
+        );
+
+        assert_eq!(
+            ParsedComponent::parse(b"list_OK"),
+            Err(NomErr::Incomplete(Needed::Size(8)))
         );
     }
 
     #[test]
     fn error() {
-        let no_command = "ACK [5@0] {} unknown command \"foo\"\n";
-        let with_command = "ACK [2@0] {random} Boolean (0/1) expected: foo\n";
+        let no_command = b"ACK [5@0] {} unknown command \"foo\"\n";
+        let with_command = b"ACK [2@0] {random} Boolean (0/1) expected: foo\n";
 
         assert_eq!(
-            super::error(no_command.as_bytes()),
+            ParsedComponent::parse(no_command),
             Ok((
                 EMPTY,
-                Response::Error {
+                ParsedComponent::Error(Error {
                     code: 5,
                     command_index: 0,
                     current_command: None,
                     message: "unknown command \"foo\""
-                }
+                })
             ))
         );
 
         assert_eq!(
-            super::error(with_command.as_bytes()),
+            ParsedComponent::parse(with_command),
             Ok((
                 EMPTY,
-                Response::Error {
+                ParsedComponent::Error(Error {
                     code: 2,
                     command_index: 0,
                     current_command: Some("random"),
                     message: "Boolean (0/1) expected: foo",
+                })
+            ))
+        );
+    }
+
+    #[test]
+    fn field() {
+        assert_eq!(
+            ParsedComponent::parse(b"foo: OK\n"),
+            Ok((
+                EMPTY,
+                ParsedComponent::Field {
+                    key: "foo",
+                    value: "OK",
                 }
             ))
         );
-    }
 
-    #[test]
-    fn incomplete_simple_response() {
-        let msg = "foo: bar\nOK".as_bytes(); // Note missing final newline
-        assert!(super::response(msg).unwrap_err().is_incomplete());
-    }
-
-    #[test]
-    fn incomplete_binary_response() {
-        let msg = "binary: 100\nfoo: bar\n".as_bytes();
-        let r = super::response(msg);
-
-        assert!(r.unwrap_err().is_incomplete());
-    }
-
-    #[test]
-    fn incomplete_complete_response() {
-        let msg = "foo: bar\nlist_OK\n".as_bytes();
-        let r = super::response(msg);
-
-        assert!(r.unwrap_err().is_incomplete());
-    }
-
-    #[test]
-    fn empty_response() {
         assert_eq!(
-            super::response(b"OK\n"),
+            ParsedComponent::parse(b"foo_bar: hello world list_OK\n"),
             Ok((
                 EMPTY,
-                vec![Response::Success {
-                    fields: Vec::new(),
-                    binary: None
-                }]
+                ParsedComponent::Field {
+                    key: "foo_bar",
+                    value: "hello world list_OK",
+                }
             ))
         );
+
+        assert!(ParsedComponent::parse(b"asdf: fooo")
+            .unwrap_err()
+            .is_incomplete());
     }
 
     #[test]
-    fn empty_key_value() {
+    fn binary_field() {
         assert_eq!(
-            super::response(b"hello: \nOK\n"),
-            Ok((
-                EMPTY,
-                vec![Response::Success {
-                    fields: vec![("hello", "")],
-                    binary: None,
-                }],
-            ))
+            ParsedComponent::parse(b"binary: 6\nFOOBAR\n"),
+            Ok((EMPTY, ParsedComponent::BinaryField(b"FOOBAR")))
         );
-    }
 
-    #[test]
-    fn simple_response() {
         assert_eq!(
-            super::response(b"foo: bar\nfoo: baz\nmep: asdf\nOK\n"),
-            Ok((
-                EMPTY,
-                vec![Response::Success {
-                    fields: vec![("foo", "bar"), ("foo", "baz"), ("mep", "asdf")],
-                    binary: None,
-                }],
-            ))
+            ParsedComponent::parse(b"binary: 6\nF"),
+            Err(NomErr::Incomplete(Needed::Size(6)))
         );
-    }
 
-    #[test]
-    fn simple_response_with_terminator_in_values() {
         assert_eq!(
-            super::response(b"hello: world\nfoo: OK\nbar: 1234\nOK\n"),
-            Ok((
-                EMPTY,
-                vec![Response::Success {
-                    fields: vec![("hello", "world"), ("foo", "OK"), ("bar", "1234")],
-                    binary: None,
-                }],
-            ))
-        );
-    }
-
-    #[test]
-    fn binary_response() {
-        assert_eq!(
-            super::response(b"foo: bar\nbinary: 14\nBINARY_OK\n_MEP\nOK\n"),
-            Ok((
-                EMPTY,
-                vec![Response::Success {
-                    fields: vec![("foo", "bar")],
-                    binary: Some(b"BINARY_OK\n_MEP"),
-                }],
-            ))
-        );
-    }
-
-    #[test]
-    fn error_response() {
-        assert_eq!(
-            super::response(b"ACK [5@0] {} unknown command \"foo\"\n"),
-            Ok((
-                EMPTY,
-                vec![Response::Error {
-                    code: 5,
-                    command_index: 0,
-                    current_command: None,
-                    message: "unknown command \"foo\""
-                }]
-            ))
-        );
-    }
-
-    #[test]
-    fn successful_command_list() {
-        assert_eq!(
-            super::response(b"hello: world\nlist_OK\nlist_OK\nOK\n"),
-            Ok((
-                EMPTY,
-                vec![
-                    Response::Success {
-                        fields: vec![("hello", "world")],
-                        binary: None,
-                    },
-                    Response::Success {
-                        fields: Vec::new(),
-                        binary: None,
-                    }
-                ]
-            ))
-        );
-    }
-
-    #[test]
-    fn command_list_with_error() {
-        assert_eq!(
-            super::response(b"foo: bar\nlist_OK\nACK [5@0] {} unknown command \"foo\"\n"),
-            Ok((
-                EMPTY,
-                vec![
-                    Response::Success {
-                        fields: vec![("foo", "bar")],
-                        binary: None,
-                    },
-                    Response::Error {
-                        code: 5,
-                        command_index: 0,
-                        current_command: None,
-                        message: "unknown command \"foo\"",
-                    }
-                ]
-            ))
+            ParsedComponent::parse(b"binary: 12\n"),
+            Err(NomErr::Incomplete(Needed::Size(12)))
         );
     }
 }
