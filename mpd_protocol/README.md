@@ -4,6 +4,8 @@ Implementation of the client protocol for [MPD][mpd]. Supports binary responses 
 
 Primarily consists of an implementation of [Tokio]'s [codec][tokio-codec] subsystem.
 
+See also [`mpd_client`][mpd-client], a crate that uses this library to implement a complete asynchronous client including connection management.
+
 ## Parser Support
 
 The response parser will understand command lists properly **only** if they are initiated with the `command_list_ok_begin` command.
@@ -23,3 +25,4 @@ This project is licensed under the GNU General Public License Version 3 or later
 [mpd]: https://musicpd.org
 [tokio]: https://tokio.rs
 [tokio-codec]: https://docs.rs/tokio-util/0.3.0/tokio_util/codec/index.html
+[mpd-client]: https://crates.io/crates/mpd_client
