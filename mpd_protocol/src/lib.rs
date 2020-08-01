@@ -7,11 +7,16 @@
 #![deny(intra_doc_link_resolution_failure)]
 #![forbid(unsafe_code)]
 
-//! Implementation of the client protocol for [MPD]. Supports binary responses and command lists,
-//! provided they are initiated with the `command_list_ok_begin` command.
+//! Implementation of the client protocol for [MPD]. Supports binary responses and command lists.
 //!
-//! Consists of a parser for MPD responses ([`parser`]), and an implementation of [Tokio]'s
-//! [codec][tokio-codec] subsystem to facilitate asynchronous clients ([`codec`]).
+//! Primarily consists of an implementation of [Tokio]'s [codec][tokio-codec] subsystem.
+//!
+//! # Parser Support
+//!
+//! The response parser will understand command lists properly **only** if they are initiated with
+//! the `command_list_ok_begin` command. If the command list is initiated without response
+//! separators, all responses will be treated as a single large response which may result in
+//! incorrect behavior.
 //!
 //! [MPD]: https://musicpd.org
 //! [Tokio]: https://tokio.rs
@@ -19,12 +24,11 @@
 
 pub mod codec;
 pub mod command;
-pub mod parser;
 pub mod response;
 
 mod macros;
+mod parser;
 
 pub use codec::{MpdCodec, MpdCodecError};
 pub use command::{Command, CommandList};
-pub use parser::{greeting as parse_greeting, response as parse_response};
 pub use response::Response;
