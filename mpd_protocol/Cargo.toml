@@ -22,3 +22,5 @@ tracing = "0.1.13"
 
 [dev-dependencies]
 tokio = { version = "0.2.22", features = ["io-util", "rt-core", "macros"] }
+tokio-test = "0.2.1"
+futures = "0.3.5"
