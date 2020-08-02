@@ -5,6 +5,7 @@ pub mod frame;
 
 use bytes::BytesMut;
 use fxhash::FxHashSet;
+use tracing::trace;
 
 use std::iter::FusedIterator;
 use std::sync::Arc;
@@ -191,15 +192,14 @@ impl ResponseBuilder {
     }
 
     pub(crate) fn finish_frame(&mut self) {
-        if let Some(frame) = self.current_frame.take() {
-            self.frames.push(frame);
-        } else {
-            self.frames.push(Frame::empty());
-        }
+        let frame = self.current_frame.take().unwrap_or_else(Frame::empty);
+        trace_frame_completed(&frame);
+        self.frames.push(frame);
     }
 
     pub(crate) fn finish(mut self) -> Response {
         if let Some(frame) = self.current_frame {
+            trace_frame_completed(&frame);
             self.frames.push(frame);
         }
 
@@ -211,6 +211,7 @@ impl ResponseBuilder {
 
     pub(crate) fn error(mut self, error: Error) -> Response {
         if let Some(frame) = self.current_frame {
+            trace_frame_completed(&frame);
             self.frames.push(frame);
         }
 
@@ -223,6 +224,14 @@ impl ResponseBuilder {
     fn current_frame(&mut self) -> &mut Frame {
         self.current_frame.get_or_insert_with(Frame::empty)
     }
+}
+
+fn trace_frame_completed(frame: &Frame) {
+    trace!(
+        fields = frame.fields_len(),
+        has_binary = frame.has_binary(),
+        "completed frame"
+    );
 }
 
 impl Default for ResponseBuilder {

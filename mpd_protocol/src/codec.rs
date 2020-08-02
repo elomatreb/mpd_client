@@ -9,7 +9,7 @@ use bytes::{Buf, BytesMut};
 use nom::{Err as NomErr, Needed};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite};
 use tokio_util::codec::{Decoder, Encoder, Framed};
-use tracing::{info, span, trace, Level, Span};
+use tracing::{debug, error, info, span, trace, Level, Span};
 
 use std::error::Error as StdError;
 use std::fmt;
@@ -26,7 +26,7 @@ use crate::response::{error::Error, Response, ResponseBuilder};
 /// [`CommandList`]: crate::command::CommandList
 #[derive(Clone, Debug)]
 pub struct MpdCodec {
-    decode_span: Option<Span>,
+    log_span: Span,
     current_response: ResponseBuilder,
     protocol_version: Box<str>,
 }
@@ -53,10 +53,14 @@ impl MpdCodec {
 
             match parser::greeting(&greeting[..read]) {
                 Ok((_, version)) => {
-                    info!(protocol_version = version, "connected successfully");
+                    let log_span = span!(Level::DEBUG, "codec", protocol_version = version);
+
+                    let enter = log_span.enter();
+                    info!("connected successfully");
+                    drop(enter);
 
                     let codec = Self {
-                        decode_span: None,
+                        log_span,
                         current_response: ResponseBuilder::new(),
                         protocol_version: version.into(),
                     };
@@ -65,6 +69,7 @@ impl MpdCodec {
                 }
                 Err(e) => {
                     if !e.is_incomplete() || read == greeting.len() - 1 {
+                        error!("invalid greeting");
                         break Err(MpdCodecError::InvalidMessage(greeting[..read].into()));
                     }
                 }
@@ -92,12 +97,10 @@ impl Encoder<CommandList> for MpdCodec {
     type Error = MpdCodecError;
 
     fn encode(&mut self, command: CommandList, buf: &mut BytesMut) -> Result<(), Self::Error> {
-        let span = span!(Level::DEBUG, "encode_command", ?command);
-        let _enter = span.enter();
+        let _enter = self.log_span.enter();
+        debug!(?command, "encoded command");
 
-        let len_before = buf.len();
         command.render(buf);
-        trace!(encoded_length = buf.len() - len_before);
 
         Ok(())
     }
@@ -108,6 +111,8 @@ impl Decoder for MpdCodec {
     type Error = MpdCodecError;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
+        let _enter = self.log_span.enter();
+
         loop {
             let parsed = ParsedComponent::parse(&src);
 
@@ -120,6 +125,7 @@ impl Decoder for MpdCodec {
                     break Ok(None);
                 }
                 Err(_) => {
+                    error!("invalid message");
                     break Err(MpdCodecError::InvalidMessage(src[..].into()));
                 }
                 Ok((remaining, parsed_item)) => {
@@ -140,17 +146,25 @@ impl Decoder for MpdCodec {
                             binary.advance(prefix_len);
                             binary.truncate(bin_len);
 
+                            trace!(length = binary.len(), "pushing binary object");
                             self.current_response.push_binary(binary);
                             continue;
                         }
                         ParsedComponent::EndOfFrame => self.current_response.finish_frame(),
                         ParsedComponent::EndOfResponse => {
-                            let response_builder = mem::take(&mut self.current_response);
-                            ret = Some(response_builder.finish());
+                            let response = mem::take(&mut self.current_response).finish();
+                            trace!(frames = response.len(), "message decoded successfully");
+                            ret = Some(response);
                         }
                         ParsedComponent::Error(e) => {
                             let response_builder = mem::take(&mut self.current_response);
-                            ret = Some(response_builder.error(Error::from_parsed(e)));
+                            let response = response_builder.error(Error::from_parsed(&e));
+                            trace!(
+                                error = ?e,
+                                successful_frames = response.len(),
+                                "message decoded with protocol error"
+                            );
+                            ret = Some(response);
                         }
                     }
 
@@ -206,7 +220,7 @@ mod tests {
 
     fn dummy_codec() -> MpdCodec {
         MpdCodec {
-            decode_span: None,
+            log_span: Span::none(),
             current_response: ResponseBuilder::new(),
             protocol_version: "".into(),
         }
