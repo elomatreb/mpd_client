@@ -1,0 +1,7 @@
+# 0.8.0 (2020-08-02)
+
+ - Rewritten parser that incrementally builds up a response
+ - Explicit connection method that creates a codec instead of handling the handshake internally
+ - Overhauled Frame APIs
+ - Removed `command_list` macro
+ - Many smaller changes
