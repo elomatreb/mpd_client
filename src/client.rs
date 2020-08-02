@@ -22,6 +22,7 @@ use tracing_futures::Instrument;
 use tokio::net::UnixStream;
 
 use std::fmt::Debug;
+#[cfg(unix)]
 use std::path::Path;
 
 use crate::commands::{self as cmds, responses::Response, Command, CommandList};
