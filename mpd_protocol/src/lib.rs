@@ -26,7 +26,6 @@ pub mod codec;
 pub mod command;
 pub mod response;
 
-mod macros;
 mod parser;
 
 pub use codec::{MpdCodec, MpdCodecError};
