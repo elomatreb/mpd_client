@@ -8,6 +8,8 @@ use fxhash::FxHashSet;
 use tracing::trace;
 
 use std::iter::FusedIterator;
+use std::option;
+use std::slice;
 use std::sync::Arc;
 use std::vec;
 
@@ -129,9 +131,8 @@ impl Response {
     /// ```
     pub fn frames(&self) -> FramesRef<'_> {
         FramesRef {
-            response: self,
-            frames_cursor: 0,
-            error_consumed: false,
+            frames: self.frames.iter(),
+            error: self.error.as_ref().into_iter(),
         }
     }
 
@@ -147,15 +148,7 @@ impl Response {
     /// ```
     pub fn single_frame(self) -> Result<Frame, Error> {
         // There is always at least one frame
-        self.into_frames().next().unwrap()
-    }
-
-    /// Creates an iterator over all frames and errors in the response.
-    pub fn into_frames(self) -> Frames {
-        Frames {
-            frames: self.frames.into_iter(),
-            error: self.error,
-        }
+        self.into_iter().next().unwrap()
     }
 }
 
@@ -241,35 +234,28 @@ impl Default for ResponseBuilder {
 }
 
 /// Iterator over frames in a response, as returned by [`Response::frames`].
-#[derive(Copy, Clone, Debug)]
+#[derive(Clone, Debug)]
 pub struct FramesRef<'a> {
-    response: &'a Response,
-    frames_cursor: usize,
-    error_consumed: bool,
+    frames: slice::Iter<'a, Frame>,
+    error: option::IntoIter<&'a Error>,
 }
 
 impl<'a> Iterator for FramesRef<'a> {
     type Item = Result<&'a Frame, &'a Error>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.frames_cursor < self.response.frames.len() {
-            let frame = self.response.frames.get(self.frames_cursor).unwrap();
-            self.frames_cursor += 1;
+        if let Some(frame) = self.frames.next() {
             Some(Ok(frame))
-        } else if !self.error_consumed {
-            self.error_consumed = true;
-            self.response.error.as_ref().map(Err)
+        } else if let Some(error) = self.error.next() {
+            Some(Err(error))
         } else {
             None
         }
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
-        let mut len = self.response.frames.len() - self.frames_cursor;
-
-        if !self.error_consumed && self.response.is_error() {
-            len += 1;
-        }
+        let (mut len, _) = self.frames.size_hint();
+        len += self.error.size_hint().0;
 
         (len, Some(len))
     }
@@ -287,7 +273,8 @@ impl<'a> IntoIterator for &'a Response {
     }
 }
 
-/// Iterator over frames in a response, as returned by [`Response::into_frames`].
+/// Iterator over frames in a response, as returned by [`IntoIterator`] implementation on
+/// [`Response`].
 #[derive(Clone, Debug)]
 pub struct Frames {
     frames: vec::IntoIter<Frame>,
@@ -323,7 +310,10 @@ impl IntoIterator for Response {
     type IntoIter = Frames;
 
     fn into_iter(self) -> Self::IntoIter {
-        self.into_frames()
+        Frames {
+            frames: self.frames.into_iter(),
+            error: self.error,
+        }
     }
 }
 
@@ -338,7 +328,7 @@ mod test {
             Some(Error::default()),
         );
 
-        let mut iter = r.into_frames();
+        let mut iter = r.into_iter();
 
         assert_eq!((4, Some(4)), iter.size_hint());
         assert_eq!(Some(Ok(Frame::empty())), iter.next());

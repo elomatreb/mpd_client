@@ -312,7 +312,7 @@ mod tests {
             .decode(buf)
             .expect("failed to decode")
             .unwrap()
-            .into_frames();
+            .into_iter();
 
         let first = response.next().unwrap().unwrap();
         let second = response.next().unwrap().unwrap();

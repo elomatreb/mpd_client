@@ -1,5 +1,5 @@
+use futures::{sink::SinkExt, stream::StreamExt};
 use tokio_test::io::Builder as MockBuilder;
-use futures::{stream::StreamExt, sink::SinkExt};
 
 use mpd_protocol::{Command, MpdCodec};
 
