@@ -1,6 +1,6 @@
 //! Complete responses.
 
-pub mod error;
+pub(crate) mod error;
 pub mod frame;
 
 use bytes::BytesMut;
