@@ -7,12 +7,12 @@ description = "Prototype of a user-friendly async MPD client"
 repository = "https://github.com/elomatreb/mpd_client"
 keywords = ["mpd", "async", "client"]
 categories = ["network-programming"]
-license = "GPL-3.0-or-later"
+license = "MIT OR Apache-2.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-mpd_protocol = "0.8.0"
+mpd_protocol = "0.8.1"
 tokio = { version = "0.2.13", features = ["rt-core", "tcp", "uds", "sync"] }
 tokio-util = { version = "0.3.1", features = ["codec"] }
 futures = { version = "0.3.4", default-features = false, features = ["std"] }
