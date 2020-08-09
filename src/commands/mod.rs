@@ -69,6 +69,15 @@ pub enum SeekMode {
     Absolute(Duration),
 }
 
+/// Possible `single` modes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[allow(missing_docs)]
+pub enum SingleMode {
+    Enabled,
+    Disabled,
+    Oneshot,
+}
+
 /// Modes to target a song with a command.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Song {

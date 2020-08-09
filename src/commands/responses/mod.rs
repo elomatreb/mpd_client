@@ -15,7 +15,7 @@ use std::num::{ParseFloatError, ParseIntError};
 use std::sync::Arc;
 use std::time::Duration;
 
-use crate::commands::{SongId, SongPosition};
+use crate::commands::{SingleMode, SongId, SongPosition};
 use crate::raw::Frame;
 use crate::sealed;
 
@@ -110,15 +110,6 @@ pub enum PlayState {
     Stopped,
     Playing,
     Paused,
-}
-
-/// Possible `single` modes.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-#[allow(missing_docs)]
-pub enum SingleMode {
-    Enabled,
-    Disabled,
-    Oneshot,
 }
 
 /// Response to the `status` command.

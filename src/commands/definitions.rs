@@ -8,8 +8,7 @@ use std::ops::{Bound, RangeBounds};
 use std::time::Duration;
 
 use crate::commands::{
-    responses::{self as res, SingleMode},
-    Command, SeekMode, Song, SongId, SongPosition,
+    responses as res, Command, SeekMode, SingleMode, Song, SongId, SongPosition,
 };
 use crate::raw::RawCommand;
 use crate::tag::Tag;
