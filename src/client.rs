@@ -24,6 +24,7 @@ use tokio::net::UnixStream;
 use std::fmt::Debug;
 #[cfg(unix)]
 use std::path::Path;
+use std::sync::Arc;
 
 use crate::commands::{self as cmds, responses::Response, Command, CommandList};
 use crate::errors::{CommandError, StateChangeError};
@@ -64,6 +65,7 @@ pub type ConnectResult = Result<(Client, StateChanges), ProtocolError>;
 #[derive(Clone, Debug)]
 pub struct Client {
     commands_sender: Sender<(RawCommandList, CommandResponder)>,
+    protocol_version: Arc<str>,
     span: Span,
 }
 
@@ -236,6 +238,11 @@ impl Client {
         Ok(frames)
     }
 
+    /// Get the protocol version the underlying connection is using.
+    pub fn protocol_version(&self) -> &str {
+        self.protocol_version.as_ref()
+    }
+
     async fn do_send(&self, commands: RawCommandList) -> Result<RawResponse, CommandError> {
         let (tx, rx) = oneshot::channel();
 
@@ -253,6 +260,7 @@ impl Client {
         let (commands_sender, commands_receiver) = mpsc::channel(2);
 
         let mut connection = MpdCodec::connect(connection).await?;
+        let protocol_version = connection.codec().protocol_version().into();
 
         trace!("sending initial idle command");
         if let Err(e) = connection.send(idle()).await {
@@ -268,6 +276,7 @@ impl Client {
 
         let client = Self {
             commands_sender,
+            protocol_version,
             span,
         };
 
@@ -573,5 +582,14 @@ mod tests {
         drop(client);
 
         assert!(state_changes.next().await.is_none());
+    }
+
+    #[tokio::test]
+    async fn protocol_version() {
+        let io = MockBuilder::new().read(GREETING).write(b"idle\n").build();
+
+        let (client, _state_changes) = Client::connect(io).await.expect("connect failed");
+
+        assert_eq!(client.protocol_version(), "0.21.11");
     }
 }
