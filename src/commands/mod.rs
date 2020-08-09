@@ -4,9 +4,9 @@
 //! wrangle the stringly-typed raw responses if you don't want to.
 //!
 //! The fields on the contained structs are mostly undocumented, see the [MPD protocol
-//! documentation][0] for details on their specific meaning.
+//! documentation][mpd-docs] for details on their specific meaning.
 //!
-//! [0]: https://www.musicpd.org/doc/html/protocol.html#command-reference
+//! [mpd-docs]: https://www.musicpd.org/doc/html/protocol.html#command-reference
 
 pub mod definitions;
 pub mod responses;

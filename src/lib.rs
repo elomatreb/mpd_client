@@ -9,7 +9,9 @@
 )]
 #![forbid(unsafe_code)]
 
-//! User-friendly async client for [MPD](https://musicpd.org).
+//! Asynchronous client for [MPD](https://musicpd.org).
+//!
+//! The [`Client`] type is the primary API.
 
 mod client;
 mod errors;

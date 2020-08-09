@@ -34,15 +34,21 @@ type CommandResponder = oneshot::Sender<Result<RawResponse, CommandError>>;
 type StateChangesSender = UnboundedSender<Result<Subsystem, StateChangeError>>;
 
 /// Result returned by a connection attempt.
+///
+/// If successful, this contains a [`Client`] which you can use to issue commands, and a
+/// [`StateChanges`] value, which is a stream that receives notifications from the server.
 pub type ConnectResult = Result<(Client, StateChanges), ProtocolError>;
 
-/// Client for MPD.
+/// A client connected to an MPD instance.
 ///
-/// You can use this to send commands to the MPD server, and wait for the response.
+/// You can use this to send commands to the MPD server, and wait for the response. Cloning the
+/// `Client` will reuse the connection, similar to how a channel sender works.
 ///
-/// Dropping the `Client` (all clients if it is cloned) will close the connection. You can clone
-/// this cheaply, which will result in the connection closing after *all* of the `Client`s are
-/// dropped.
+/// # Connection management
+///
+/// Dropping the last clone of a particular `Client` will close the connection automatically.
+///
+/// # Example
 ///
 /// ```no_run
 /// use mpd_client::{commands::Play, Client};
@@ -64,6 +70,8 @@ pub struct Client {
 impl Client {
     /// Connect to an MPD server at the given TCP address.
     ///
+    /// This requires the `dns` [Tokio feature][tokio-features] to resolve domain names.
+    ///
     /// # Panics
     ///
     /// This panics for the same reasons as [`Client::connect`].
@@ -72,6 +80,8 @@ impl Client {
     ///
     /// This returns errors in the same conditions as [`Client::connect`], and if connecting to the given
     /// TCP address fails for any reason.
+    ///
+    /// [tokio-features]: https://docs.rs/tokio/0.2/tokio/#feature-flags
     pub async fn connect_to<A: ToSocketAddrs + Debug>(address: A) -> ConnectResult {
         let span = span!(Level::DEBUG, "client connection", tcp_addr = ?address);
         let connection = TcpStream::connect(address).await?;
@@ -80,6 +90,8 @@ impl Client {
     }
 
     /// Connect to an MPD server using the Unix socket at the given path.
+    ///
+    /// This is only available on Unix.
     ///
     /// # Panics
     ///
@@ -102,11 +114,12 @@ impl Client {
     /// Since this method is generic over the connection type it can be used to connect to either a
     /// TCP or Unix socket dynamically or e.g. use a proxy.
     ///
-    /// See also [`Client::connect_to`] and [`Client::connect_unix`] for the common connection case.
+    /// See also the [`Client::connect_to`] and [`Client::connect_unix`] shorthands for the common
+    /// connection case.
     ///
     /// # Panics
     ///
-    /// Since this spawns a task internally, this will panic when called outside a tokio runtime.
+    /// Since this spawns a task internally, this will panic when called outside a Tokio runtime.
     ///
     /// # Errors
     ///

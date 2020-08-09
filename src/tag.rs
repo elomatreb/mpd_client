@@ -51,6 +51,8 @@ pub enum Tag {
     Performer,
     Title,
     Track,
+    /// Catch-all variant that contains the raw tag string when it doesn't match any other
+    /// variants, but is valid.
     Other(Box<str>),
 }
 

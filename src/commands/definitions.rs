@@ -415,11 +415,10 @@ impl Find {
     /// # Panics
     ///
     /// This will panic when sending the command if you pass a malformed value using the
-    /// [`Other` variant][error].
-    /// variant.
+    /// [`Other`][error] variant.
     ///
     /// [0]: https://www.musicpd.org/doc/html/protocol.html#command-find
-    /// [error]: crate::tag::Tag
+    /// [error]: crate::tag::Tag::Other
     pub fn sort(mut self, sort_by: Tag) -> Self {
         self.sort = Some(sort_by);
         self

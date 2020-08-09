@@ -1,5 +1,6 @@
-//! Tools for constructing [filter expressions], as used by e.g. the `find` command.
+//! Tools for constructing [filter expressions], as used by e.g. the [`find`] command.
 //!
+//! [`find`]: crate::commands::definitions::Find
 //! [filter expressions]: https://www.musicpd.org/doc/html/protocol.html#filters
 
 use std::borrow::Cow;

@@ -5,7 +5,8 @@ use crate::commands::{
 use crate::raw::{Frame, RawCommandList};
 use crate::sealed;
 
-/// Types which can be used as a typed command list.
+/// Types which can be used as a typed command list, using
+/// [`Client::command_list`][crate::Client::command_list].
 ///
 /// This is implemented for tuples of [`Command`s][Command] where it returns a tuple of the same
 /// size of the responses corresponding to the commands, as well as for a vector of the same
