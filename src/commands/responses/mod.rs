@@ -30,6 +30,7 @@ type KeyValuePair = (Arc<str>, String);
 /// This is sealed, so it cannot be implemented.
 pub trait Response: Sized + sealed::Sealed {
     /// Attempt to convert the raw [`Frame`] into the response type.
+    #[doc(hidden)]
     fn from_frame(frame: Frame) -> Result<Self, TypedResponseError>;
 }
 
