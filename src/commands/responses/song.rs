@@ -12,7 +12,9 @@ use super::{ErrorKind, KeyValuePair, TypedResponseError};
 use crate::commands::{SongId, SongPosition};
 use crate::tag::Tag;
 
-/// A [`Song`] in the current queue.
+/// A [`Song`] in the current queue, as returned by the [`playlistinfo`] command.
+///
+/// [`playlistinfo`]: crate::commands::definitions::Queue
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SongInQueue {
     /// Position in queue.
@@ -74,7 +76,10 @@ impl SongInQueue {
     }
 }
 
-/// A single song, as returned by the playlist or current song commands.
+/// A single song, as returned by the [playlist] or [current song] commands.
+///
+/// [playlist]: crate::commands::definitions::Queue
+/// [current song]: crate::commands::definitions::CurrentSong
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Song {
     /// Unique identifier of the song. May be a file path relative to the library root, or an URL

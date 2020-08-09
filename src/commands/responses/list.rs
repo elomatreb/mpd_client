@@ -3,7 +3,9 @@ use std::convert::TryFrom;
 use super::KeyValuePair;
 use crate::tag::Tag;
 
-/// Response to the `list` command.
+/// Response to the [`list`] command.
+///
+/// [`list`]: crate::commands::definitions::List
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct List {
     /// The fields returned by the command, in the order returned by MPD.

@@ -112,7 +112,12 @@ pub enum PlayState {
     Paused,
 }
 
-/// Response to the `status` command.
+/// Response to the [`status`] command.
+///
+/// See the [MPD documentation][status-command] for the specific meanings of the fields.
+///
+/// [`status`]: crate::commands::definitions::Status
+/// [status-command]: https://www.musicpd.org/doc/html/protocol.html#command-status
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[allow(missing_docs)]
 pub struct Status {
@@ -173,9 +178,9 @@ impl Response for Status {
     }
 }
 
-/// Response to the `stats` command.
+/// Response to the [`stats`] command, containing general server statistics.
 ///
-/// General server statistics.
+/// [`stats`]: crate::commands::definitions::Stats
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[allow(missing_docs)]
 pub struct Stats {

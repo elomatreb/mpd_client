@@ -4,7 +4,9 @@ use chrono::{DateTime, FixedOffset};
 
 use super::{ErrorKind, TypedResponseError};
 
-/// A stored playlist.
+/// A stored playlist, as returned by [`listplaylists`].
+///
+/// [`listplaylists`]: crate::commands::definitions::GetPlaylists
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Playlist {
     /// Name of the playlist.
