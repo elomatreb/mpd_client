@@ -3,22 +3,27 @@ use crate::commands::{
     Command,
 };
 use crate::raw::{Frame, RawCommandList};
+use crate::sealed;
 
 /// Types which can be used as a typed command list.
 ///
 /// This is implemented for tuples of [`Command`s][Command] where it returns a tuple of the same
 /// size of the responses corresponding to the commands, as well as for a vector of the same
 /// command type where it returns a vector of the same length of the responses.
-pub trait CommandList {
+pub trait CommandList: sealed::Sealed {
     /// The responses the list will result in.
     type Response;
 
     /// Generate the command list that will be sent, or `None` if no commands.
+    #[doc(hidden)]
     fn to_raw_command_list(self) -> Option<RawCommandList>;
 
     /// Parse the raw response frames into the proper types.
+    #[doc(hidden)]
     fn parse_responses(frames: Vec<Frame>) -> Result<Self::Response, TypedResponseError>;
 }
+
+impl<C: Command> sealed::Sealed for Vec<C> {}
 
 /// Arbitrarily long sequence of the same command.
 impl<C> CommandList for Vec<C>
@@ -52,6 +57,14 @@ where
 
 macro_rules! impl_command_list_tuple {
     ($first_type:ident, $($further_type:ident => $further_idx:tt),*) => {
+        impl<$first_type, $($further_type),*> sealed::Sealed for ($first_type, $($further_type),*)
+        where
+            $first_type: Command,
+            $(
+                $further_type: Command
+            ),*
+        {}
+
         impl<$first_type, $($further_type),*> CommandList for ($first_type, $($further_type),*)
         where
             $first_type: Command,
