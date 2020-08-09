@@ -4,15 +4,15 @@ use std::error::Error;
 use std::fmt;
 
 use crate::commands::responses::TypedResponseError;
-use crate::raw::{ErrorResponse, Frame, MpdCodecError};
+use crate::raw::{ErrorResponse, Frame, ProtocolError};
 
 /// Errors which can occur when issuing a command.
 #[derive(Debug)]
 pub enum CommandError {
-    /// The connection to MPD is closed
+    /// The connection to MPD was closed cleanly
     ConnectionClosed,
-    /// Received or attempted to send an invalid message
-    InvalidMessage(MpdCodecError),
+    /// An underlying protocol error occured, including IO errors
+    Protocol(ProtocolError),
     /// Command returned an error
     ErrorResponse {
         /// The error
@@ -20,7 +20,7 @@ pub enum CommandError {
         /// Possible sucessful frames in the same response, empty if not in a command list
         succesful_frames: Vec<Frame>,
     },
-    /// A [typed command](crate::commands) failed to parse its response.
+    /// A [typed command](crate::commands) failed to convert its response.
     InvalidTypedResponse(TypedResponseError),
 }
 
@@ -28,7 +28,7 @@ impl fmt::Display for CommandError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             CommandError::ConnectionClosed => write!(f, "The connection is closed"),
-            CommandError::InvalidMessage(_) => write!(f, "Invalid message"),
+            CommandError::Protocol(_) => write!(f, "Protocol error"),
             CommandError::InvalidTypedResponse(_) => {
                 write!(f, "Response was invalid for typed command")
             }
@@ -49,7 +49,7 @@ impl fmt::Display for CommandError {
 impl Error for CommandError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
-            CommandError::InvalidMessage(e) => Some(e),
+            CommandError::Protocol(e) => Some(e),
             CommandError::InvalidTypedResponse(e) => Some(e),
             _ => None,
         }
@@ -57,9 +57,9 @@ impl Error for CommandError {
 }
 
 #[doc(hidden)]
-impl From<MpdCodecError> for CommandError {
-    fn from(e: MpdCodecError) -> Self {
-        CommandError::InvalidMessage(e)
+impl From<ProtocolError> for CommandError {
+    fn from(e: ProtocolError) -> Self {
+        CommandError::Protocol(e)
     }
 }
 
@@ -97,8 +97,8 @@ impl From<TypedResponseError> for CommandError {
 /// Errors which may occur while listening for state change events.
 #[derive(Debug)]
 pub enum StateChangeError {
-    /// The message was invalid
-    InvalidMessage(MpdCodecError),
+    /// An underlying protocol error occured, including IO errors
+    Protocol(ProtocolError),
     /// The state change message contained an error frame
     ErrorMessage(ErrorResponse),
 }
@@ -106,7 +106,7 @@ pub enum StateChangeError {
 impl fmt::Display for StateChangeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            StateChangeError::InvalidMessage(_) => write!(f, "Invalid message"),
+            StateChangeError::Protocol(_) => write!(f, "Protocol error"),
             StateChangeError::ErrorMessage(ErrorResponse { code, message, .. }) => write!(
                 f,
                 "Message contained an error frame (code {} - {:?})",
@@ -119,7 +119,7 @@ impl fmt::Display for StateChangeError {
 impl Error for StateChangeError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
-            StateChangeError::InvalidMessage(e) => Some(e),
+            StateChangeError::Protocol(e) => Some(e),
             _ => None,
         }
     }
@@ -133,8 +133,8 @@ impl From<ErrorResponse> for StateChangeError {
 }
 
 #[doc(hidden)]
-impl From<MpdCodecError> for StateChangeError {
-    fn from(e: MpdCodecError) -> Self {
-        StateChangeError::InvalidMessage(e)
+impl From<ProtocolError> for StateChangeError {
+    fn from(e: ProtocolError) -> Self {
+        StateChangeError::Protocol(e)
     }
 }

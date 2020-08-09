@@ -29,7 +29,7 @@ pub use tag::Tag;
 pub mod raw {
     pub use mpd_protocol::{
         response::{Error as ErrorResponse, Frame},
-        Command as RawCommand, CommandList as RawCommandList, MpdCodecError,
+        Command as RawCommand, CommandList as RawCommandList, MpdCodecError as ProtocolError,
     };
 }
 

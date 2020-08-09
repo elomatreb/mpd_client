@@ -27,14 +27,14 @@ use std::path::Path;
 
 use crate::commands::{self as cmds, responses::Response, Command, CommandList};
 use crate::errors::{CommandError, StateChangeError};
-use crate::raw::{Frame, MpdCodecError, RawCommand, RawCommandList};
+use crate::raw::{Frame, ProtocolError, RawCommand, RawCommandList};
 use crate::state_changes::{StateChanges, Subsystem};
 
 type CommandResponder = oneshot::Sender<Result<RawResponse, CommandError>>;
 type StateChangesSender = UnboundedSender<Result<Subsystem, StateChangeError>>;
 
 /// Result returned by a connection attempt.
-pub type ConnectResult = Result<(Client, StateChanges), MpdCodecError>;
+pub type ConnectResult = Result<(Client, StateChanges), ProtocolError>;
 
 /// Client for MPD.
 ///
@@ -232,7 +232,7 @@ impl Client {
         rx.await?
     }
 
-    async fn do_connect<C>(connection: C, span: Span) -> Result<(Self, StateChanges), MpdCodecError>
+    async fn do_connect<C>(connection: C, span: Span) -> Result<(Self, StateChanges), ProtocolError>
     where
         C: AsyncRead + AsyncWrite + Unpin + Send + 'static,
     {
