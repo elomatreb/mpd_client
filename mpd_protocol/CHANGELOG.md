@@ -1,3 +1,7 @@
+# 0.8.2 (????)
+
+ - Don't depend on nom features we don't actually use
+
 # 0.8.1 (2020-08-05)
 
  - Change license to MIT or Apache 2.0
