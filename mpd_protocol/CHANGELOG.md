@@ -1,6 +1,7 @@
 # 0.8.2 (????)
 
  - Don't depend on nom features we don't actually use
+ - Reword error messages to follow API guidelines
 
 # 0.8.1 (2020-08-05)
 

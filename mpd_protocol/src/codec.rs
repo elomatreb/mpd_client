@@ -192,7 +192,7 @@ impl fmt::Display for MpdCodecError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             MpdCodecError::Io(_) => write!(f, "IO error"),
-            MpdCodecError::InvalidMessage(_) => write!(f, "Invalid message"),
+            MpdCodecError::InvalidMessage(_) => write!(f, "invalid message"),
         }
     }
 }

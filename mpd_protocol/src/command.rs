@@ -357,18 +357,12 @@ impl Error for CommandError {}
 impl fmt::Display for CommandError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            CommandError::Empty => write!(f, "Command or command list was empty"),
-            CommandError::InvalidCharacter(i, c) => write!(
-                f,
-                "Command contained an invalid character: {:?} at position {}",
-                c, i
-            ),
-            CommandError::UnncessaryWhitespace => {
-                write!(f, "Command contained leading or trailing whitespace")
+            CommandError::Empty => write!(f, "empty command"),
+            CommandError::InvalidCharacter(i, c) => {
+                write!(f, "invalid character {:?} at position {}", c, i)
             }
-            CommandError::CommandList => {
-                write!(f, "Command attempted to open or close a command list")
-            }
+            CommandError::UnncessaryWhitespace => write!(f, "leading or trailing whitespace"),
+            CommandError::CommandList => write!(f, "attempted to open or close a command list"),
         }
     }
 }
