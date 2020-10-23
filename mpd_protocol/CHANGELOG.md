@@ -1,5 +1,7 @@
-# 0.8.2 (????)
+# 0.9.0 (2020-10-23)
 
+ - Update to tokio 0.3
+ - Provide basic functions for sending and receiving using synchronous IO
  - Don't depend on nom features we don't actually use
  - Reword error messages to follow API guidelines
 
