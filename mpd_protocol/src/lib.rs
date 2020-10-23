@@ -4,7 +4,7 @@
     rust_2018_idioms,
     unreachable_pub
 )]
-#![deny(intra_doc_link_resolution_failure)]
+#![deny(broken_intra_doc_links)]
 #![forbid(unsafe_code)]
 
 //! Implementation of the client protocol for [MPD]. Supports binary responses and command lists.
