@@ -25,6 +25,7 @@
 pub mod codec;
 pub mod command;
 pub mod response;
+pub mod sync;
 
 mod parser;
 
