@@ -12,15 +12,15 @@ license = "MIT OR Apache-2.0"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-mpd_protocol = "0.8.1"
-tokio = { version = "0.2.13", features = ["rt-core", "tcp", "uds", "sync"] }
-tokio-util = { version = "0.3.1", features = ["codec"] }
+mpd_protocol = "0.10.0"
+tokio = { version = "0.3.2", features = ["rt", "net", "sync"] }
+tokio-util = { version = "0.5.0", features = ["codec"] }
 futures = { version = "0.3.4", default-features = false, features = ["std"] }
 tracing = "0.1.13"
 tracing-futures = "0.2.3"
 chrono = { version = "0.4.11", default-features = false, features = ["std"] }
 
 [dev-dependencies]
-tokio = { version = "0.2.13", features = ["rt-core", "tcp", "uds", "sync", "stream", "macros", "dns"] }
+tokio = { version = "0.3.2", features = ["rt", "net", "sync", "stream", "macros"] }
 tracing-subscriber = "0.2.4"
-tokio-test = "0.2.0"
+tokio-test = "0.3.0"

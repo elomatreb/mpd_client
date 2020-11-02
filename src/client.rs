@@ -54,8 +54,7 @@ pub type ConnectResult = Result<(Client, StateChanges), ProtocolError>;
 /// ```no_run
 /// use mpd_client::{commands::Play, Client};
 ///
-/// #[tokio::main]
-/// async fn main() -> Result<(), Box<dyn std::error::Error>> {
+/// async fn connect_to_mpd() -> Result<(), Box<dyn std::error::Error>> {
 ///     let (client, _state_changes) = Client::connect_to("localhost:6600").await?;
 ///
 ///     client.command(Play::current()).await?;

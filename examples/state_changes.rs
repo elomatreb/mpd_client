@@ -4,7 +4,7 @@ use tracing_subscriber::{EnvFilter, FmtSubscriber};
 
 use mpd_client::{commands, Client, Subsystem};
 
-#[tokio::main]
+#[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), Box<dyn Error>> {
     FmtSubscriber::builder()
         .with_env_filter(EnvFilter::from_default_env())
