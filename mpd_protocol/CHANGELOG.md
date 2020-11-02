@@ -1,3 +1,7 @@
+# 0.10.0 (2020-11-02)
+
+ - Update `tokio-util` and `bytes` crates.
+
 # 0.9.0 (2020-10-23)
 
  - Update to tokio 0.3
