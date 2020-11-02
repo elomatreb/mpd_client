@@ -36,7 +36,9 @@ pub enum Tag {
     ArtistSort,
     Comment,
     Composer,
+    Conductor,
     Date,
+    Grouping,
     OriginalDate,
     Disc,
     Genre,
@@ -51,6 +53,7 @@ pub enum Tag {
     Performer,
     Title,
     Track,
+    Work,
     /// Catch-all variant that contains the raw tag string when it doesn't match any other
     /// variants, but is valid.
     Other(Box<str>),
@@ -79,7 +82,9 @@ impl Tag {
             Tag::ArtistSort => "ArtistSort",
             Tag::Comment => "Comment",
             Tag::Composer => "Composer",
+            Tag::Conductor => "Conductor",
             Tag::Date => "Date",
+            Tag::Grouping => "Grouping",
             Tag::OriginalDate => "OriginalDate",
             Tag::Disc => "Disc",
             Tag::Genre => "Genre",
@@ -94,6 +99,7 @@ impl Tag {
             Tag::Performer => "Performer",
             Tag::Title => "Title",
             Tag::Track => "Track",
+            Tag::Work => "Work",
         })
     }
 }
@@ -131,7 +137,9 @@ impl<'a> TryFrom<&'a str> for Tag {
             "ArtistSort" => Self::ArtistSort,
             "Comment" => Self::Comment,
             "Composer" => Self::Composer,
+            "Conductor" => Self::Conductor,
             "Date" => Self::Date,
+            "Grouping" => Self::Grouping,
             "OriginalDate" => Self::OriginalDate,
             "Disc" => Self::Disc,
             "Genre" => Self::Genre,
@@ -145,7 +153,8 @@ impl<'a> TryFrom<&'a str> for Tag {
             "Name" => Self::Name,
             "Performer" => Self::Performer,
             "Title" => Self::Title,
-            "Track" => Self::Track
+            "Track" => Self::Track,
+            "Work" => Self::Work
         }
 
         Ok(Self::Other(raw.into()))
