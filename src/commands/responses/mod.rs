@@ -137,6 +137,9 @@ pub struct Status {
     pub crossfade: Duration,
     pub update_job: Option<u64>,
     pub error: Option<String>,
+    /// Name of the non-default partition this client is active on. Will be `None` if the default
+    /// partition is active or if the server doesn't send the field at all.
+    pub partition: Option<String>,
 }
 
 impl sealed::Sealed for Status {}
@@ -157,6 +160,12 @@ impl Response for Status {
             },
         };
 
+        let mut partition = raw.get("partition");
+
+        if partition.as_deref() == Some("default") {
+            partition = None;
+        }
+
         Ok(Self {
             volume: field!(raw, "volume" integer default 0),
             state: field!(raw, "state" PlayState),
@@ -174,6 +183,7 @@ impl Response for Status {
             crossfade: field!(raw, "xfade" duration default Duration::from_secs(0)),
             update_job: field!(raw, "update_job" integer optional),
             error: raw.get("error"),
+            partition,
         })
     }
 }
