@@ -245,8 +245,7 @@ impl Client {
     async fn do_send(&self, commands: RawCommandList) -> Result<RawResponse, CommandError> {
         let (tx, rx) = oneshot::channel();
 
-        let mut commands_sender = self.commands_sender.clone();
-        commands_sender.send((commands, tx)).await?;
+        self.commands_sender.send((commands, tx)).await?;
 
         rx.await?
     }
