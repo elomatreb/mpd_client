@@ -1,3 +1,7 @@
+# 0.10.1 (2020-11-20)
+
+ - Update to `nom` 6.
+
 # 0.10.0 (2020-11-02)
 
  - Update `tokio-util` and `bytes` crates.
