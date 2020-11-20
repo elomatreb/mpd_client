@@ -119,7 +119,7 @@ impl Decoder for MpdCodec {
             match parsed {
                 Err(NomErr::Incomplete(needed)) => {
                     if let Needed::Size(n) = needed {
-                        src.reserve(n.saturating_sub(src.len()));
+                        src.reserve(n.get().saturating_sub(src.len()));
                     }
 
                     break Ok(None);

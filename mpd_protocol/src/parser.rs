@@ -17,12 +17,11 @@ use nom::{
         streaming::{char, digit1, newline},
     },
     combinator::{cut, map, map_res, opt},
-    error::ParseError,
     sequence::{delimited, separated_pair, terminated, tuple},
     IResult,
 };
 
-use std::str::{self, FromStr};
+use std::str::{self, from_utf8, FromStr};
 
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum ParsedComponent<'raw> {
@@ -58,21 +57,16 @@ impl<'raw> ParsedComponent<'raw> {
 
 /// Recognize a server greeting, returning the protocol version.
 pub(crate) fn greeting(i: &[u8]) -> IResult<&[u8], &str> {
-    delimited(tag("OK MPD "), utf8(take_while1(|c| c != b'\n')), newline)(i)
-}
-
-/// Apply the given parser and try to interpret its result as UTF-8 encoded bytes.
-fn utf8<'a, F, E>(parser: F) -> impl Fn(&'a [u8]) -> nom::IResult<&'a [u8], &str, E>
-where
-    F: Fn(&'a [u8]) -> nom::IResult<&'a [u8], &'a [u8], E>,
-    E: ParseError<&'a [u8]>,
-{
-    map_res(parser, str::from_utf8)
+    delimited(
+        tag("OK MPD "),
+        map_res(take_while1(|c| c != b'\n'), from_utf8),
+        newline,
+    )(i)
 }
 
 /// Recognize and parse an unsigned ASCII-encoded number
 fn number<O: FromStr>(i: &[u8]) -> IResult<&[u8], O> {
-    map_res(utf8(digit1), str::parse)(i)
+    map_res(map_res(digit1, from_utf8), str::parse)(i)
 }
 
 /// Parse an error response.
@@ -82,7 +76,7 @@ fn error(i: &[u8]) -> IResult<&[u8], Error<'_>> {
         tuple((
             terminated(error_code_and_index, char(' ')),
             terminated(error_current_command, char(' ')),
-            utf8(take_while(|b| b != b'\n')),
+            map_res(take_while(|b| b != b'\n'), from_utf8),
         )),
         newline,
     )(i)?;
@@ -111,7 +105,10 @@ fn error_code_and_index(i: &[u8]) -> IResult<&[u8], (u64, u64)> {
 fn error_current_command(i: &[u8]) -> IResult<&[u8], Option<&str>> {
     delimited(
         char('{'),
-        opt(utf8(take_while1(|b| is_alphabetic(b) || b == b'_'))),
+        opt(map_res(
+            take_while1(|b| is_alphabetic(b) || b == b'_'),
+            from_utf8,
+        )),
         char('}'),
     )(i)
 }
@@ -119,9 +116,12 @@ fn error_current_command(i: &[u8]) -> IResult<&[u8], Option<&str>> {
 /// Recognize a single key-value pair
 fn key_value_field(i: &[u8]) -> IResult<&[u8], (&str, &str)> {
     separated_pair(
-        utf8(take_while1(|b| is_alphabetic(b) || b == b'_' || b == b'-')),
+        map_res(
+            take_while1(|b| is_alphabetic(b) || b == b'_' || b == b'-'),
+            from_utf8,
+        ),
         tag(": "),
-        utf8(terminated(take_while(|b| b != b'\n'), newline)),
+        map_res(terminated(take_while(|b| b != b'\n'), newline), from_utf8),
     )(i)
 }
 
@@ -161,7 +161,7 @@ mod test {
 
         assert_eq!(
             ParsedComponent::parse(b"OK"),
-            Err(NomErr::Incomplete(Needed::Size(3)))
+            Err(NomErr::Incomplete(Needed::new(1)))
         );
 
         assert_eq!(
@@ -171,7 +171,7 @@ mod test {
 
         assert_eq!(
             ParsedComponent::parse(b"list_OK"),
-            Err(NomErr::Incomplete(Needed::Size(8)))
+            Err(NomErr::Incomplete(Needed::new(1)))
         );
     }
 
@@ -245,12 +245,12 @@ mod test {
 
         assert_eq!(
             ParsedComponent::parse(b"binary: 6\nF"),
-            Err(NomErr::Incomplete(Needed::Size(6)))
+            Err(NomErr::Incomplete(Needed::new(5)))
         );
 
         assert_eq!(
             ParsedComponent::parse(b"binary: 12\n"),
-            Err(NomErr::Incomplete(Needed::Size(12)))
+            Err(NomErr::Incomplete(Needed::new(12)))
         );
     }
 }
