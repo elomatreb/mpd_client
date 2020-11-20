@@ -36,8 +36,7 @@ impl Response {
     /// Construct a new response.
     ///
     /// ```
-    /// use mpd_protocol::response::{Response, Frame};
-    ///
+    /// # use mpd_protocol::response::{Response, Frame};
     /// let r = Response::new(vec![Frame::empty()], None);
     /// assert_eq!(1, r.len());
     /// assert!(r.is_success());
@@ -49,8 +48,7 @@ impl Response {
     /// are empty). This should not occur during normal operation.
     ///
     /// ```should_panic
-    /// use mpd_protocol::response::Response;
-    ///
+    /// # use mpd_protocol::response::Response;
     /// // This panics:
     /// Response::new(Vec::new(), None);
     /// ```
@@ -68,8 +66,7 @@ impl Response {
     /// consisting of a single empty frame.
     ///
     /// ```
-    /// use mpd_protocol::response::Response;
-    ///
+    /// # use mpd_protocol::response::Response;
     /// let r = Response::empty();
     /// assert_eq!(1, r.len());
     /// assert!(r.is_success());
@@ -84,8 +81,7 @@ impl Response {
     /// response is to a command list.
     ///
     /// ```
-    /// use mpd_protocol::response::{Response, Error};
-    ///
+    /// # use mpd_protocol::response::{Response, Error};
     /// let r = Response::new(Vec::new(), Some(Error::default()));
     /// assert!(r.is_error());
     /// ```
@@ -96,8 +92,7 @@ impl Response {
     /// Returns `true` if the response was entirely succesful (i.e. no errors).
     ///
     /// ```
-    /// use mpd_protocol::response::{Response, Frame};
-    ///
+    /// # use mpd_protocol::response::{Response, Frame};
     /// let r = Response::new(vec![Frame::empty()], None);
     /// assert!(r.is_success());
     /// ```
@@ -110,8 +105,7 @@ impl Response {
     /// May be 0 if the response only consists of an error.
     ///
     /// ```
-    /// use mpd_protocol::response::Response;
-    ///
+    /// # use mpd_protocol::response::Response;
     /// let r = Response::empty();
     /// assert_eq!(r.len(), 1);
     /// ```
@@ -122,8 +116,7 @@ impl Response {
     /// Create an iterator over references to the frames in the response.
     ///
     /// ```
-    /// use mpd_protocol::response::{Frame, Response};
-    ///
+    /// # use mpd_protocol::response::{Frame, Response};
     /// let r = Response::empty();
     /// let mut iter = r.frames();
     ///
@@ -141,8 +134,7 @@ impl Response {
     /// Frames or errors beyond the first, if they exist, are silently discarded.
     ///
     /// ```
-    /// use mpd_protocol::response::{Frame, Response};
-    ///
+    /// # use mpd_protocol::response::{Frame, Response};
     /// let r = Response::empty();
     /// assert_eq!(Ok(Frame::empty()), r.single_frame());
     /// ```

@@ -252,11 +252,10 @@ impl Argument for Duration {
 /// Escape a single argument, prefixing necessary characters (quotes and backslashes) with
 /// backslashes.
 ///
-/// Returns a borrowed `Cow` if the argument did not require escaping.
+/// Returns a borrowed [`Cow`] if the argument did not require escaping.
 ///
 /// ```
-/// use mpd_protocol::command::escape_argument;
-///
+/// # use mpd_protocol::command::escape_argument;
 /// assert_eq!(escape_argument("foo'bar\""), "foo\\'bar\\\"");
 /// ```
 pub fn escape_argument(argument: &str) -> Cow<'_, str> {
