@@ -19,7 +19,7 @@ pub use crate::errors::StateChangeError;
 ///
 /// ```no_run
 /// use mpd_client::Client;
-/// use tokio::stream::StreamExt; // For .next()
+/// use futures::stream::StreamExt; // For .next()
 ///
 /// async fn print_songs() -> Result<(), Box<dyn std::error::Error>> {
 ///     let (_client, mut state_changes) = Client::connect_to("localhost:6600").await?;
@@ -41,9 +41,7 @@ impl Stream for StateChanges {
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         // Just delegate for now
-        let rx = &mut self.rx;
-        tokio::pin!(rx);
-        rx.poll_next(cx)
+        self.rx.poll_recv(cx)
     }
 }
 

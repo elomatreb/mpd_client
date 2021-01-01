@@ -1,5 +1,5 @@
+use futures::stream::StreamExt; // for .next()
 use std::error::Error;
-use tokio::stream::StreamExt; // for .next()
 use tracing_subscriber::{EnvFilter, FmtSubscriber};
 
 use mpd_client::{commands, Client, Subsystem};

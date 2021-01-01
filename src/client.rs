@@ -1,7 +1,7 @@
 //! The client implementation.
 
 use futures::{
-    future::{select, Either},
+    future::{select, Either, FutureExt},
     sink::SinkExt,
     stream::StreamExt,
 };
@@ -10,7 +10,7 @@ use tokio::{
     io::{AsyncRead, AsyncWrite},
     net::{TcpStream, ToSocketAddrs},
     sync::{
-        mpsc::{self, error::TryRecvError, Receiver, Sender, UnboundedSender},
+        mpsc::{self, Receiver, Sender, UnboundedSender},
         oneshot,
     },
 };
@@ -342,7 +342,9 @@ where
 
             // Wait for either a command to send or a message from the server, which would be a
             // state change notification.
-            let event = select(state.connection.next(), state.commands.next()).await;
+            let next_command = state.commands.recv();
+            tokio::pin!(next_command);
+            let event = select(state.connection.next(), next_command).await;
 
             match event {
                 Either::Left((response, _)) => {
@@ -424,8 +426,8 @@ where
             let _ = responder.send(response.map_err(Into::into));
 
             // See if we can immediately send the next command
-            match state.commands.try_recv() {
-                Ok((command, responder)) => {
+            match state.commands.recv().now_or_never()? {
+                Some((command, responder)) => {
                     trace!(?command, "next command immediately available");
                     match state.connection.send(command).await {
                         Ok(_) => state.loop_state = LoopState::WaitingForCommandReply(responder),
@@ -436,7 +438,7 @@ where
                         }
                     }
                 }
-                Err(TryRecvError::Empty) => {
+                None => {
                     trace!("no next command immediately available, idling");
 
                     // Start idling again
@@ -447,7 +449,6 @@ where
                         return None;
                     }
                 }
-                Err(TryRecvError::Closed) => return None,
             }
         }
     }
