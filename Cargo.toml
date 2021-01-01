@@ -1,9 +1,9 @@
 [package]
 name = "mpd_client"
-version = "0.4.0"
+version = "0.5.0"
 authors = ["Ole Bertram <git@bertr.am>"]
 edition = "2018"
-description = "Prototype of a user-friendly async MPD client"
+description = "Asynchronous user-friendly MPD client"
 repository = "https://github.com/elomatreb/mpd_client"
 keywords = ["mpd", "async", "client"]
 categories = ["network-programming"]
