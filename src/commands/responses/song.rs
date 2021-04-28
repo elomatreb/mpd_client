@@ -208,11 +208,14 @@ where
         if key.as_ref() == "directory" {
             loop {
                 let next = self.fields.next()?;
-
-                if next.0.as_ref() != "directory" {
-                    key = next.0;
-                    value = next.1;
-                    break;
+                match next.0.as_ref() {
+                    "directory" => continue,
+                    "Last-Modified" => continue,
+                    _ => {
+                        key = next.0;
+                        value = next.1;
+                        break;
+                    }
                 }
             }
         }
