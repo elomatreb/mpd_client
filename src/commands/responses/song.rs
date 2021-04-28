@@ -419,6 +419,29 @@ mod tests {
     }
 
     #[test]
+    fn song_parser_directory_with_modified() {
+        // https://github.com/elomatreb/mpd_client/issues/7
+        let input = key_value_pairs(vec![
+            ("directory", "foo"),
+            ("Last-Modified", "2020-06-12T17:53:00Z"),
+            ("file", "foo/bar.baz"),
+        ]);
+
+        let songs = Song::parse_frame(input, None).unwrap();
+
+        assert_eq!(
+            songs,
+            vec![Song {
+                url: String::from("foo/bar.baz"),
+                duration: None,
+                tags: HashMap::new(),
+                format: None,
+                last_modified: None,
+            }]
+        );
+    }
+
+    #[test]
     fn song_in_queue_parser() {
         let ts = "2020-06-12T17:53:00Z";
         let input = key_value_pairs(vec![
