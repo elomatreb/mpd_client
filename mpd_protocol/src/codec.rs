@@ -70,7 +70,7 @@ impl MpdCodec {
                 Err(e) => {
                     if !e.is_incomplete() || read == greeting.len() - 1 {
                         error!("invalid greeting");
-                        break Err(MpdCodecError::InvalidMessage(greeting[..read].into()));
+                        break Err(MpdCodecError::InvalidMessage);
                     }
                 }
             }
@@ -126,7 +126,7 @@ impl Decoder for MpdCodec {
                 }
                 Err(_) => {
                     error!("invalid message");
-                    break Err(MpdCodecError::InvalidMessage(src[..].into()));
+                    break Err(MpdCodecError::InvalidMessage);
                 }
                 Ok((remaining, parsed_item)) => {
                     let mut ret = None;
@@ -185,14 +185,14 @@ pub enum MpdCodecError {
     /// IO error occured
     Io(io::Error),
     /// A message could not be parsed succesfully.
-    InvalidMessage(Box<[u8]>),
+    InvalidMessage,
 }
 
 impl fmt::Display for MpdCodecError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             MpdCodecError::Io(_) => write!(f, "IO error"),
-            MpdCodecError::InvalidMessage(_) => write!(f, "invalid message"),
+            MpdCodecError::InvalidMessage => write!(f, "invalid message"),
         }
     }
 }

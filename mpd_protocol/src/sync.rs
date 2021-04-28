@@ -26,7 +26,7 @@ where
 
     match parser::greeting(&greeting) {
         Ok((_, version)) => Ok(Box::from(version)),
-        Err(_) => Err(MpdCodecError::InvalidMessage(greeting.into())),
+        Err(_) => Err(MpdCodecError::InvalidMessage),
     }
 }
 
@@ -75,7 +75,7 @@ where
 
         match parsed {
             Err(nom::Err::Incomplete(_)) => continue,
-            Err(_) => break Err(MpdCodecError::InvalidMessage(buf.into())),
+            Err(_) => break Err(MpdCodecError::InvalidMessage),
             Ok((_, parsed)) => match parsed {
                 ParsedComponent::Field { key, value } => response.push_field(key, value.to_owned()),
                 ParsedComponent::BinaryField(bin) => response.push_binary(BytesMut::from(bin)),
