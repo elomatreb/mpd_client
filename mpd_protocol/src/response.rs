@@ -16,6 +16,9 @@ use std::vec;
 pub use error::Error;
 pub use frame::Frame;
 
+use crate::codec::MpdCodecError;
+use crate::parser::ParsedComponent;
+
 /// Response to a command, consisting of an abitrary amount of [frames], which are responses to
 /// individual commands, and optionally a single [error].
 ///
@@ -144,9 +147,11 @@ impl Response {
     }
 }
 
+pub(crate) type InternedKeys = FxHashSet<Arc<str>>;
+
 #[derive(Clone, Debug)]
 pub(crate) struct ResponseBuilder {
-    field_keys: FxHashSet<Arc<str>>,
+    field_keys: InternedKeys,
     current_frame: Option<Frame>,
     frames: Vec<Frame>,
 }
@@ -160,16 +165,31 @@ impl ResponseBuilder {
         }
     }
 
-    pub(crate) fn push_field(&mut self, key: &str, value: String) {
-        let key = if let Some(v) = self.field_keys.get(key) {
-            Arc::clone(v)
-        } else {
-            let v = Arc::from(key);
-            self.field_keys.insert(Arc::clone(&v));
-            v
-        };
+    pub(crate) fn parse(&mut self, src: &mut BytesMut) -> Result<Option<Response>, MpdCodecError> {
+        while !src.is_empty() {
+            let (remaining, component) = match ParsedComponent::parse(&src, &mut self.field_keys) {
+                Err(e) if e.is_incomplete() => break,
+                Err(_) => return Err(MpdCodecError::InvalidMessage),
+                Ok(p) => p,
+            };
 
-        self.current_frame().fields.push_field(key, value);
+            let msg_end = src.len() - remaining.len();
+            let _msg = src.split_to(msg_end);
+
+            match component {
+                ParsedComponent::Field { key, value } => {
+                    self.current_frame().fields.push_field(key, value)
+                }
+                ParsedComponent::BinaryField(binary) => {
+                    self.push_binary(binary);
+                }
+                ParsedComponent::Error(e) => return Ok(Some(self.error(e))),
+                ParsedComponent::EndOfFrame => self.finish_frame(),
+                ParsedComponent::EndOfResponse => return Ok(Some(self.finish())),
+            }
+        }
+
+        Ok(None)
     }
 
     pub(crate) fn push_binary(&mut self, binary: BytesMut) {
@@ -182,32 +202,42 @@ impl ResponseBuilder {
         self.frames.push(frame);
     }
 
-    pub(crate) fn finish(mut self) -> Response {
-        if let Some(frame) = self.current_frame {
+    pub(crate) fn finish(&mut self) -> Response {
+        if let Some(frame) = self.current_frame.take() {
             trace_frame_completed(&frame);
             self.frames.push(frame);
         }
 
         Response {
-            frames: self.frames,
+            frames: std::mem::take(&mut self.frames),
             error: None,
         }
     }
 
-    pub(crate) fn error(mut self, error: Error) -> Response {
-        if let Some(frame) = self.current_frame {
+    pub(crate) fn error(&mut self, error: Error) -> Response {
+        if let Some(frame) = self.current_frame.take() {
             trace_frame_completed(&frame);
             self.frames.push(frame);
         }
 
         Response {
-            frames: self.frames,
+            frames: std::mem::take(&mut self.frames),
             error: Some(error),
         }
     }
 
     fn current_frame(&mut self) -> &mut Frame {
         self.current_frame.get_or_insert_with(Frame::empty)
+    }
+}
+
+pub(crate) fn intern_key(interned_keys: &mut InternedKeys, key: &str) -> Arc<str> {
+    if let Some(k) = interned_keys.get(key) {
+        Arc::clone(k)
+    } else {
+        let k = Arc::from(key);
+        interned_keys.insert(Arc::clone(&k));
+        k
     }
 }
 

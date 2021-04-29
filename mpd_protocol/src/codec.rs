@@ -5,20 +5,18 @@
 //!
 //! [Codec]: https://docs.rs/tokio-util/0.3.0/tokio_util/codec/index.html
 
-use bytes::{Buf, BytesMut};
-use nom::{Err as NomErr, Needed};
+use bytes::BytesMut;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite};
 use tokio_util::codec::{Decoder, Encoder, Framed};
-use tracing::{debug, error, info, span, trace, Level, Span};
+use tracing::{debug, error, info, span, Level, Span};
 
 use std::error::Error as StdError;
 use std::fmt;
 use std::io;
-use std::mem;
 
 use crate::command::{Command, CommandList};
-use crate::parser::{self, ParsedComponent};
-use crate::response::{error::Error, Response, ResponseBuilder};
+use crate::parser;
+use crate::response::{Response, ResponseBuilder};
 
 /// [Codec] for MPD protocol.
 ///
@@ -111,71 +109,7 @@ impl Decoder for MpdCodec {
     type Error = MpdCodecError;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
-        let _enter = self.log_span.enter();
-
-        loop {
-            let parsed = ParsedComponent::parse(&src);
-
-            match parsed {
-                Err(NomErr::Incomplete(needed)) => {
-                    if let Needed::Size(n) = needed {
-                        src.reserve(n.get().saturating_sub(src.len()));
-                    }
-
-                    break Ok(None);
-                }
-                Err(_) => {
-                    error!("invalid message");
-                    break Err(MpdCodecError::InvalidMessage);
-                }
-                Ok((remaining, parsed_item)) => {
-                    let mut ret = None;
-                    let msg_end = src.len() - remaining.len();
-
-                    match parsed_item {
-                        ParsedComponent::Field { key, value } => {
-                            self.current_response.push_field(key, value.to_owned())
-                        }
-                        ParsedComponent::BinaryField(bin) => {
-                            let bin_start = bin.as_ptr() as usize;
-                            let bin_len = bin.len();
-
-                            let mut binary = src.split_to(msg_end);
-                            let prefix_len = bin_start - binary.as_ptr() as usize;
-
-                            binary.advance(prefix_len);
-                            binary.truncate(bin_len);
-
-                            trace!(length = binary.len(), "pushing binary object");
-                            self.current_response.push_binary(binary);
-                            continue;
-                        }
-                        ParsedComponent::EndOfFrame => self.current_response.finish_frame(),
-                        ParsedComponent::EndOfResponse => {
-                            let response = mem::take(&mut self.current_response).finish();
-                            trace!(frames = response.len(), "message decoded successfully");
-                            ret = Some(response);
-                        }
-                        ParsedComponent::Error(e) => {
-                            let response_builder = mem::take(&mut self.current_response);
-                            let response = response_builder.error(Error::from_parsed(&e));
-                            trace!(
-                                error = ?e,
-                                successful_frames = response.len(),
-                                "message decoded with protocol error"
-                            );
-                            ret = Some(response);
-                        }
-                    }
-
-                    src.advance(msg_end);
-
-                    if let Some(response) = ret {
-                        break Ok(Some(response));
-                    }
-                }
-            }
-        }
+        self.current_response.parse(src)
     }
 }
 
@@ -237,7 +171,7 @@ mod tests {
 
         let command = CommandList::new(Command::build("status").unwrap());
 
-        codec.encode(command.clone(), buf).unwrap();
+        codec.encode(command, buf).unwrap();
 
         assert_eq!(&b"status\n"[..], buf);
     }

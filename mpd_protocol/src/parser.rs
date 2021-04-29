@@ -9,6 +9,7 @@
 //! responses are not separated from each other, which causes the responses to be treated as a
 //! single large one.
 
+use bytes::BytesMut;
 use nom::{
     branch::alt,
     bytes::streaming::{tag, take, take_while, take_while1},
@@ -22,34 +23,40 @@ use nom::{
 };
 
 use std::str::{self, from_utf8, FromStr};
+use std::sync::Arc;
+
+use crate::response::{intern_key, Error, InternedKeys};
 
 #[derive(Debug, PartialEq, Eq)]
-pub(crate) enum ParsedComponent<'raw> {
+pub(crate) enum ParsedComponent {
     EndOfFrame,
     EndOfResponse,
-    Error(Error<'raw>),
-    Field { key: &'raw str, value: &'raw str },
-    BinaryField(&'raw [u8]),
+    Error(Error),
+    Field { key: Arc<str>, value: String },
+    BinaryField(BytesMut),
 }
 
 #[derive(Debug, PartialEq, Eq)]
-pub(crate) struct Error<'raw> {
+pub(crate) struct RawError<'raw> {
     pub(crate) code: u64,
     pub(crate) command_index: u64,
     pub(crate) current_command: Option<&'raw str>,
     pub(crate) message: &'raw str,
 }
 
-impl<'raw> ParsedComponent<'raw> {
-    pub(crate) fn parse(i: &'raw [u8]) -> IResult<&[u8], ParsedComponent<'_>> {
+impl ParsedComponent {
+    pub(crate) fn parse<'i>(
+        i: &'i [u8],
+        keys: &'_ mut InternedKeys,
+    ) -> IResult<&'i [u8], ParsedComponent> {
         alt((
             map(tag("OK\n"), |_| ParsedComponent::EndOfResponse),
             map(tag("list_OK\n"), |_| ParsedComponent::EndOfFrame),
-            map(error, ParsedComponent::Error),
-            map(binary_field, |bin| ParsedComponent::BinaryField(bin)),
-            map(key_value_field, |(key, value)| ParsedComponent::Field {
-                key,
-                value,
+            map(error, |e| ParsedComponent::Error(Error::from_parsed(&e))),
+            map(binary_field, |bin| ParsedComponent::BinaryField(bin.into())),
+            map(key_value_field, |(k, v)| ParsedComponent::Field {
+                key: intern_key(keys, k),
+                value: String::from(v),
             }),
         ))(i)
     }
@@ -70,7 +77,7 @@ fn number<O: FromStr>(i: &[u8]) -> IResult<&[u8], O> {
 }
 
 /// Parse an error response.
-fn error(i: &[u8]) -> IResult<&[u8], Error<'_>> {
+fn error(i: &[u8]) -> IResult<&[u8], RawError<'_>> {
     let (remaining, ((code, index), command, message)) = delimited(
         tag("ACK "),
         tuple((
@@ -83,7 +90,7 @@ fn error(i: &[u8]) -> IResult<&[u8], Error<'_>> {
 
     Ok((
         remaining,
-        Error {
+        RawError {
             code,
             message,
             command_index: index,
@@ -139,8 +146,9 @@ fn binary_field(i: &[u8]) -> IResult<&[u8], &[u8]> {
 
 #[cfg(test)]
 mod test {
-    use super::{Error, ParsedComponent};
+    use super::*;
     use nom::{Err as NomErr, Needed};
+    use std::collections::HashSet;
 
     const EMPTY: &[u8] = &[];
 
@@ -154,102 +162,112 @@ mod test {
 
     #[test]
     fn end_markers() {
+        let keys = &mut InternedKeys::default();
+
         assert_eq!(
-            ParsedComponent::parse(b"OK\n"),
+            ParsedComponent::parse(b"OK\n", keys),
             Ok((EMPTY, ParsedComponent::EndOfResponse))
         );
 
         assert_eq!(
-            ParsedComponent::parse(b"OK"),
+            ParsedComponent::parse(b"OK", keys),
             Err(NomErr::Incomplete(Needed::new(1)))
         );
 
         assert_eq!(
-            ParsedComponent::parse(b"list_OK\n"),
+            ParsedComponent::parse(b"list_OK\n", keys),
             Ok((EMPTY, ParsedComponent::EndOfFrame))
         );
 
         assert_eq!(
-            ParsedComponent::parse(b"list_OK"),
+            ParsedComponent::parse(b"list_OK", keys),
             Err(NomErr::Incomplete(Needed::new(1)))
         );
     }
 
     #[test]
-    fn error() {
+    fn parse_error() {
+        let keys = &mut HashSet::default();
         let no_command = b"ACK [5@0] {} unknown command \"foo\"\n";
         let with_command = b"ACK [2@0] {random} Boolean (0/1) expected: foo\n";
 
         assert_eq!(
-            ParsedComponent::parse(no_command),
+            ParsedComponent::parse(no_command, keys),
             Ok((
                 EMPTY,
                 ParsedComponent::Error(Error {
                     code: 5,
                     command_index: 0,
                     current_command: None,
-                    message: "unknown command \"foo\""
+                    message: Box::from("unknown command \"foo\""),
                 })
             ))
         );
 
         assert_eq!(
-            ParsedComponent::parse(with_command),
+            ParsedComponent::parse(with_command, keys),
             Ok((
                 EMPTY,
                 ParsedComponent::Error(Error {
                     code: 2,
                     command_index: 0,
-                    current_command: Some("random"),
-                    message: "Boolean (0/1) expected: foo",
-                })
+                    current_command: Some(Box::from("random")),
+                    message: Box::from("Boolean (0/1) expected: foo"),
+                }),
             ))
         );
     }
 
     #[test]
     fn field() {
+        let keys = &mut HashSet::default();
+
         assert_eq!(
-            ParsedComponent::parse(b"foo: OK\n"),
+            ParsedComponent::parse(b"foo: OK\n", keys),
             Ok((
                 EMPTY,
                 ParsedComponent::Field {
-                    key: "foo",
-                    value: "OK",
+                    key: Arc::from("foo"),
+                    value: String::from("OK"),
                 }
             ))
         );
 
         assert_eq!(
-            ParsedComponent::parse(b"foo_bar: hello world list_OK\n"),
+            ParsedComponent::parse(b"foo_bar: hello world list_OK\n", keys),
             Ok((
                 EMPTY,
                 ParsedComponent::Field {
-                    key: "foo_bar",
-                    value: "hello world list_OK",
+                    key: Arc::from("foo_bar"),
+                    value: String::from("hello world list_OK"),
                 }
             ))
         );
 
-        assert!(ParsedComponent::parse(b"asdf: fooo")
+        assert!(ParsedComponent::parse(b"asdf: fooo", keys)
             .unwrap_err()
             .is_incomplete());
     }
 
     #[test]
     fn binary_field() {
+        let keys = &mut HashSet::default();
+
         assert_eq!(
-            ParsedComponent::parse(b"binary: 6\nFOOBAR\n"),
-            Ok((EMPTY, ParsedComponent::BinaryField(b"FOOBAR")))
+            ParsedComponent::parse(b"binary: 6\nFOOBAR\n", keys),
+            Ok((
+                EMPTY,
+                ParsedComponent::BinaryField(BytesMut::from("FOOBAR"))
+            ))
         );
 
         assert_eq!(
-            ParsedComponent::parse(b"binary: 6\nF"),
+            ParsedComponent::parse(b"binary: 6\nF", keys),
             Err(NomErr::Incomplete(Needed::new(5)))
         );
 
         assert_eq!(
-            ParsedComponent::parse(b"binary: 12\n"),
+            ParsedComponent::parse(b"binary: 12\n", keys),
             Err(NomErr::Incomplete(Needed::new(12)))
         );
     }

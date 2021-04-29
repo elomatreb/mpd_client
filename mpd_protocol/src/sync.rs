@@ -4,11 +4,7 @@ use bytes::BytesMut;
 
 use std::io::{self, BufRead, Write};
 
-use crate::{
-    parser::{self, ParsedComponent},
-    response::{Error, ResponseBuilder},
-    Command, CommandList, MpdCodecError, Response,
-};
+use crate::{parser, response::ResponseBuilder, Command, CommandList, MpdCodecError, Response};
 
 /// Connect to a server using the given IO.
 ///
@@ -43,54 +39,57 @@ pub fn receive<IO>(mut io: IO) -> Result<Option<Response>, MpdCodecError>
 where
     IO: BufRead,
 {
-    let mut buf = Vec::new();
+    let mut src = BytesMut::new();
     let mut response = ResponseBuilder::new();
-    let mut frame_in_progresss = false;
 
     loop {
-        let read = io.read_until(b'\n', &mut buf)?;
+        let read = read_until(&mut io, b'\n', &mut src)?;
 
         if read == 0 {
             // Reached EOF
-            if frame_in_progresss {
+            if src.is_empty() {
+                break Ok(None);
+            } else {
                 break Err(MpdCodecError::Io(io::Error::new(
                     io::ErrorKind::UnexpectedEof,
                     "unexpected end of response",
                 )));
-            } else {
-                break Ok(None);
             }
         }
 
-        let parsed = ParsedComponent::parse(&buf);
+        if let Some(resp) = response.parse(&mut src)? {
+            break Ok(Some(resp));
+        }
+    }
+}
 
-        if let Ok((_, p)) = &parsed {
-            match p {
-                ParsedComponent::EndOfResponse | ParsedComponent::Error(_) => {
-                    frame_in_progresss = false
+/// Read all bytes into `buf` until the delimiter `byte` or EOF is reached.
+fn read_until<R: BufRead>(r: &mut R, delim: u8, buf: &mut BytesMut) -> Result<usize, io::Error> {
+    // Adapted from implementation of standard library `BufRead::read_until`
+    let mut read = 0;
+    loop {
+        let (done, used) = {
+            let available = match r.fill_buf() {
+                Ok(n) => n,
+                Err(ref e) if e.kind() == io::ErrorKind::Interrupted => continue,
+                Err(e) => return Err(e),
+            };
+            match memchr::memchr(delim, available) {
+                Some(i) => {
+                    buf.extend_from_slice(&available[..=i]);
+                    (true, i + 1)
                 }
-                _ => frame_in_progresss = true,
+                None => {
+                    buf.extend_from_slice(available);
+                    (false, available.len())
+                }
             }
+        };
+        r.consume(used);
+        read += used;
+        if done || used == 0 {
+            return Ok(read);
         }
-
-        match parsed {
-            Err(nom::Err::Incomplete(_)) => continue,
-            Err(_) => break Err(MpdCodecError::InvalidMessage),
-            Ok((_, parsed)) => match parsed {
-                ParsedComponent::Field { key, value } => response.push_field(key, value.to_owned()),
-                ParsedComponent::BinaryField(bin) => response.push_binary(BytesMut::from(bin)),
-                ParsedComponent::EndOfFrame => response.finish_frame(),
-                ParsedComponent::EndOfResponse => {
-                    break Ok(Some(response.finish()));
-                }
-                ParsedComponent::Error(e) => {
-                    let error = Error::from_parsed(&e);
-                    break Ok(Some(response.error(error)));
-                }
-            },
-        }
-
-        buf.clear();
     }
 }
 

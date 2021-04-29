@@ -18,7 +18,7 @@ pub struct Error {
 }
 
 impl Error {
-    pub(crate) fn from_parsed(parsed: &parser::Error<'_>) -> Self {
+    pub(crate) fn from_parsed(parsed: &parser::RawError<'_>) -> Self {
         Self {
             code: parsed.code,
             command_index: parsed.command_index,
