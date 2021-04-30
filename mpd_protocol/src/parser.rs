@@ -147,8 +147,8 @@ fn binary_field(i: &[u8]) -> IResult<&[u8], &[u8]> {
 #[cfg(test)]
 mod test {
     use super::*;
+    use hashbrown::HashSet;
     use nom::{Err as NomErr, Needed};
-    use std::collections::HashSet;
 
     const EMPTY: &[u8] = &[];
 

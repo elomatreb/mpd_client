@@ -4,7 +4,7 @@ pub(crate) mod error;
 pub mod frame;
 
 use bytes::BytesMut;
-use fxhash::FxHashSet;
+use hashbrown::HashSet;
 
 use std::iter::FusedIterator;
 use std::mem;
@@ -84,7 +84,7 @@ impl Response {
     }
 }
 
-pub(crate) type InternedKeys = FxHashSet<Arc<str>>;
+pub(crate) type InternedKeys = HashSet<Arc<str>>;
 
 #[derive(Clone, Debug)]
 pub(crate) struct ResponseBuilder {
@@ -107,7 +107,7 @@ enum ResponseState {
 impl ResponseBuilder {
     pub(crate) fn new() -> Self {
         Self {
-            fields: FxHashSet::default(),
+            fields: HashSet::default(),
             state: ResponseState::Initial,
         }
     }
