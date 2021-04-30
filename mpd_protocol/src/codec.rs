@@ -3,7 +3,7 @@
 //! The codec accepts sending arbitrary (single) messages, it is up to you to make sure they are
 //! valid.
 //!
-//! [Codec]: https://docs.rs/tokio-util/0.3.0/tokio_util/codec/index.html
+//! [Codec]: https://docs.rs/tokio-util/0.6.0/tokio_util/codec/index.html
 
 use bytes::BytesMut;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite};
@@ -20,7 +20,7 @@ use crate::response::{Response, ResponseBuilder};
 
 /// [Codec] for MPD protocol.
 ///
-/// [Codec]: https://docs.rs/tokio-util/0.3.0/tokio_util/codec/index.html
+/// [Codec]: https://docs.rs/tokio-util/0.6.0/tokio_util/codec/index.html
 /// [`CommandList`]: crate::command::CommandList
 #[derive(Clone, Debug)]
 pub struct MpdCodec {
