@@ -109,6 +109,7 @@ impl Decoder for MpdCodec {
     type Error = MpdCodecError;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
+        let _enter = self.log_span.enter();
         self.current_response.parse(src)
     }
 }

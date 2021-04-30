@@ -1,6 +1,7 @@
 //! Basic facilities for using the protocol using synchronous IO.
 
 use bytes::BytesMut;
+use tracing::{debug, error, span, trace, Level};
 
 use std::io::{self, BufRead, Write};
 
@@ -17,11 +18,17 @@ pub fn connect<IO>(mut io: IO) -> Result<Box<str>, MpdCodecError>
 where
     IO: BufRead,
 {
+    let span = span!(Level::DEBUG, "connect");
+    let _enter = span.enter();
+
     let mut greeting = Vec::new();
     io.read_until(b'\n', &mut greeting)?;
 
     match parser::greeting(&greeting) {
-        Ok((_, version)) => Ok(Box::from(version)),
+        Ok((_, version)) => {
+            debug!(?version, "connected");
+            Ok(Box::from(version))
+        }
         Err(_) => Err(MpdCodecError::InvalidMessage),
     }
 }
@@ -39,6 +46,9 @@ pub fn receive<IO>(mut io: IO) -> Result<Option<Response>, MpdCodecError>
 where
     IO: BufRead,
 {
+    let span = span!(Level::DEBUG, "receive");
+    let _enter = span.enter();
+
     let mut src = BytesMut::new();
     let mut response = ResponseBuilder::new();
 
@@ -48,8 +58,10 @@ where
         if read == 0 {
             // Reached EOF
             if src.is_empty() {
+                debug!("EOF while no frame in progress");
                 break Ok(None);
             } else {
+                error!("EOF while reading frame");
                 break Err(MpdCodecError::Io(io::Error::new(
                     io::ErrorKind::UnexpectedEof,
                     "unexpected end of response",
@@ -58,7 +70,10 @@ where
         }
 
         if let Some(resp) = response.parse(&mut src)? {
+            debug!("parsed complete response");
             break Ok(Some(resp));
+        } else {
+            trace!("response incomplete");
         }
     }
 }

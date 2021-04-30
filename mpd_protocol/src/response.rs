@@ -5,6 +5,7 @@ pub mod frame;
 
 use bytes::BytesMut;
 use hashbrown::HashSet;
+use tracing::trace;
 
 use std::iter::FusedIterator;
 use std::mem;
@@ -132,10 +133,13 @@ impl ResponseBuilder {
             }
         }
 
+        trace!("reached end of message segment, response incomplete");
+
         Ok(None)
     }
 
     fn field(&mut self, key: Arc<str>, value: String) {
+        trace!(?key, ?value, "parsed field");
         match &mut self.state {
             ResponseState::Initial => {
                 let mut frame = Frame::empty();
@@ -150,6 +154,7 @@ impl ResponseBuilder {
     }
 
     fn binary(&mut self, binary: BytesMut) {
+        trace!(length = binary.len(), "parsed binary field");
         match &mut self.state {
             ResponseState::Initial => {
                 let mut frame = Frame::empty();
@@ -164,6 +169,7 @@ impl ResponseBuilder {
     }
 
     fn finish_frame(&mut self) {
+        trace!("finished command list frame");
         let completed_frames = match mem::replace(&mut self.state, ResponseState::Initial) {
             ResponseState::Initial => vec![Frame::empty()],
             ResponseState::InProgress { current } => vec![current],
@@ -183,6 +189,7 @@ impl ResponseBuilder {
     }
 
     fn finish(&mut self) -> Response {
+        trace!("finished response");
         match mem::replace(&mut self.state, ResponseState::Initial) {
             ResponseState::Initial => Response::empty(),
             ResponseState::InProgress { current } => Response {
@@ -199,6 +206,7 @@ impl ResponseBuilder {
     }
 
     fn error(&mut self, error: Error) -> Response {
+        trace!(?error, "parsed error");
         match mem::replace(&mut self.state, ResponseState::Initial) {
             ResponseState::Initial | ResponseState::InProgress { .. } => Response {
                 frames: Vec::new(),
