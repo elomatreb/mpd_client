@@ -6,10 +6,12 @@
 )]
 #![deny(broken_intra_doc_links)]
 #![forbid(unsafe_code)]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 
 //! Implementation of the client protocol for [MPD]. Supports binary responses and command lists.
 //!
-//! Primarily consists of an implementation of [Tokio]'s [codec][tokio-codec] subsystem.
+//! The async support, available if the `async` crate feature is enabled, consists of an
+//! implementation of [Tokio]'s [codec][tokio-codec] subsystem.
 //!
 //! # Parser Support
 //!
@@ -20,18 +22,27 @@
 //!
 //! [MPD]: https://musicpd.org
 //! [Tokio]: https://tokio.rs
-//! [tokio-codec]: https://docs.rs/tokio-util/0.3.0/tokio_util/codec/index.html
+//! [tokio-codec]: https://docs.rs/tokio-util/0.6.0/tokio_util/codec/index.html
 
-use std::io;
-use std::fmt;
 use std::error::Error;
+use std::fmt;
+use std::io;
 
+#[cfg(feature = "async")]
+#[cfg_attr(docsrs, doc(cfg(feature = "async")))]
 pub mod codec;
+
 pub mod command;
 pub mod response;
 pub mod sync;
 
 mod parser;
+
+#[cfg(feature = "async")]
+pub use codec::MpdCodec;
+
+pub use command::{Command, CommandList};
+pub use response::Response;
 
 /// Unrecoverable errors.
 #[derive(Debug)]
@@ -66,7 +77,3 @@ impl Error for MpdProtocolError {
         }
     }
 }
-
-pub use codec::MpdCodec;
-pub use command::{Command, CommandList};
-pub use response::Response;
