@@ -10,10 +10,7 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite};
 use tokio_util::codec::{Decoder, Encoder, Framed};
 use tracing::{debug, error, info, span, Level, Span};
 
-use std::error::Error as StdError;
-use std::fmt;
-use std::io;
-
+use crate::MpdProtocolError;
 use crate::command::{Command, CommandList};
 use crate::parser;
 use crate::response::{Response, ResponseBuilder};
@@ -39,7 +36,7 @@ impl MpdCodec {
     ///
     /// This returns an error when reading from the given IO object returns an error, or if the
     /// data read from it fails to parse as a valid server handshake.
-    pub async fn connect<IO>(mut io: IO) -> Result<Framed<IO, Self>, MpdCodecError>
+    pub async fn connect<IO>(mut io: IO) -> Result<Framed<IO, Self>, MpdProtocolError>
     where
         IO: AsyncRead + AsyncWrite + Unpin,
     {
@@ -68,7 +65,7 @@ impl MpdCodec {
                 Err(e) => {
                     if !e.is_incomplete() || read == greeting.len() - 1 {
                         error!("invalid greeting");
-                        break Err(MpdCodecError::InvalidMessage);
+                        break Err(MpdProtocolError::InvalidMessage);
                     }
                 }
             }
@@ -82,7 +79,7 @@ impl MpdCodec {
 }
 
 impl Encoder<Command> for MpdCodec {
-    type Error = MpdCodecError;
+    type Error = MpdProtocolError;
 
     fn encode(&mut self, command: Command, dst: &mut BytesMut) -> Result<(), Self::Error> {
         // This is free since CommandList stores its first item inline
@@ -92,7 +89,7 @@ impl Encoder<Command> for MpdCodec {
 }
 
 impl Encoder<CommandList> for MpdCodec {
-    type Error = MpdCodecError;
+    type Error = MpdProtocolError;
 
     fn encode(&mut self, command: CommandList, buf: &mut BytesMut) -> Result<(), Self::Error> {
         let _enter = self.log_span.enter();
@@ -106,45 +103,11 @@ impl Encoder<CommandList> for MpdCodec {
 
 impl Decoder for MpdCodec {
     type Item = Response;
-    type Error = MpdCodecError;
+    type Error = MpdProtocolError;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
         let _enter = self.log_span.enter();
         self.current_response.parse(src)
-    }
-}
-
-/// Errors which can occur during [`MpdCodec`] operation.
-#[derive(Debug)]
-pub enum MpdCodecError {
-    /// IO error occured
-    Io(io::Error),
-    /// A message could not be parsed succesfully.
-    InvalidMessage,
-}
-
-impl fmt::Display for MpdCodecError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            MpdCodecError::Io(_) => write!(f, "IO error"),
-            MpdCodecError::InvalidMessage => write!(f, "invalid message"),
-        }
-    }
-}
-
-#[doc(hidden)]
-impl From<io::Error> for MpdCodecError {
-    fn from(e: io::Error) -> Self {
-        MpdCodecError::Io(e)
-    }
-}
-
-impl StdError for MpdCodecError {
-    fn source(&self) -> Option<&(dyn StdError + 'static)> {
-        match self {
-            MpdCodecError::Io(e) => Some(e),
-            _ => None,
-        }
     }
 }
 

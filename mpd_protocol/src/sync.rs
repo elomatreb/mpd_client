@@ -5,7 +5,7 @@ use tracing::{debug, error, span, trace, Level};
 
 use std::io::{self, BufRead, Write};
 
-use crate::{parser, response::ResponseBuilder, Command, CommandList, MpdCodecError, Response};
+use crate::{parser, response::ResponseBuilder, Command, CommandList, MpdProtocolError, Response};
 
 /// Connect to a server using the given IO.
 ///
@@ -14,7 +14,7 @@ use crate::{parser, response::ResponseBuilder, Command, CommandList, MpdCodecErr
 /// # Errors
 ///
 /// This will error if an IO error occurs, or if the server sends an invalid greeting message.
-pub fn connect<IO>(mut io: IO) -> Result<Box<str>, MpdCodecError>
+pub fn connect<IO>(mut io: IO) -> Result<Box<str>, MpdProtocolError>
 where
     IO: BufRead,
 {
@@ -29,7 +29,7 @@ where
             debug!(?version, "connected");
             Ok(Box::from(version))
         }
-        Err(_) => Err(MpdCodecError::InvalidMessage),
+        Err(_) => Err(MpdProtocolError::InvalidMessage),
     }
 }
 
@@ -42,7 +42,7 @@ where
 ///
 /// This will return an error if reading from the IO returns an error, if EOF is encountered while
 /// in the middle of a response, or if the server sends an invalid response.
-pub fn receive<IO>(mut io: IO) -> Result<Option<Response>, MpdCodecError>
+pub fn receive<IO>(mut io: IO) -> Result<Option<Response>, MpdProtocolError>
 where
     IO: BufRead,
 {
@@ -62,7 +62,7 @@ where
                 break Ok(None);
             } else {
                 error!("EOF while reading frame");
-                break Err(MpdCodecError::Io(io::Error::new(
+                break Err(MpdProtocolError::Io(io::Error::new(
                     io::ErrorKind::UnexpectedEof,
                     "unexpected end of response",
                 )));
@@ -113,7 +113,7 @@ fn read_until<R: BufRead>(r: &mut R, delim: u8, buf: &mut BytesMut) -> Result<us
 /// # Errors
 ///
 /// This will return an error if writing to the IO returns an error.
-pub fn send<IO>(io: IO, command: Command) -> Result<(), MpdCodecError>
+pub fn send<IO>(io: IO, command: Command) -> Result<(), MpdProtocolError>
 where
     IO: Write,
 {
@@ -125,7 +125,7 @@ where
 /// # Errors
 ///
 /// This will return an error if writing to the IO returns an error.
-pub fn send_list<IO>(mut io: IO, command_list: CommandList) -> Result<(), MpdCodecError>
+pub fn send_list<IO>(mut io: IO, command_list: CommandList) -> Result<(), MpdProtocolError>
 where
     IO: Write,
 {

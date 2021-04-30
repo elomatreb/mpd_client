@@ -22,6 +22,10 @@
 //! [Tokio]: https://tokio.rs
 //! [tokio-codec]: https://docs.rs/tokio-util/0.3.0/tokio_util/codec/index.html
 
+use std::io;
+use std::fmt;
+use std::error::Error;
+
 pub mod codec;
 pub mod command;
 pub mod response;
@@ -29,6 +33,40 @@ pub mod sync;
 
 mod parser;
 
-pub use codec::{MpdCodec, MpdCodecError};
+/// Unrecoverable errors.
+#[derive(Debug)]
+pub enum MpdProtocolError {
+    /// IO error occured
+    Io(io::Error),
+    /// A message could not be parsed succesfully.
+    InvalidMessage,
+}
+
+impl fmt::Display for MpdProtocolError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            MpdProtocolError::Io(_) => write!(f, "IO error"),
+            MpdProtocolError::InvalidMessage => write!(f, "invalid message"),
+        }
+    }
+}
+
+#[doc(hidden)]
+impl From<io::Error> for MpdProtocolError {
+    fn from(e: io::Error) -> Self {
+        MpdProtocolError::Io(e)
+    }
+}
+
+impl Error for MpdProtocolError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            MpdProtocolError::Io(e) => Some(e),
+            _ => None,
+        }
+    }
+}
+
+pub use codec::MpdCodec;
 pub use command::{Command, CommandList};
 pub use response::Response;

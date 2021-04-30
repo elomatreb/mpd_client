@@ -17,8 +17,8 @@ use std::vec;
 pub use error::Error;
 pub use frame::Frame;
 
-use crate::codec::MpdCodecError;
 use crate::parser::ParsedComponent;
+use crate::MpdProtocolError;
 
 /// Response to a command, consisting of an abitrary amount of [frames], which are responses to
 /// individual commands, and optionally a single [error].
@@ -113,11 +113,14 @@ impl ResponseBuilder {
         }
     }
 
-    pub(crate) fn parse(&mut self, src: &mut BytesMut) -> Result<Option<Response>, MpdCodecError> {
+    pub(crate) fn parse(
+        &mut self,
+        src: &mut BytesMut,
+    ) -> Result<Option<Response>, MpdProtocolError> {
         while !src.is_empty() {
             let (remaining, component) = match ParsedComponent::parse(&src, &mut self.fields) {
                 Err(e) if e.is_incomplete() => break,
-                Err(_) => return Err(MpdCodecError::InvalidMessage),
+                Err(_) => return Err(MpdProtocolError::InvalidMessage),
                 Ok(p) => p,
             };
 
