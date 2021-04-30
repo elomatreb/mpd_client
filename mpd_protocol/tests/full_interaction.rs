@@ -17,7 +17,7 @@ async fn full_interaction() {
     conn.send(Command::new("status")).await.unwrap();
 
     let response = conn.next().await.unwrap().unwrap();
-    assert_eq!(response.len(), 1);
+    assert_eq!(response.successful_frames(), 1);
 
     let frame = response.single_frame().unwrap();
     assert_eq!(frame.find("foo"), Some("bar"));

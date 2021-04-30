@@ -29,3 +29,4 @@ features = ["std"]
 tokio = { version = "1.0.1", features = ["io-util", "rt", "macros"] }
 tokio-test = "0.4.0"
 futures = "0.3.6"
+assert_matches = "1.5.0"

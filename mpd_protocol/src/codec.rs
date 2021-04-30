@@ -152,21 +152,13 @@ mod tests {
     use super::*;
     use std::io::Cursor;
 
-    fn dummy_codec() -> MpdCodec {
-        MpdCodec {
+    #[test]
+    fn encoder() {
+        let mut codec = MpdCodec {
             log_span: Span::none(),
             current_response: ResponseBuilder::new(),
             protocol_version: "".into(),
-        }
-    }
-
-    fn init_buffer(msg: &[u8]) -> BytesMut {
-        BytesMut::from(msg)
-    }
-
-    #[test]
-    fn encoder() {
-        let mut codec = dummy_codec();
+        };
         let buf = &mut BytesMut::new();
 
         let command = CommandList::new(Command::build("status").unwrap());
@@ -190,127 +182,5 @@ mod tests {
 
         assert!(parts.read_buf.is_empty());
         assert!(parts.write_buf.is_empty());
-    }
-
-    #[test]
-    fn empty_response() {
-        let mut codec = dummy_codec();
-        let buf = &mut init_buffer(b"OK");
-
-        assert_eq!(None, codec.decode(buf).unwrap());
-
-        buf.extend_from_slice(b"\n");
-
-        assert_eq!(Some(Response::empty()), codec.decode(buf).unwrap());
-    }
-
-    #[test]
-    fn simple_response() {
-        let mut codec = dummy_codec();
-        let buf = &mut init_buffer(b"hello: world\nfoo: OK\nbar: 1234\nOK");
-
-        assert_eq!(None, codec.decode(buf).unwrap());
-
-        buf.extend_from_slice(b"\n");
-
-        let response = codec.decode(buf).expect("failed to decode").unwrap();
-        let frame = response.single_frame().unwrap();
-
-        assert_eq!(frame.find("hello"), Some("world"));
-        assert_eq!(frame.find("foo"), Some("OK"));
-        assert_eq!(frame.find("bar"), Some("1234"));
-
-        assert!(buf.is_empty());
-    }
-
-    #[test]
-    fn decoder_ignores_trailing_data() {
-        let mut codec = dummy_codec();
-        let buf = &mut init_buffer(b"foo: OK\nOK\ntrailing_stuff");
-
-        let _ = codec.decode(buf).unwrap();
-
-        assert_eq!(buf, "trailing_stuff");
-    }
-
-    #[test]
-    fn command_list() {
-        let mut codec = dummy_codec();
-        let buf = &mut init_buffer(b"list_OK\nfoo: bar\nlist_OK\nbinary: 6\nBINARY\nlist_OK\nOK");
-
-        assert_eq!(None, codec.decode(buf).unwrap());
-
-        buf.extend_from_slice(b"\n");
-
-        let mut response = codec
-            .decode(buf)
-            .expect("failed to decode")
-            .unwrap()
-            .into_iter();
-
-        let first = response.next().unwrap().unwrap();
-        let second = response.next().unwrap().unwrap();
-        let mut third = response.next().unwrap().unwrap();
-
-        assert!(buf.is_empty());
-
-        assert!(first.is_empty());
-
-        assert_eq!(second.find("foo"), Some("bar"));
-
-        assert_eq!(third.find("binary"), None);
-        assert_eq!(third.get_binary(), Some(BytesMut::from("BINARY")));
-    }
-
-    #[test]
-    fn binary_response() {
-        let mut codec = dummy_codec();
-        let buf = &mut init_buffer(b"binary: 16\nHELLO \nOK\n");
-
-        assert_eq!(None, codec.decode(buf).unwrap());
-
-        buf.extend_from_slice(b" WORLD\nOK\n");
-
-        let response = codec.decode(buf).expect("failed to decode").unwrap();
-        let mut frame = response.single_frame().unwrap();
-
-        assert_eq!(frame.fields_len(), 0);
-        assert_eq!(
-            frame.get_binary(),
-            Some(BytesMut::from("HELLO \nOK\n WORLD"))
-        );
-
-        assert!(buf.is_empty());
-    }
-
-    #[test]
-    fn multiple_messages() {
-        let mut codec = dummy_codec();
-        let buf = &mut init_buffer(b"foo: bar\nOK\nhello: world\nOK\n");
-
-        let response = codec.decode(buf).expect("failed to decode").unwrap();
-        let frame = response.single_frame().unwrap();
-
-        assert_eq!(frame.find("foo"), Some("bar"));
-        assert_eq!(&buf[..], b"hello: world\nOK\n");
-
-        let response = codec.decode(buf).expect("failed to decode").unwrap();
-        let frame = response.single_frame().unwrap();
-
-        assert_eq!(frame.find("hello"), Some("world"));
-        assert!(buf.is_empty());
-    }
-
-    #[test]
-    fn cursor_reset() {
-        let mut codec = dummy_codec();
-        let buf = &mut init_buffer(b"hello: world\nOK");
-
-        assert_eq!(None, codec.decode(buf).unwrap());
-
-        buf.extend_from_slice(b"\na: b\nOK\n");
-
-        assert!(codec.decode(buf).unwrap().is_some());
-        assert!(codec.decode(buf).unwrap().is_some());
     }
 }

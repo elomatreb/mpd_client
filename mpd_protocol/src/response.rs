@@ -5,9 +5,9 @@ pub mod frame;
 
 use bytes::BytesMut;
 use fxhash::FxHashSet;
-use tracing::trace;
 
 use std::iter::FusedIterator;
+use std::mem;
 use std::option;
 use std::slice;
 use std::sync::Arc;
@@ -34,71 +34,25 @@ pub struct Response {
     error: Option<Error>,
 }
 
-#[allow(clippy::len_without_is_empty)]
 impl Response {
-    /// Construct a new response.
-    ///
-    /// ```
-    /// # use mpd_protocol::response::{Response, Frame};
-    /// let r = Response::new(vec![Frame::empty()], None);
-    /// assert_eq!(1, r.len());
-    /// assert!(r.is_success());
-    /// ```
-    ///
-    /// # Panics
-    ///
-    /// Panics if it is attempted to construct an empty response (i.e. both `frames` and `error`
-    /// are empty). This should not occur during normal operation.
-    ///
-    /// ```should_panic
-    /// # use mpd_protocol::response::Response;
-    /// // This panics:
-    /// Response::new(Vec::new(), None);
-    /// ```
-    pub fn new(mut frames: Vec<Frame>, error: Option<Error>) -> Self {
-        assert!(
-            !frames.is_empty() || error.is_some(),
-            "attempted to construct an empty (no frames or error) response"
-        );
-
-        frames.reverse(); // We want the frames in reverse-chronological order (i.e. oldest last).
-        Self { frames, error }
-    }
-
     /// Construct a new "empty" response. This is the simplest possible succesful response,
     /// consisting of a single empty frame.
-    ///
-    /// ```
-    /// # use mpd_protocol::response::Response;
-    /// let r = Response::empty();
-    /// assert_eq!(1, r.len());
-    /// assert!(r.is_success());
-    /// ```
-    pub fn empty() -> Self {
-        Self::new(vec![Frame::empty()], None)
+    pub(crate) fn empty() -> Self {
+        Self {
+            frames: Vec::new(),
+            error: None,
+        }
     }
 
-    /// Returns `true` if the response resulted in an error.
+    /// Returns `true` if the response contains an error.
     ///
     /// Even if this returns `true`, there may still be succesful frames in the response when the
     /// response is to a command list.
-    ///
-    /// ```
-    /// # use mpd_protocol::response::{Response, Error};
-    /// let r = Response::new(Vec::new(), Some(Error::default()));
-    /// assert!(r.is_error());
-    /// ```
     pub fn is_error(&self) -> bool {
         self.error.is_some()
     }
 
     /// Returns `true` if the response was entirely succesful (i.e. no errors).
-    ///
-    /// ```
-    /// # use mpd_protocol::response::{Response, Frame};
-    /// let r = Response::new(vec![Frame::empty()], None);
-    /// assert!(r.is_success());
-    /// ```
     pub fn is_success(&self) -> bool {
         !self.is_error()
     }
@@ -106,25 +60,14 @@ impl Response {
     /// Get the number of succesful frames in the response.
     ///
     /// May be 0 if the response only consists of an error.
-    ///
-    /// ```
-    /// # use mpd_protocol::response::Response;
-    /// let r = Response::empty();
-    /// assert_eq!(r.len(), 1);
-    /// ```
-    pub fn len(&self) -> usize {
+    pub fn successful_frames(&self) -> usize {
         self.frames.len()
     }
 
     /// Create an iterator over references to the frames in the response.
     ///
-    /// ```
-    /// # use mpd_protocol::response::{Frame, Response};
-    /// let r = Response::empty();
-    /// let mut iter = r.frames();
-    ///
-    /// assert_eq!(Some(Ok(&Frame::empty())), iter.next());
-    /// ```
+    /// This yields `Result`s, with succesful frames becoming `Ok()`s and an error becoming a
+    /// (final) `Err()`.
     pub fn frames(&self) -> FramesRef<'_> {
         FramesRef {
             frames: self.frames.iter(),
@@ -135,12 +78,6 @@ impl Response {
     /// Treat the response as consisting of a single frame or error.
     ///
     /// Frames or errors beyond the first, if they exist, are silently discarded.
-    ///
-    /// ```
-    /// # use mpd_protocol::response::{Frame, Response};
-    /// let r = Response::empty();
-    /// assert_eq!(Ok(Frame::empty()), r.single_frame());
-    /// ```
     pub fn single_frame(self) -> Result<Frame, Error> {
         // There is always at least one frame
         self.into_iter().next().unwrap()
@@ -151,23 +88,33 @@ pub(crate) type InternedKeys = FxHashSet<Arc<str>>;
 
 #[derive(Clone, Debug)]
 pub(crate) struct ResponseBuilder {
-    field_keys: InternedKeys,
-    current_frame: Option<Frame>,
-    frames: Vec<Frame>,
+    fields: InternedKeys,
+    state: ResponseState,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum ResponseState {
+    Initial,
+    InProgress {
+        current: Frame,
+    },
+    ListInProgress {
+        current: Frame,
+        completed_frames: Vec<Frame>,
+    },
 }
 
 impl ResponseBuilder {
     pub(crate) fn new() -> Self {
         Self {
-            field_keys: FxHashSet::default(),
-            current_frame: Some(Frame::empty()),
-            frames: Vec::new(),
+            fields: FxHashSet::default(),
+            state: ResponseState::Initial,
         }
     }
 
     pub(crate) fn parse(&mut self, src: &mut BytesMut) -> Result<Option<Response>, MpdCodecError> {
         while !src.is_empty() {
-            let (remaining, component) = match ParsedComponent::parse(&src, &mut self.field_keys) {
+            let (remaining, component) = match ParsedComponent::parse(&src, &mut self.fields) {
                 Err(e) if e.is_incomplete() => break,
                 Err(_) => return Err(MpdCodecError::InvalidMessage),
                 Ok(p) => p,
@@ -177,12 +124,8 @@ impl ResponseBuilder {
             let _msg = src.split_to(msg_end);
 
             match component {
-                ParsedComponent::Field { key, value } => {
-                    self.current_frame().fields.push_field(key, value)
-                }
-                ParsedComponent::BinaryField(binary) => {
-                    self.push_binary(binary);
-                }
+                ParsedComponent::Field { key, value } => self.field(key, value),
+                ParsedComponent::BinaryField(binary) => self.binary(binary),
                 ParsedComponent::Error(e) => return Ok(Some(self.error(e))),
                 ParsedComponent::EndOfFrame => self.finish_frame(),
                 ParsedComponent::EndOfResponse => return Ok(Some(self.finish())),
@@ -192,42 +135,82 @@ impl ResponseBuilder {
         Ok(None)
     }
 
-    pub(crate) fn push_binary(&mut self, binary: BytesMut) {
-        self.current_frame().binary = Some(binary);
-    }
-
-    pub(crate) fn finish_frame(&mut self) {
-        let frame = self.current_frame.take().unwrap_or_else(Frame::empty);
-        trace_frame_completed(&frame);
-        self.frames.push(frame);
-    }
-
-    pub(crate) fn finish(&mut self) -> Response {
-        if let Some(frame) = self.current_frame.take() {
-            trace_frame_completed(&frame);
-            self.frames.push(frame);
-        }
-
-        Response {
-            frames: std::mem::take(&mut self.frames),
-            error: None,
+    fn field(&mut self, key: Arc<str>, value: String) {
+        match &mut self.state {
+            ResponseState::Initial => {
+                let mut frame = Frame::empty();
+                frame.fields.push_field(key, value);
+                self.state = ResponseState::InProgress { current: frame };
+            }
+            ResponseState::InProgress { current }
+            | ResponseState::ListInProgress { current, .. } => {
+                current.fields.push_field(key, value);
+            }
         }
     }
 
-    pub(crate) fn error(&mut self, error: Error) -> Response {
-        if let Some(frame) = self.current_frame.take() {
-            trace_frame_completed(&frame);
-            self.frames.push(frame);
-        }
-
-        Response {
-            frames: std::mem::take(&mut self.frames),
-            error: Some(error),
+    fn binary(&mut self, binary: BytesMut) {
+        match &mut self.state {
+            ResponseState::Initial => {
+                let mut frame = Frame::empty();
+                frame.binary = Some(binary);
+                self.state = ResponseState::InProgress { current: frame };
+            }
+            ResponseState::InProgress { current }
+            | ResponseState::ListInProgress { current, .. } => {
+                current.binary = Some(binary);
+            }
         }
     }
 
-    fn current_frame(&mut self) -> &mut Frame {
-        self.current_frame.get_or_insert_with(Frame::empty)
+    fn finish_frame(&mut self) {
+        let completed_frames = match mem::replace(&mut self.state, ResponseState::Initial) {
+            ResponseState::Initial => vec![Frame::empty()],
+            ResponseState::InProgress { current } => vec![current],
+            ResponseState::ListInProgress {
+                current,
+                mut completed_frames,
+            } => {
+                completed_frames.push(current);
+                completed_frames
+            }
+        };
+
+        self.state = ResponseState::ListInProgress {
+            current: Frame::empty(),
+            completed_frames,
+        };
+    }
+
+    fn finish(&mut self) -> Response {
+        match mem::replace(&mut self.state, ResponseState::Initial) {
+            ResponseState::Initial => Response::empty(),
+            ResponseState::InProgress { current } => Response {
+                frames: vec![current],
+                error: None,
+            },
+            ResponseState::ListInProgress {
+                completed_frames, ..
+            } => Response {
+                frames: completed_frames,
+                error: None,
+            },
+        }
+    }
+
+    fn error(&mut self, error: Error) -> Response {
+        match mem::replace(&mut self.state, ResponseState::Initial) {
+            ResponseState::Initial | ResponseState::InProgress { .. } => Response {
+                frames: Vec::new(),
+                error: Some(error),
+            },
+            ResponseState::ListInProgress {
+                completed_frames, ..
+            } => Response {
+                frames: completed_frames,
+                error: Some(error),
+            },
+        }
     }
 }
 
@@ -239,14 +222,6 @@ pub(crate) fn intern_key(interned_keys: &mut InternedKeys, key: &str) -> Arc<str
         interned_keys.insert(Arc::clone(&k));
         k
     }
-}
-
-fn trace_frame_completed(frame: &Frame) {
-    trace!(
-        fields = frame.fields_len(),
-        has_binary = frame.has_binary(),
-        "completed frame"
-    );
 }
 
 impl Default for ResponseBuilder {
@@ -342,13 +317,26 @@ impl IntoIterator for Response {
 #[cfg(test)]
 mod test {
     use super::*;
+    use assert_matches::assert_matches;
+
+    fn frame<const N: usize>(fields: [(&str, &str); N], binary: Option<&[u8]>) -> Frame {
+        let mut out = Frame::empty();
+
+        for &(k, v) in &fields {
+            out.fields.push_field(k.into(), v.into());
+        }
+
+        out.binary = binary.map(BytesMut::from);
+
+        out
+    }
 
     #[test]
     fn owned_frames_iter() {
-        let r = Response::new(
-            vec![Frame::empty(), Frame::empty(), Frame::empty()],
-            Some(Error::default()),
-        );
+        let r = Response {
+            frames: vec![Frame::empty(), Frame::empty(), Frame::empty()],
+            error: Some(Error::default()),
+        };
 
         let mut iter = r.into_iter();
 
@@ -369,10 +357,10 @@ mod test {
 
     #[test]
     fn borrowed_frames_iter() {
-        let r = Response::new(
-            vec![Frame::empty(), Frame::empty(), Frame::empty()],
-            Some(Error::default()),
-        );
+        let r = Response {
+            frames: vec![Frame::empty(), Frame::empty(), Frame::empty()],
+            error: Some(Error::default()),
+        };
 
         let mut iter = r.frames();
 
@@ -389,5 +377,239 @@ mod test {
         assert_eq!(Some(Err(&Error::default())), iter.next());
 
         assert_eq!((0, Some(0)), iter.size_hint());
+    }
+
+    #[test]
+    fn simple_response() {
+        let mut io = BytesMut::from("foo: bar\nOK");
+
+        let mut builder = ResponseBuilder::new();
+        assert_eq!(builder.state, ResponseState::Initial);
+
+        // Consume fields
+        assert_matches!(builder.parse(&mut io), Ok(None));
+        assert_eq!(
+            builder.state,
+            ResponseState::InProgress {
+                current: frame([("foo", "bar")], None)
+            }
+        );
+        assert_eq!(io, "OK");
+
+        // No complete message, do not consume buffer
+        assert_matches!(builder.parse(&mut io), Ok(None));
+        assert_eq!(
+            builder.state,
+            ResponseState::InProgress {
+                current: frame([("foo", "bar")], None)
+            }
+        );
+        assert_eq!(io, "OK");
+
+        io.extend_from_slice(b"\n");
+
+        // Response now complete
+        assert_eq!(
+            builder.parse(&mut io).unwrap(),
+            Some(Response {
+                frames: vec![frame([("foo", "bar")], None)],
+                error: None
+            })
+        );
+        assert_eq!(builder.state, ResponseState::Initial);
+        assert_eq!(io, "");
+    }
+
+    #[test]
+    fn response_with_binary() {
+        let mut io = BytesMut::from("foo: bar\nbinary: 6\nOK\n");
+        let mut builder = ResponseBuilder::new();
+
+        assert_matches!(builder.parse(&mut io), Ok(None));
+        assert_eq!(
+            builder.state,
+            ResponseState::InProgress {
+                current: frame([("foo", "bar")], None)
+            }
+        );
+        assert_eq!(io, "binary: 6\nOK\n");
+
+        io.extend_from_slice(b"OK\n\n");
+
+        assert_matches!(builder.parse(&mut io), Ok(None));
+        assert_eq!(
+            builder.state,
+            ResponseState::InProgress {
+                current: frame([("foo", "bar")], Some(b"OK\nOK\n")),
+            }
+        );
+        assert_eq!(io, "");
+
+        io.extend_from_slice(b"OK\n");
+        assert_eq!(
+            builder.parse(&mut io).unwrap(),
+            Some(Response {
+                frames: vec![frame([("foo", "bar")], Some(b"OK\nOK\n"))],
+                error: None,
+            })
+        );
+        assert_eq!(builder.state, ResponseState::Initial);
+    }
+
+    #[test]
+    fn empty_response() {
+        let mut io = BytesMut::from("OK");
+        let mut builder = ResponseBuilder::new();
+
+        assert_matches!(builder.parse(&mut io), Ok(None));
+        assert_eq!(builder.state, ResponseState::Initial);
+
+        io.extend_from_slice(b"\n");
+
+        assert_eq!(builder.parse(&mut io).unwrap(), Some(Response::empty()));
+    }
+
+    #[test]
+    fn error() {
+        let mut io = BytesMut::from("ACK [5@0] {} unknown command \"foo\"");
+        let mut builder = ResponseBuilder::new();
+
+        assert_matches!(builder.parse(&mut io), Ok(None));
+        assert_eq!(builder.state, ResponseState::Initial);
+
+        io.extend_from_slice(b"\n");
+
+        assert_eq!(
+            builder.parse(&mut io).unwrap(),
+            Some(Response {
+                frames: vec![],
+                error: Some(Error {
+                    code: 5,
+                    command_index: 0,
+                    current_command: None,
+                    message: Box::from("unknown command \"foo\""),
+                }),
+            })
+        );
+        assert_eq!(builder.state, ResponseState::Initial);
+    }
+
+    #[test]
+    fn multiple_messages() {
+        let mut io = BytesMut::from("foo: bar\nOK\nhello: world\nOK\n");
+        let mut builder = ResponseBuilder::new();
+
+        assert_eq!(
+            builder.parse(&mut io).unwrap(),
+            Some(Response {
+                frames: vec![frame([("foo", "bar")], None)],
+                error: None
+            })
+        );
+        assert_eq!(io, "hello: world\nOK\n");
+
+        assert_eq!(
+            builder.parse(&mut io).unwrap(),
+            Some(Response {
+                frames: vec![frame([("hello", "world")], None)],
+                error: None
+            })
+        );
+        assert_eq!(io, "");
+    }
+
+    #[test]
+    fn command_list() {
+        let mut io = BytesMut::from("foo: bar\n");
+        let mut builder = ResponseBuilder::new();
+
+        assert_matches!(builder.parse(&mut io), Ok(None));
+        assert_eq!(
+            builder.state,
+            ResponseState::InProgress {
+                current: frame([("foo", "bar")], None)
+            }
+        );
+
+        io.extend_from_slice(b"list_OK\n");
+
+        assert_matches!(builder.parse(&mut io), Ok(None));
+        assert_eq!(
+            builder.state,
+            ResponseState::ListInProgress {
+                current: Frame::empty(),
+                completed_frames: vec![frame([("foo", "bar")], None)],
+            }
+        );
+
+        io.extend_from_slice(b"list_OK\n");
+
+        assert_matches!(builder.parse(&mut io), Ok(None));
+        assert_eq!(
+            builder.state,
+            ResponseState::ListInProgress {
+                current: Frame::empty(),
+                completed_frames: vec![frame([("foo", "bar")], None), Frame::empty()],
+            }
+        );
+
+        io.extend_from_slice(b"OK\n");
+
+        assert_eq!(
+            builder.parse(&mut io).unwrap(),
+            Some(Response {
+                frames: vec![frame([("foo", "bar")], None), Frame::empty()],
+                error: None
+            })
+        );
+        assert_eq!(builder.state, ResponseState::Initial);
+    }
+
+    #[test]
+    fn command_list_error() {
+        let mut io = BytesMut::from("list_OK\n");
+        let mut builder = ResponseBuilder::new();
+
+        assert_matches!(builder.parse(&mut io), Ok(None));
+        assert_eq!(
+            builder.state,
+            ResponseState::ListInProgress {
+                current: Frame::empty(),
+                completed_frames: vec![Frame::empty()],
+            }
+        );
+
+        io.extend_from_slice(b"ACK [5@1] {} unknown command \"foo\"\n");
+
+        assert_eq!(
+            builder.parse(&mut io).unwrap(),
+            Some(Response {
+                frames: vec![Frame::empty()],
+                error: Some(Error {
+                    code: 5,
+                    command_index: 1,
+                    current_command: None,
+                    message: Box::from("unknown command \"foo\""),
+                }),
+            })
+        );
+        assert_eq!(builder.state, ResponseState::Initial);
+    }
+
+    #[test]
+    fn key_interning() {
+        let mut io = BytesMut::from("foo: bar\nfoo: baz\nOK\n");
+
+        let mut resp = ResponseBuilder::new()
+            .parse(&mut io)
+            .expect("incomplete")
+            .expect("invalid");
+
+        let mut fields = resp.frames.pop().unwrap().into_iter();
+
+        let (a, _) = fields.next().unwrap();
+        let (b, _) = fields.next().unwrap();
+
+        assert!(Arc::ptr_eq(&a, &b));
     }
 }
