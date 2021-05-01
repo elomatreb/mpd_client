@@ -9,7 +9,6 @@
 //! responses are not separated from each other, which causes the responses to be treated as a
 //! single large one.
 
-use bytes::BytesMut;
 use nom::{
     branch::alt,
     bytes::streaming::{tag, take, take_while, take_while1},
@@ -33,7 +32,7 @@ pub(crate) enum ParsedComponent {
     EndOfResponse,
     Error(Error),
     Field { key: Arc<str>, value: String },
-    BinaryField(BytesMut),
+    BinaryField { data_length: usize },
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -53,7 +52,9 @@ impl ParsedComponent {
             map(tag("OK\n"), |_| ParsedComponent::EndOfResponse),
             map(tag("list_OK\n"), |_| ParsedComponent::EndOfFrame),
             map(error, |e| ParsedComponent::Error(Error::from_parsed(&e))),
-            map(binary_field, |bin| ParsedComponent::BinaryField(bin.into())),
+            map(binary_field, |bin| ParsedComponent::BinaryField {
+                data_length: bin.len(),
+            }),
             map(key_value_field, |(k, v)| ParsedComponent::Field {
                 key: intern_key(keys, k),
                 value: String::from(v),
@@ -255,10 +256,7 @@ mod test {
 
         assert_eq!(
             ParsedComponent::parse(b"binary: 6\nFOOBAR\n", keys),
-            Ok((
-                EMPTY,
-                ParsedComponent::BinaryField(BytesMut::from("FOOBAR"))
-            ))
+            Ok((EMPTY, ParsedComponent::BinaryField { data_length: 6 }))
         );
 
         assert_eq!(

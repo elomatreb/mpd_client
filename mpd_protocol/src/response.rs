@@ -3,7 +3,7 @@
 pub(crate) mod error;
 pub mod frame;
 
-use bytes::BytesMut;
+use bytes::{Buf, BytesMut};
 use hashbrown::HashSet;
 use tracing::trace;
 
@@ -125,11 +125,15 @@ impl ResponseBuilder {
             };
 
             let msg_end = src.len() - remaining.len();
-            let _msg = src.split_to(msg_end);
+            let mut msg = src.split_to(msg_end);
 
             match component {
                 ParsedComponent::Field { key, value } => self.field(key, value),
-                ParsedComponent::BinaryField(binary) => self.binary(binary),
+                ParsedComponent::BinaryField { data_length } => {
+                    msg.advance(msg.len() - (data_length + 1));
+                    msg.truncate(data_length);
+                    self.binary(msg);
+                }
                 ParsedComponent::Error(e) => return Ok(Some(self.error(e))),
                 ParsedComponent::EndOfFrame => self.finish_frame(),
                 ParsedComponent::EndOfResponse => return Ok(Some(self.finish())),
