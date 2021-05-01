@@ -35,7 +35,7 @@ impl Response {
     /// consisting of a single empty frame.
     pub(crate) fn empty() -> Self {
         Self {
-            frames: Vec::new(),
+            frames: vec![Frame::empty()],
             error: None,
         }
     }
@@ -491,7 +491,13 @@ mod test {
 
         io.extend_from_slice(b"\n");
 
-        assert_eq!(builder.parse(&mut io).unwrap(), Some(Response::empty()));
+        assert_eq!(
+            builder.parse(&mut io).unwrap(),
+            Some(Response {
+                frames: vec![Frame::empty()],
+                error: None,
+            })
+        );
     }
 
     #[test]
