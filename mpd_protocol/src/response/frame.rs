@@ -40,7 +40,7 @@ impl Frame {
 
     /// Returns `true` if the frame contains a binary blob.
     ///
-    /// This will return `false` after you remove the binary blob using [`Frame::get_binary`].
+    /// If the binary blob has been removed using [`Frame::get_binary`], this will return `false`.
     pub fn has_binary(&self) -> bool {
         self.binary.is_some()
     }

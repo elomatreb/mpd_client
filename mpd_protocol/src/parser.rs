@@ -36,11 +36,11 @@ pub(crate) enum ParsedComponent {
 }
 
 #[derive(Debug, PartialEq, Eq)]
-pub(crate) struct RawError<'raw> {
-    pub(crate) code: u64,
-    pub(crate) command_index: u64,
-    pub(crate) current_command: Option<&'raw str>,
-    pub(crate) message: &'raw str,
+struct RawError<'raw> {
+    code: u64,
+    command_index: u64,
+    current_command: Option<&'raw str>,
+    message: &'raw str,
 }
 
 impl ParsedComponent {
@@ -51,7 +51,7 @@ impl ParsedComponent {
         alt((
             map(tag("OK\n"), |_| ParsedComponent::EndOfResponse),
             map(tag("list_OK\n"), |_| ParsedComponent::EndOfFrame),
-            map(error, |e| ParsedComponent::Error(Error::from_parsed(&e))),
+            map(error, |e| ParsedComponent::Error(e.into_owned_error())),
             map(binary_field, |bin| ParsedComponent::BinaryField {
                 data_length: bin.len(),
             }),
@@ -60,6 +60,17 @@ impl ParsedComponent {
                 value: String::from(v),
             }),
         ))(i)
+    }
+}
+
+impl RawError<'_> {
+    fn into_owned_error(self) -> Error {
+        Error {
+            code: self.code,
+            command_index: self.command_index,
+            current_command: self.current_command.map(Box::from),
+            message: Box::from(self.message),
+        }
     }
 }
 
