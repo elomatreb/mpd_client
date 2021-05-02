@@ -4,7 +4,7 @@ use std::error::Error;
 use std::fmt;
 
 use crate::commands::responses::TypedResponseError;
-use crate::raw::{ErrorResponse, Frame, ProtocolError};
+use crate::raw::{ErrorResponse, Frame, MpdProtocolError};
 
 /// Errors which can occur when issuing a command.
 #[derive(Debug)]
@@ -12,7 +12,7 @@ pub enum CommandError {
     /// The connection to MPD was closed cleanly
     ConnectionClosed,
     /// An underlying protocol error occured, including IO errors
-    Protocol(ProtocolError),
+    Protocol(MpdProtocolError),
     /// Command returned an error
     ErrorResponse {
         /// The error
@@ -57,8 +57,8 @@ impl Error for CommandError {
 }
 
 #[doc(hidden)]
-impl From<ProtocolError> for CommandError {
-    fn from(e: ProtocolError) -> Self {
+impl From<MpdProtocolError> for CommandError {
+    fn from(e: MpdProtocolError) -> Self {
         CommandError::Protocol(e)
     }
 }
@@ -98,7 +98,7 @@ impl From<TypedResponseError> for CommandError {
 #[derive(Debug)]
 pub enum StateChangeError {
     /// An underlying protocol error occured, including IO errors
-    Protocol(ProtocolError),
+    Protocol(MpdProtocolError),
     /// The state change message contained an error frame
     ErrorMessage(ErrorResponse),
 }
@@ -133,8 +133,8 @@ impl From<ErrorResponse> for StateChangeError {
 }
 
 #[doc(hidden)]
-impl From<ProtocolError> for StateChangeError {
-    fn from(e: ProtocolError) -> Self {
+impl From<MpdProtocolError> for StateChangeError {
+    fn from(e: MpdProtocolError) -> Self {
         StateChangeError::Protocol(e)
     }
 }

@@ -28,7 +28,7 @@ use std::sync::Arc;
 
 use crate::commands::{self as cmds, responses::Response, Command, CommandList};
 use crate::errors::{CommandError, StateChangeError};
-use crate::raw::{Frame, ProtocolError, RawCommand, RawCommandList};
+use crate::raw::{Frame, MpdProtocolError, RawCommand, RawCommandList};
 use crate::state_changes::{StateChanges, Subsystem};
 
 type CommandResponder = oneshot::Sender<Result<RawResponse, CommandError>>;
@@ -38,7 +38,7 @@ type StateChangesSender = UnboundedSender<Result<Subsystem, StateChangeError>>;
 ///
 /// If successful, this contains a [`Client`] which you can use to issue commands, and a
 /// [`StateChanges`] value, which is a stream that receives notifications from the server.
-pub type ConnectResult = Result<(Client, StateChanges), ProtocolError>;
+pub type ConnectResult = Result<(Client, StateChanges), MpdProtocolError>;
 
 /// A client connected to an MPD instance.
 ///
@@ -220,7 +220,7 @@ impl Client {
         debug!(?commands, "sending command");
 
         let res = self.do_send(commands).await?;
-        let mut frames = Vec::with_capacity(res.len());
+        let mut frames = Vec::with_capacity(res.successful_frames());
 
         for frame in res {
             match frame {
@@ -250,7 +250,10 @@ impl Client {
         rx.await?
     }
 
-    async fn do_connect<C>(connection: C, span: Span) -> Result<(Self, StateChanges), ProtocolError>
+    async fn do_connect<C>(
+        connection: C,
+        span: Span,
+    ) -> Result<(Self, StateChanges), MpdProtocolError>
     where
         C: AsyncRead + AsyncWrite + Unpin + Send + 'static,
     {
@@ -426,8 +429,8 @@ where
             let _ = responder.send(response.map_err(Into::into));
 
             // See if we can immediately send the next command
-            match state.commands.recv().now_or_never()? {
-                Some((command, responder)) => {
+            match state.commands.recv().now_or_never() {
+                Some(Some((command, responder))) => {
                     trace!(?command, "next command immediately available");
                     match state.connection.send(command).await {
                         Ok(_) => state.loop_state = LoopState::WaitingForCommandReply(responder),
@@ -438,6 +441,7 @@ where
                         }
                     }
                 }
+                Some(None) => return None,
                 None => {
                     trace!("no next command immediately available, idling");
 
