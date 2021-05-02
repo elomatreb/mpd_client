@@ -17,7 +17,7 @@ pub trait CommandList: sealed::Sealed {
 
     /// Generate the command list that will be sent, or `None` if no commands.
     #[doc(hidden)]
-    fn to_raw_command_list(self) -> Option<RawCommandList>;
+    fn into_raw_command_list(self) -> Option<RawCommandList>;
 
     /// Parse the raw response frames into the proper types.
     #[doc(hidden)]
@@ -33,8 +33,8 @@ where
 {
     type Response = Vec<C::Response>;
 
-    fn to_raw_command_list(self) -> Option<RawCommandList> {
-        let mut commands = self.into_iter().map(|c| c.to_command());
+    fn into_raw_command_list(self) -> Option<RawCommandList> {
+        let mut commands = self.into_iter().map(|c| c.into_command());
 
         let mut raw_commands = RawCommandList::new(commands.next()?);
 
@@ -75,12 +75,12 @@ macro_rules! impl_command_list_tuple {
         {
             type Response = ($first_type::Response, $($further_type::Response),*);
 
-            fn to_raw_command_list(self) -> Option<RawCommandList> {
+            fn into_raw_command_list(self) -> Option<RawCommandList> {
                 #[allow(unused_mut)]
-                let mut commands = RawCommandList::new(self.0.to_command());
+                let mut commands = RawCommandList::new(self.0.into_command());
 
                 $(
-                    commands.add(self.$further_idx.to_command());
+                    commands.add(self.$further_idx.into_command());
                 )*
 
                 Some(commands)

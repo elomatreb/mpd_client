@@ -146,7 +146,7 @@ impl Client {
     where
         C: Command,
     {
-        let command = cmd.to_command();
+        let command = cmd.into_command();
         let frame = self.raw_command(command).await?;
 
         Ok(Response::from_frame(frame)?)
@@ -162,7 +162,7 @@ impl Client {
     where
         L: CommandList,
     {
-        let frames = match list.to_raw_command_list() {
+        let frames = match list.into_raw_command_list() {
             Some(cmds) => self.raw_command_list(cmds).await?,
             None => Vec::new(),
         };

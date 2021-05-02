@@ -230,14 +230,14 @@ impl Response for Option<SongInQueue> {
 impl sealed::Sealed for Vec<SongInQueue> {}
 impl Response for Vec<SongInQueue> {
     fn from_frame(raw: Frame) -> Result<Self, TypedResponseError> {
-        Ok(SongInQueue::parse_frame(raw, None)?)
+        SongInQueue::parse_frame(raw, None)
     }
 }
 
 impl sealed::Sealed for Vec<Song> {}
 impl Response for Vec<Song> {
     fn from_frame(raw: Frame) -> Result<Self, TypedResponseError> {
-        Ok(Song::parse_frame(raw, None)?)
+        Song::parse_frame(raw, None)
     }
 }
 
@@ -252,7 +252,7 @@ impl sealed::Sealed for Vec<Playlist> {}
 impl Response for Vec<Playlist> {
     fn from_frame(raw: Frame) -> Result<Self, TypedResponseError> {
         let fields_count = raw.fields_len();
-        Ok(Playlist::parse_frame(raw, fields_count)?)
+        Playlist::parse_frame(raw, fields_count)
     }
 }
 

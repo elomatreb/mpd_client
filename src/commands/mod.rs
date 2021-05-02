@@ -105,5 +105,5 @@ pub trait Command {
     type Response: Response;
 
     /// Create the "raw" command representation for transmission.
-    fn to_command(self) -> RawCommand;
+    fn into_command(self) -> RawCommand;
 }
