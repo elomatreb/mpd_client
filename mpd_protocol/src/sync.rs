@@ -55,23 +55,21 @@ where
     loop {
         let read = read_until(&mut io, b'\n', &mut src)?;
 
-        if read == 0 {
+        if let Some(resp) = response.parse(&mut src)? {
+            debug!("parsed complete response");
+            break Ok(Some(resp));
+        } else if read == 0 {
             // Reached EOF
-            if src.is_empty() {
-                debug!("EOF while no frame in progress");
-                break Ok(None);
-            } else {
+            if response.is_frame_in_progress() || !src.is_empty() {
                 error!("EOF while reading frame");
                 break Err(MpdProtocolError::Io(io::Error::new(
                     io::ErrorKind::UnexpectedEof,
                     "unexpected end of response",
                 )));
+            } else {
+                debug!("EOF while no frame in progress");
+                break Ok(None);
             }
-        }
-
-        if let Some(resp) = response.parse(&mut src)? {
-            debug!("parsed complete response");
-            break Ok(Some(resp));
         } else {
             trace!("response incomplete");
         }
@@ -140,6 +138,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use assert_matches::assert_matches;
     use std::io::Cursor;
 
     #[test]
@@ -175,5 +174,17 @@ mod tests {
         send(&mut io, Command::new("playid").argument("3")).unwrap();
 
         assert_eq!(&io.get_ref()[GREETING.len()..], b"playid 3\n");
+    }
+
+    #[test]
+    fn eof() {
+        let buf = "".as_bytes();
+        assert_matches!(receive(buf), Ok(None));
+
+        let buf = "foo: bar\n".as_bytes();
+        assert_matches!(receive(buf), Err(MpdProtocolError::Io(_)));
+
+        let buf = "foo: bar".as_bytes();
+        assert_matches!(receive(buf), Err(MpdProtocolError::Io(_)));
     }
 }

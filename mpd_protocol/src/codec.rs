@@ -10,6 +10,8 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite};
 use tokio_util::codec::{Decoder, Encoder, Framed};
 use tracing::{debug, error, info, span, Level, Span};
 
+use std::io;
+
 use crate::command::{Command, CommandList};
 use crate::parser;
 use crate::response::{Response, ResponseBuilder};
@@ -110,11 +112,27 @@ impl Decoder for MpdCodec {
         let _enter = self.log_span.enter();
         self.current_response.parse(src)
     }
+
+    fn decode_eof(&mut self, buf: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
+        let _enter = self.log_span.enter();
+
+        if !buf.is_empty() || self.current_response.is_frame_in_progress() {
+            error!("EOF while frame in progress");
+            Err(MpdProtocolError::Io(io::Error::new(
+                io::ErrorKind::UnexpectedEof,
+                "unexpected end of response",
+            )))
+        } else {
+            debug!("EOF while no frame in progress");
+            Ok(None)
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use assert_matches::assert_matches;
     use futures::{sink::SinkExt, stream::StreamExt};
     use std::io::Cursor;
     use tokio_test::io::Builder as MockBuilder;
@@ -169,5 +187,28 @@ mod tests {
 
         let frame = response.single_frame().unwrap();
         assert_eq!(frame.find("foo"), Some("bar"));
+    }
+
+    #[tokio::test]
+    async fn eof() {
+        let io = MockBuilder::new().read(b"OK MPD 0.21.11\n").build();
+        let mut conn = MpdCodec::connect(io).await.unwrap();
+        assert_matches!(conn.next().await, None);
+
+        // Incomplete frame
+        let io = MockBuilder::new()
+            .read(b"OK MPD 0.21.11\n")
+            .read(b"foo: bar\n")
+            .build();
+        let mut conn = MpdCodec::connect(io).await.unwrap();
+        assert_matches!(conn.next().await, Some(Err(MpdProtocolError::Io(_))));
+
+        // Incomplete frame with unconsumed data
+        let io = MockBuilder::new()
+            .read(b"OK MPD 0.21.11\n")
+            .read(b"foo: bar")
+            .build();
+        let mut conn = MpdCodec::connect(io).await.unwrap();
+        assert_matches!(conn.next().await, Some(Err(MpdProtocolError::Io(_))));
     }
 }

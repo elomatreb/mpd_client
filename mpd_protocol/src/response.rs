@@ -140,6 +140,10 @@ impl ResponseBuilder {
         Ok(None)
     }
 
+    pub(crate) fn is_frame_in_progress(&self) -> bool {
+        self.state != ResponseState::Initial
+    }
+
     fn field(&mut self, key: Arc<str>, value: String) {
         trace!(?key, ?value, "parsed field");
         match &mut self.state {
