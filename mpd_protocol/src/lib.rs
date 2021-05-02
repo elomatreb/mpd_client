@@ -30,7 +30,7 @@ use std::io;
 
 #[cfg(feature = "async")]
 #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
-pub mod codec;
+mod codec;
 
 pub mod command;
 pub mod response;

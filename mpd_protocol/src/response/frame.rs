@@ -20,7 +20,7 @@ pub struct Frame {
 
 impl Frame {
     /// Create an empty frame (0 key-value pairs).
-    pub fn empty() -> Self {
+    pub(crate) fn empty() -> Self {
         Self {
             fields: FieldsContainer(Vec::new()),
             binary: None,
