@@ -644,13 +644,13 @@ impl Command for MoveInPlaylist {
 
 /// `listallinfo` command.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ListAllSongs {
+pub struct ListAllIn {
     directory: String,
 }
 
-impl ListAllSongs {
+impl ListAllIn {
     /// List all songs in the library.
-    pub fn new() -> Self {
+    pub fn root() -> Self {
         Self {
             directory: String::new(),
         }
@@ -662,7 +662,7 @@ impl ListAllSongs {
     }
 }
 
-impl Command for ListAllSongs {
+impl Command for ListAllIn {
     type Response = Vec<res::Song>;
 
     fn into_command(self) -> RawCommand {
@@ -843,12 +843,12 @@ mod tests {
     #[test]
     fn command_listallinfo() {
         assert_eq!(
-            ListAllSongs::new().into_command(),
+            ListAllIn::root().into_command(),
             RawCommand::new("listallinfo")
         );
 
         assert_eq!(
-            ListAllSongs::directory(String::from("foo")).into_command(),
+            ListAllIn::directory(String::from("foo")).into_command(),
             RawCommand::new("listallinfo").argument("foo")
         );
     }
