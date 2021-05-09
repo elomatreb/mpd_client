@@ -66,6 +66,8 @@ pub enum Subsystem {
     StoredPlaylist,
     Subscription,
     Update,
+    Neighbor,
+    Mount,
 
     /// Catch-all variant used when the above variants do not match. Includes the raw subsystem
     /// from the MPD response.
@@ -87,6 +89,8 @@ impl Subsystem {
             "stored_playlist" => Subsystem::StoredPlaylist,
             "subscription" => Subsystem::Subscription,
             "update" => Subsystem::Update,
+            "neighbor" => Subsystem::Neighbor,
+            "mount" => Subsystem::Mount,
             _ => Subsystem::Other(raw.into()),
         }
     }
