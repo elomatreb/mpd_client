@@ -62,9 +62,9 @@ impl SongInQueue {
                 }) => Ok(SongInQueue {
                     position,
                     id,
-                    song,
                     range,
                     priority,
+                    song,
                 }),
                 None => Err(TypedResponseError {
                     field: "Id",
