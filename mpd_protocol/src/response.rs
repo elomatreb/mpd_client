@@ -262,10 +262,20 @@ impl<'a> Iterator for FramesRef<'a> {
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
-        let (mut len, _) = self.frames.size_hint();
-        len += if self.error.is_some() { 1 } else { 0 };
+        // .len() returns the number of succesful frames, add 1 if there is also an error
+        let len = self.frames.len() + if self.error.is_some() { 1 } else { 0 };
 
         (len, Some(len))
+    }
+}
+
+impl<'a> DoubleEndedIterator for FramesRef<'a> {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        if let Some(e) = self.error.take() {
+            Some(Err(e))
+        } else {
+            self.frames.next_back().map(Ok)
+        }
     }
 }
 
@@ -305,6 +315,16 @@ impl Iterator for Frames {
         let len = self.frames.len() + if self.error.is_some() { 1 } else { 0 };
 
         (len, Some(len))
+    }
+}
+
+impl DoubleEndedIterator for Frames {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        if let Some(e) = self.error.take() {
+            Some(Err(e))
+        } else {
+            self.frames.next_back().map(Ok)
+        }
     }
 }
 
