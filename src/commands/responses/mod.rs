@@ -7,6 +7,7 @@ mod list;
 mod playlist;
 mod song;
 
+use bytes::Bytes;
 use chrono::ParseError;
 
 use std::error::Error;
@@ -260,5 +261,40 @@ impl sealed::Sealed for List {}
 impl Response for List {
     fn from_frame(frame: Frame) -> Result<Self, TypedResponseError> {
         Ok(List::from_frame(frame))
+    }
+}
+
+/// Response to the [`albumart`][crate::commands::AlbumArt] and
+/// [`readpicture`][crate::commands::AlbumArtEmbedded] commands.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AlbumArt {
+    /// The total size in bytes of the file.
+    pub size: usize,
+    /// The mime type, if known.
+    pub mime: Option<String>,
+    /// The raw data.
+    data: Bytes,
+}
+
+impl AlbumArt {
+    /// Get the data in the response.
+    pub fn data(&self) -> &[u8] {
+        &self.data
+    }
+}
+
+impl sealed::Sealed for Option<AlbumArt> {}
+impl Response for Option<AlbumArt> {
+    fn from_frame(mut frame: Frame) -> Result<Self, TypedResponseError> {
+        let data = match frame.get_binary() {
+            Some(d) => d.freeze(),
+            None => return Ok(None),
+        };
+
+        Ok(Some(AlbumArt {
+            size: field!(frame, "size" integer),
+            mime: frame.get("type"),
+            data,
+        }))
     }
 }

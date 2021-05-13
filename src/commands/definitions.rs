@@ -676,6 +676,71 @@ impl Command for ListAllIn {
     }
 }
 
+/// Set the response binary length limit, in bytes.
+///
+/// This can dramatically speed up operations like [loading album art][crate::Client::album_art],
+/// but may cause undesirable latency when using MPD over a slow connection.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SetBinaryLimit(pub usize);
+
+/// `albumart` command.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AlbumArt {
+    uri: String,
+    offset: usize,
+}
+
+impl AlbumArt {
+    /// Get the separate file album art for the given URI.
+    pub fn new(uri: String) -> Self {
+        Self { uri, offset: 0 }
+    }
+
+    /// Load the resulting data starting from the given offset.
+    pub fn offset(self, offset: usize) -> Self {
+        Self { offset, ..self }
+    }
+}
+
+impl Command for AlbumArt {
+    type Response = Option<res::AlbumArt>;
+
+    fn into_command(self) -> RawCommand {
+        RawCommand::new("albumart")
+            .argument(self.uri)
+            .argument(self.offset.to_string())
+    }
+}
+
+/// `readpicture` command.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AlbumArtEmbedded {
+    uri: String,
+    offset: usize,
+}
+
+impl AlbumArtEmbedded {
+    /// Get the separate file album art for the given URI.
+    pub fn new(uri: String) -> Self {
+        Self { uri, offset: 0 }
+    }
+
+    /// Load the resulting data starting from the given offset.
+    pub fn offset(self, offset: usize) -> Self {
+        Self { offset, ..self }
+    }
+}
+
+impl Command for AlbumArtEmbedded {
+    type Response = Option<res::AlbumArt>;
+
+    fn into_command(self) -> RawCommand {
+        RawCommand::new("readpicture")
+            .argument(self.uri)
+            .argument(self.offset.to_string())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

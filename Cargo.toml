@@ -19,6 +19,7 @@ futures = { version = "0.3.4", default-features = false, features = ["std"] }
 tracing = "0.1.13"
 tracing-futures = "0.2.3"
 chrono = { version = "0.4.11", default-features = false, features = ["std"] }
+bytes = "1.0.1"
 
 [dev-dependencies]
 tokio = { version = "1.0.1", features = ["rt", "net", "sync", "macros"] }

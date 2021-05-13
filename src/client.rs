@@ -242,6 +242,101 @@ impl Client {
         Ok(frames)
     }
 
+    /// Load album art for the given URI.
+    ///
+    /// # Behavior
+    ///
+    /// This first tries to use the [`readpicture`][cmds::AlbumArtEmbedded] command to load
+    /// embedded data, before falling back to reading from a separate file using the
+    /// [`albumart`](cmds::AlbumArt) command.
+    ///
+    /// **Note**: Due to the default binary size limit of MPD being quite low, loading larger art
+    /// will issue many commands and can be slow. Consider increasing the
+    /// [binary size limit][cmds::SetBinaryLimit].
+    ///
+    /// # Return value
+    ///
+    /// If this method returns succesfully, a return value of  `None` indicates that no album art
+    /// for the given URI was found. Otherwise, you will get a tuple consisting of the raw binary
+    /// data, and an optional string value that contains a MIME type for the data, if one was
+    /// provided by the server.
+    ///
+    /// # Errors
+    ///
+    /// This returns errors in the same conditions as [`Client::command`].
+    pub async fn album_art(
+        &self,
+        uri: &str,
+    ) -> Result<Option<(Vec<u8>, Option<String>)>, CommandError> {
+        let span = span!(Level::DEBUG, "album_art", ?uri);
+        let _enter = span.enter();
+
+        debug!("loading album art");
+
+        let mut out = Vec::new();
+        let mut expected_size = 0;
+        let mut embedded = false;
+        let mut mime = None;
+
+        match self
+            .command(cmds::AlbumArtEmbedded::new(uri.to_owned()))
+            .await
+        {
+            Ok(Some(resp)) => {
+                expected_size = resp.size;
+                out.reserve(expected_size);
+                out.extend_from_slice(resp.data());
+                embedded = true;
+                mime = resp.mime;
+                debug!(length = resp.size, ?mime, "found embedded album art");
+            }
+            Ok(None) => {
+                debug!("readpicture command gave no result, falling back");
+            }
+            Err(e) => match e {
+                CommandError::ErrorResponse { error, .. } if error.code == 5 => {
+                    debug!("readpicture command unsupported, falling back");
+                }
+                e => return Err(e),
+            },
+        }
+
+        if !embedded {
+            if let Some(resp) = self.command(cmds::AlbumArt::new(uri.to_owned())).await? {
+                expected_size = resp.size;
+                out.reserve(expected_size);
+                out.extend_from_slice(resp.data());
+                debug!(length = expected_size, "found separate file album art");
+            } else {
+                debug!("no embedded or separte album art found");
+                return Ok(None);
+            }
+        }
+
+        while out.len() < expected_size {
+            let resp = if embedded {
+                self.command(cmds::AlbumArtEmbedded::new(uri.to_owned()).offset(out.len()))
+                    .await?
+            } else {
+                self.command(cmds::AlbumArt::new(uri.to_owned()).offset(out.len()))
+                    .await?
+            };
+
+            if let Some(resp) = resp {
+                let data = resp.data();
+                trace!(received = data.len(), progress = out.len());
+                out.extend_from_slice(data);
+            } else {
+                warn!(progress = out.len(), "incomplete cover art response");
+                return Ok(None);
+            }
+        }
+
+        debug!(length = expected_size, "finished loading");
+
+        Ok(Some((out, mime)))
+    }
+
     /// Get the protocol version the underlying connection is using.
     pub fn protocol_version(&self) -> &str {
         self.protocol_version.as_ref()
@@ -601,6 +696,80 @@ mod tests {
         drop(client);
 
         assert!(state_changes.next().await.is_none());
+    }
+
+    #[tokio::test]
+    async fn album_art() {
+        let io = MockBuilder::new()
+            .read(GREETING)
+            .write(b"idle\n")
+            .write(b"noidle\n")
+            .read(b"OK\n")
+            .write(b"readpicture foo/bar.mp3 0\n")
+            .read(b"size: 6\ntype: image/jpeg\nbinary: 3\nFOO\nOK\n")
+            .write(b"readpicture foo/bar.mp3 3\n")
+            .read(b"size: 6\ntype: image/jpeg\nbinary: 3\nBAR\nOK\n")
+            .build();
+
+        let (client, _) = Client::connect(io).await.expect("connect failed");
+
+        let x = client
+            .album_art("foo/bar.mp3")
+            .await
+            .expect("command failed");
+
+        assert_eq!(
+            x,
+            Some((Vec::from("FOOBAR"), Some(String::from("image/jpeg"))))
+        );
+    }
+
+    #[tokio::test]
+    async fn album_art_fallback() {
+        let io = MockBuilder::new()
+            .read(GREETING)
+            .write(b"idle\n")
+            .write(b"noidle\n")
+            .read(b"OK\n")
+            .write(b"readpicture foo/bar.mp3 0\n")
+            .read(b"OK\n")
+            .write(b"albumart foo/bar.mp3 0\n")
+            .read(b"size: 6\nbinary: 3\nFOO\nOK\n")
+            .write(b"albumart foo/bar.mp3 3\n")
+            .read(b"size: 6\nbinary: 3\nBAR\nOK\n")
+            .build();
+
+        let (client, _) = Client::connect(io).await.expect("connect failed");
+
+        let x = client
+            .album_art("foo/bar.mp3")
+            .await
+            .expect("command failed");
+
+        assert_eq!(x, Some((Vec::from("FOOBAR"), None)));
+    }
+
+    #[tokio::test]
+    async fn album_art_none() {
+        let io = MockBuilder::new()
+            .read(GREETING)
+            .write(b"idle\n")
+            .write(b"noidle\n")
+            .read(b"OK\n")
+            .write(b"readpicture foo/bar.mp3 0\n")
+            .read(b"OK\n")
+            .write(b"albumart foo/bar.mp3 0\n")
+            .read(b"OK\n")
+            .build();
+
+        let (client, _) = Client::connect(io).await.expect("connect failed");
+
+        let x = client
+            .album_art("foo/bar.mp3")
+            .await
+            .expect("command failed");
+
+        assert_eq!(x, None);
     }
 
     #[tokio::test]
