@@ -1,3 +1,15 @@
+# 0.12.0 (2021-05-13)
+
+ - Make async functionality optional by moving it behind the default-off `async` feature flag. Without it, the `tokio` dependencies are removed.
+ - Rename error type from `MpdCodecError` to `MpdProtocolError` to reflect the above change.
+   - Remove raw message contents from `InvalidMessage` error variant.
+ - API changes:
+   - Remove `Response::new()` and `Response::empty()` methods
+   - Rename `Response::len()` to `Response::successful_frames()`
+   - Remove `Frame::empty()`
+   - Add `DoubleEndedIterator` implementations for response frame iterators
+ - Internal improvements.
+
 # 0.11.0 (2021-01-01)
 
  - Update to `tokio` 1.0.
