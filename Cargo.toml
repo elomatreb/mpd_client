@@ -13,7 +13,7 @@ license = "MIT OR Apache-2.0"
 
 [dependencies]
 mpd_protocol = { path = "../mpd_protocol", features = ["async"] }
-tokio = { version = "1.0.1", features = ["rt", "net", "sync"] }
+tokio = { version = "1.0.1", features = ["rt", "net", "time", "sync"] }
 tokio-util = { version = "0.6.0", features = ["codec"] }
 futures = { version = "0.3.4", default-features = false, features = ["std"] }
 tracing = "0.1.13"

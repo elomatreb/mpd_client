@@ -1,7 +1,7 @@
 //! The client implementation.
 
 use futures::{
-    future::{select, Either, FutureExt},
+    future::{select, Either},
     sink::SinkExt,
     stream::StreamExt,
 };
@@ -13,6 +13,7 @@ use tokio::{
         mpsc::{self, Receiver, Sender, UnboundedSender},
         oneshot,
     },
+    time::timeout,
 };
 use tokio_util::codec::Framed;
 use tracing::{debug, error, span, trace, warn, Level, Span};
@@ -21,10 +22,11 @@ use tracing_futures::Instrument;
 #[cfg(unix)]
 use tokio::net::UnixStream;
 
-use std::fmt::Debug;
+use std::fmt::{self, Debug};
 #[cfg(unix)]
 use std::path::Path;
 use std::sync::Arc;
+use std::time::Duration;
 
 use crate::commands::{self as cmds, responses::Response, Command, CommandList};
 use crate::errors::{CommandError, StateChangeError};
@@ -33,6 +35,9 @@ use crate::state_changes::{StateChanges, Subsystem};
 
 type CommandResponder = oneshot::Sender<Result<RawResponse, CommandError>>;
 type StateChangesSender = UnboundedSender<Result<Subsystem, StateChangeError>>;
+
+/// Time to wait for another command to send before starting the idle loop.
+const NEXT_COMMAND_IDLE_TIMEOUT: Duration = Duration::from_millis(100);
 
 /// Result returned by a connection attempt.
 ///
@@ -293,10 +298,19 @@ struct State<C> {
     state_changes: StateChangesSender,
 }
 
-#[derive(Debug)]
 enum LoopState {
     Idling,
     WaitingForCommandReply(CommandResponder),
+}
+
+impl Debug for LoopState {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // avoid Debug-printing the noisy internals of the contained channel type
+        match self {
+            LoopState::Idling => write!(f, "Idling"),
+            LoopState::WaitingForCommandReply(_) => write!(f, "WaitingForCommandReply"),
+        }
+    }
 }
 
 fn idle() -> RawCommand {
@@ -428,9 +442,11 @@ where
 
             let _ = responder.send(response.map_err(Into::into));
 
+            let next_command = timeout(NEXT_COMMAND_IDLE_TIMEOUT, state.commands.recv());
+
             // See if we can immediately send the next command
-            match state.commands.recv().now_or_never() {
-                Some(Some((command, responder))) => {
+            match next_command.await {
+                Ok(Some((command, responder))) => {
                     trace!(?command, "next command immediately available");
                     match state.connection.send(command).await {
                         Ok(_) => state.loop_state = LoopState::WaitingForCommandReply(responder),
@@ -441,9 +457,9 @@ where
                         }
                     }
                 }
-                Some(None) => return None,
-                None => {
-                    trace!("no next command immediately available, idling");
+                Ok(None) => return None,
+                Err(_) => {
+                    trace!("reached next command timeout, idling");
 
                     // Start idling again
                     state.loop_state = LoopState::Idling;
