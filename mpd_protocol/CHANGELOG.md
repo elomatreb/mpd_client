@@ -1,3 +1,7 @@
+# 0.12.1 (2021-05-13)
+
+ - No external changes (only doc fixes)
+
 # 0.12.0 (2021-05-13)
 
  - Make async functionality optional by moving it behind the default-off `async` feature flag. Without it, the `tokio` dependencies are removed.
