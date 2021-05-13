@@ -338,13 +338,6 @@ pub struct Error {
     pub message: Box<str>,
 }
 
-impl Error {
-    /// Returns `true` if this error indicates an unknown command.
-    pub fn is_unknown_command(&self) -> bool {
-        self.code == 5
-    }
-}
-
 #[cfg(test)]
 mod test {
     use super::*;
