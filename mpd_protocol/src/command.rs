@@ -30,8 +30,6 @@ pub struct Command {
 }
 
 /// A non-empty list of commands.
-///
-/// Commands will be automatically wrapped in a proper command list if necessary.
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct CommandList {
     first: Command,

@@ -13,16 +13,9 @@
 //! The async support, available if the `async` crate feature is enabled, consists of an
 //! implementation of [Tokio]'s [codec][tokio-codec] subsystem.
 //!
-//! # Parser Support
-//!
-//! The response parser will understand command lists properly **only** if they are initiated with
-//! the `command_list_ok_begin` command. If the command list is initiated without response
-//! separators, all responses will be treated as a single large response which may result in
-//! incorrect behavior.
-//!
 //! [MPD]: https://musicpd.org
 //! [Tokio]: https://tokio.rs
-//! [tokio-codec]: https://docs.rs/tokio-util/0.6.0/tokio_util/codec/index.html
+//! [tokio-codec]: https://docs.rs/tokio-util/0.6.6/tokio_util/codec/index.html
 
 use std::error::Error;
 use std::fmt;

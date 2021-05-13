@@ -1,13 +1,4 @@
-//! Parsers for MPD responses.
-//!
-//! # Feature support
-//!
-//! The parser supports binary fields as the last field in a given message, and command lists if
-//! they were initiated with the `command_list_ok_begin` command.
-//!
-//! If the command list was initiated with the regular `command_list_begin` command, the individual
-//! responses are not separated from each other, which causes the responses to be treated as a
-//! single large one.
+//! Parser for MPD responses.
 
 use nom::{
     branch::alt,
