@@ -8,7 +8,6 @@ use tracing::trace;
 
 use std::iter::FusedIterator;
 use std::mem;
-use std::option;
 use std::slice;
 use std::sync::Arc;
 use std::vec;
@@ -67,7 +66,7 @@ impl Response {
     pub fn frames(&self) -> FramesRef<'_> {
         FramesRef {
             frames: self.frames.iter(),
-            error: self.error.as_ref().into_iter(),
+            error: self.error.as_ref(),
         }
     }
 
@@ -248,7 +247,7 @@ impl Default for ResponseBuilder {
 #[derive(Clone, Debug)]
 pub struct FramesRef<'a> {
     frames: slice::Iter<'a, Frame>,
-    error: option::IntoIter<&'a Error>,
+    error: Option<&'a Error>,
 }
 
 impl<'a> Iterator for FramesRef<'a> {
@@ -257,16 +256,14 @@ impl<'a> Iterator for FramesRef<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(frame) = self.frames.next() {
             Some(Ok(frame))
-        } else if let Some(error) = self.error.next() {
-            Some(Err(error))
         } else {
-            None
+            self.error.take().map(Err)
         }
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
         let (mut len, _) = self.frames.size_hint();
-        len += self.error.size_hint().0;
+        len += if self.error.is_some() { 1 } else { 0 };
 
         (len, Some(len))
     }
@@ -298,10 +295,8 @@ impl Iterator for Frames {
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(f) = self.frames.next() {
             Some(Ok(f))
-        } else if let Some(e) = self.error.take() {
-            Some(Err(e))
         } else {
-            None
+            self.error.take().map(Err)
         }
     }
 
@@ -341,6 +336,13 @@ pub struct Error {
     pub current_command: Option<Box<str>>,
     /// Message describing the error.
     pub message: Box<str>,
+}
+
+impl Error {
+    /// Returns `true` if this error indicates an unknown command.
+    pub fn is_unknown_command(&self) -> bool {
+        self.code == 5
+    }
 }
 
 #[cfg(test)]
