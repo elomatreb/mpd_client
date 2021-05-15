@@ -1,43 +1,33 @@
 //! The client implementation.
 
-use futures::{
-    future::{select, Either},
-    sink::SinkExt,
-    stream::StreamExt,
-};
-use mpd_protocol::{MpdCodec, Response as RawResponse};
+mod connection;
+
+use mpd_protocol::Response as RawResponse;
 use tokio::{
     io::{AsyncRead, AsyncWrite},
     net::{TcpStream, ToSocketAddrs},
     sync::{
-        mpsc::{self, Receiver, Sender, UnboundedSender},
+        mpsc::{self, Sender},
         oneshot,
     },
-    time::timeout,
 };
-use tokio_util::codec::Framed;
-use tracing::{debug, error, span, trace, warn, Level, Span};
+use tracing::{debug, span, trace, warn, Level, Span};
 use tracing_futures::Instrument;
 
 #[cfg(unix)]
 use tokio::net::UnixStream;
 
-use std::fmt::{self, Debug};
+use std::fmt::Debug;
 #[cfg(unix)]
 use std::path::Path;
 use std::sync::Arc;
-use std::time::Duration;
 
 use crate::commands::{self as cmds, responses::Response, Command, CommandList};
-use crate::errors::{CommandError, StateChangeError};
+use crate::errors::CommandError;
 use crate::raw::{Frame, MpdProtocolError, RawCommand, RawCommandList};
-use crate::state_changes::{StateChanges, Subsystem};
+use crate::state_changes::StateChanges;
 
 type CommandResponder = oneshot::Sender<Result<RawResponse, CommandError>>;
-type StateChangesSender = UnboundedSender<Result<Subsystem, StateChangeError>>;
-
-/// Time to wait for another command to send before starting the idle loop.
-const NEXT_COMMAND_IDLE_TIMEOUT: Duration = Duration::from_millis(100);
 
 /// Result returned by a connection attempt.
 ///
@@ -358,237 +348,33 @@ impl Client {
         C: AsyncRead + AsyncWrite + Unpin + Send + 'static,
     {
         let (state_changes_sender, state_changes) = mpsc::unbounded_channel();
-        let (commands_sender, commands_receiver) = mpsc::channel(2);
+        let (commands_sender, commands_receiver) = mpsc::channel(1);
 
-        let mut connection = MpdCodec::connect(connection).await?;
-        let protocol_version = connection.codec().protocol_version().into();
+        let connection = connection::connect(connection, &span).await?;
 
-        trace!("sending initial idle command");
-        if let Err(e) = connection.send(idle()).await {
-            error!(error = ?e, "failed to send initial idle command");
-            return Err(e);
-        }
+        let protocol_version = Arc::from(connection.codec().protocol_version());
 
-        debug!("connected succesfully");
-        let run_loop = run_loop(connection, commands_receiver, state_changes_sender)
-            .instrument(span!(parent: &span, Level::TRACE, "run loop"));
+        tokio::spawn(
+            connection::run_loop(connection, commands_receiver, state_changes_sender)
+                .instrument(span!(parent: &span, Level::TRACE, "run loop")),
+        );
 
-        tokio::spawn(run_loop);
-
-        let client = Self {
+        let state_changes = StateChanges { rx: state_changes };
+        let client = Client {
             commands_sender,
             protocol_version,
             span,
         };
 
-        let state_changes = StateChanges { rx: state_changes };
         Ok((client, state_changes))
     }
-}
-
-struct State<C> {
-    loop_state: LoopState,
-    connection: Framed<C, MpdCodec>,
-    commands: Receiver<(RawCommandList, CommandResponder)>,
-    state_changes: StateChangesSender,
-}
-
-enum LoopState {
-    Idling,
-    WaitingForCommandReply(CommandResponder),
-}
-
-impl Debug for LoopState {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        // avoid Debug-printing the noisy internals of the contained channel type
-        match self {
-            LoopState::Idling => write!(f, "Idling"),
-            LoopState::WaitingForCommandReply(_) => write!(f, "WaitingForCommandReply"),
-        }
-    }
-}
-
-fn idle() -> RawCommand {
-    RawCommand::new("idle")
-}
-
-fn cancel_idle() -> RawCommand {
-    RawCommand::new("noidle")
-}
-
-async fn run_loop<C>(
-    connection: Framed<C, MpdCodec>,
-    commands: Receiver<(RawCommandList, CommandResponder)>,
-    state_changes: StateChangesSender,
-) where
-    C: AsyncRead + AsyncWrite + Unpin,
-{
-    trace!("entering run loop");
-
-    let mut state = State {
-        loop_state: LoopState::Idling,
-        connection,
-        commands,
-        state_changes,
-    };
-
-    loop {
-        trace!(state = ?state.loop_state, "loop iteration");
-
-        match run_loop_iteration(state).await {
-            Some(new_state) => state = new_state,
-            None => break,
-        }
-    }
-
-    trace!("exited run_loop");
-}
-
-async fn run_loop_iteration<C>(mut state: State<C>) -> Option<State<C>>
-where
-    C: AsyncRead + AsyncWrite + Unpin,
-{
-    match state.loop_state {
-        LoopState::Idling => {
-            // We are idling (the last command sent to the server was an IDLE).
-
-            // Wait for either a command to send or a message from the server, which would be a
-            // state change notification.
-            let next_command = state.commands.recv();
-            tokio::pin!(next_command);
-            let event = select(state.connection.next(), next_command).await;
-
-            match event {
-                Either::Left((response, _)) => {
-                    // A server message was received. Since we were idling, this is a state
-                    // change notification or `None` is the connection was closed.
-
-                    match response {
-                        Some(Ok(res)) => {
-                            if let Some(state_change) = response_to_subsystem(res).transpose() {
-                                trace!(?state_change);
-                                let _ = state.state_changes.send(state_change);
-                            }
-
-                            if let Err(e) = state.connection.send(idle()).await {
-                                error!(error = ?e, "failed to start idling after state change");
-                                let _ = state.state_changes.send(Err(e.into()));
-                                return None;
-                            }
-                        }
-                        Some(Err(e)) => {
-                            error!(error = ?e, "state change error");
-                            let _ = state.state_changes.send(Err(e.into()));
-                            return None;
-                        }
-                        None => return None, // The connection was closed
-                    }
-                }
-                Either::Right((command, _)) => {
-                    // A command was received or the commands channel was dropped. The latter
-                    // is an indicator for us to close the connection.
-
-                    let (command, responder) = command?;
-                    trace!(?command, "command received");
-
-                    // Cancel currently ongoing idle
-                    if let Err(e) = state.connection.send(cancel_idle()).await {
-                        error!(error = ?e, "failed to cancel idle prior to sending command");
-                        let _ = responder.send(Err(e.into()));
-                        return None;
-                    }
-
-                    // Response to CANCEL_IDLE above
-                    match state.connection.next().await {
-                        None => return None,
-                        Some(Ok(res)) => {
-                            if let Some(state_change) = response_to_subsystem(res).transpose() {
-                                trace!(?state_change);
-                                let _ = state.state_changes.send(state_change);
-                            }
-                        }
-                        Some(Err(e)) => {
-                            error!(error = ?e, "state change error prior to sending command");
-                            let _ = responder.send(Err(e.into()));
-                            return None;
-                        }
-                    }
-
-                    // Actually send the command. This sets the state for the next loop
-                    // iteration.
-                    match state.connection.send(command).await {
-                        Ok(_) => state.loop_state = LoopState::WaitingForCommandReply(responder),
-                        Err(e) => {
-                            error!(error = ?e, "failed to send command");
-                            let _ = responder.send(Err(e.into()));
-                            return None;
-                        }
-                    }
-
-                    trace!("command sent succesfully");
-                }
-            }
-        }
-        LoopState::WaitingForCommandReply(responder) => {
-            // We're waiting for the response to the command associated with `responder`.
-
-            let response = state.connection.next().await?;
-            trace!(?response, "response to command received");
-
-            let _ = responder.send(response.map_err(Into::into));
-
-            let next_command = timeout(NEXT_COMMAND_IDLE_TIMEOUT, state.commands.recv());
-
-            // See if we can immediately send the next command
-            match next_command.await {
-                Ok(Some((command, responder))) => {
-                    trace!(?command, "next command immediately available");
-                    match state.connection.send(command).await {
-                        Ok(_) => state.loop_state = LoopState::WaitingForCommandReply(responder),
-                        Err(e) => {
-                            error!(error = ?e, "failed to send command");
-                            let _ = responder.send(Err(e.into()));
-                            return None;
-                        }
-                    }
-                }
-                Ok(None) => return None,
-                Err(_) => {
-                    trace!("reached next command timeout, idling");
-
-                    // Start idling again
-                    state.loop_state = LoopState::Idling;
-                    if let Err(e) = state.connection.send(idle()).await {
-                        error!(error = ?e, "failed to start idling after receiving command response");
-                        let _ = state.state_changes.send(Err(e.into()));
-                        return None;
-                    }
-                }
-            }
-        }
-    }
-
-    Some(state)
-}
-
-fn response_to_subsystem(res: RawResponse) -> Result<Option<Subsystem>, StateChangeError> {
-    let mut frame = res.single_frame()?;
-
-    Ok(match frame.get("changed") {
-        Some(raw) => Some(Subsystem::from_raw_string(raw)),
-        None => {
-            if frame.fields_len() != 0 {
-                warn!("state change response was not empty but did not contain `changed` key");
-            }
-
-            None
-        }
-    })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::state_changes::Subsystem;
+    use futures::StreamExt;
     use tokio_test::{assert_ok, io::Builder as MockBuilder};
 
     static GREETING: &[u8] = b"OK MPD 0.21.11\n";
