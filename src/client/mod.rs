@@ -536,6 +536,31 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn album_art_fallback_error() {
+        let io = MockBuilder::new()
+            .read(GREETING)
+            .write(b"idle\n")
+            .write(b"noidle\n")
+            .read(b"OK\n")
+            .write(b"readpicture foo/bar.mp3 0\n")
+            .read(b"ACK [5@0] {} unknown command \"readpicture\"\n")
+            .write(b"albumart foo/bar.mp3 0\n")
+            .read(b"size: 6\nbinary: 3\nFOO\nOK\n")
+            .write(b"albumart foo/bar.mp3 3\n")
+            .read(b"size: 6\nbinary: 3\nBAR\nOK\n")
+            .build();
+
+        let (client, _) = Client::connect(io).await.expect("connect failed");
+
+        let x = client
+            .album_art("foo/bar.mp3")
+            .await
+            .expect("command failed");
+
+        assert_eq!(x, Some((Vec::from("FOOBAR"), None)));
+    }
+
+    #[tokio::test]
     async fn album_art_none() {
         let io = MockBuilder::new()
             .read(GREETING)
