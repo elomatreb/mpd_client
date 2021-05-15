@@ -16,21 +16,6 @@ pub use crate::errors::StateChangeError;
 /// attempting to send a command will return an error.
 ///
 /// If you don't care about these, you can just drop this receiver.
-///
-/// ```no_run
-/// use mpd_client::Client;
-/// use futures::stream::StreamExt; // For .next()
-///
-/// async fn print_songs() -> Result<(), Box<dyn std::error::Error>> {
-///     let (_client, mut state_changes) = Client::connect_to("localhost:6600").await?;
-///
-///     while let Some(Ok(state_change)) = state_changes.next().await {
-///         println!("state change: {:?}", state_change);
-///     }
-///
-///     Ok(())
-/// }
-/// ```
 #[derive(Debug)]
 pub struct StateChanges {
     pub(crate) rx: UnboundedReceiver<Result<Subsystem, StateChangeError>>,

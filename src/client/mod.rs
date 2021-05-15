@@ -5,7 +5,6 @@ mod connection;
 use mpd_protocol::Response as RawResponse;
 use tokio::{
     io::{AsyncRead, AsyncWrite},
-    net::{TcpStream, ToSocketAddrs},
     sync::{
         mpsc::{self, Sender},
         oneshot,
@@ -14,13 +13,11 @@ use tokio::{
 use tracing::{debug, span, trace, warn, Level, Span};
 use tracing_futures::Instrument;
 
-#[cfg(unix)]
-use tokio::net::UnixStream;
-
 use std::fmt::Debug;
-#[cfg(unix)]
-use std::path::Path;
-use std::sync::Arc;
+use std::sync::{
+    atomic::{AtomicUsize, Ordering},
+    Arc,
+};
 
 use crate::commands::{self as cmds, responses::Response, Command, CommandList};
 use crate::errors::CommandError;
@@ -28,6 +25,9 @@ use crate::raw::{Frame, MpdProtocolError, RawCommand, RawCommandList};
 use crate::state_changes::StateChanges;
 
 type CommandResponder = oneshot::Sender<Result<RawResponse, CommandError>>;
+
+/// Counter for connection IDs for logging.
+static CONNECTION_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
 /// Result returned by a connection attempt.
 ///
@@ -43,19 +43,6 @@ pub type ConnectResult = Result<(Client, StateChanges), MpdProtocolError>;
 /// # Connection management
 ///
 /// Dropping the last clone of a particular `Client` will close the connection automatically.
-///
-/// # Example
-///
-/// ```no_run
-/// use mpd_client::{commands::Play, Client};
-///
-/// async fn connect_to_mpd() -> Result<(), Box<dyn std::error::Error>> {
-///     let (client, _state_changes) = Client::connect_to("localhost:6600").await?;
-///
-///     client.command(Play::current()).await?;
-///     Ok(())
-/// }
-/// ```
 #[derive(Clone, Debug)]
 pub struct Client {
     commands_sender: Sender<(RawCommandList, CommandResponder)>,
@@ -64,54 +51,10 @@ pub struct Client {
 }
 
 impl Client {
-    /// Connect to an MPD server at the given TCP address.
-    ///
-    /// This requires the `dns` [Tokio feature][tokio-features] to resolve domain names.
-    ///
-    /// # Panics
-    ///
-    /// This panics for the same reasons as [`Client::connect`].
-    ///
-    /// # Errors
-    ///
-    /// This returns errors in the same conditions as [`Client::connect`], and if connecting to the given
-    /// TCP address fails for any reason.
-    ///
-    /// [tokio-features]: https://docs.rs/tokio/0.2/tokio/#feature-flags
-    pub async fn connect_to<A: ToSocketAddrs + Debug>(address: A) -> ConnectResult {
-        let span = span!(Level::DEBUG, "client connection", tcp_addr = ?address);
-        let connection = TcpStream::connect(address).await?;
-
-        Self::do_connect(connection, span).await
-    }
-
-    /// Connect to an MPD server using the Unix socket at the given path.
-    ///
-    /// This is only available on Unix.
-    ///
-    /// # Panics
-    ///
-    /// This panics for the same reasons as [`Client::connect`].
-    ///
-    /// # Errors
-    ///
-    /// This returns errors in the same conditions as [`Client::connect`], and if connecting to the Unix
-    /// socket at the given address fails for any reason.
-    #[cfg(unix)]
-    pub async fn connect_unix<P: AsRef<Path>>(path: P) -> ConnectResult {
-        let span = span!(Level::DEBUG, "client connection", unix_addr = ?path.as_ref());
-        let connection = UnixStream::connect(path).await?;
-
-        Self::do_connect(connection, span).await
-    }
-
     /// Connect to the MPD server using the given connection.
     ///
-    /// Since this method is generic over the connection type it can be used to connect to either a
-    /// TCP or Unix socket dynamically or e.g. use a proxy.
-    ///
-    /// See also the [`Client::connect_to`] and [`Client::connect_unix`] shorthands for the common
-    /// connection case.
+    /// Commonly used with [TCP connections](tokio::net::TcpStream) or [Unix
+    /// sockets](tokio::net::UnixStream).
     ///
     /// # Panics
     ///
@@ -122,9 +65,31 @@ impl Client {
     /// This will return an error if sending the initial commands over the given transport fails.
     pub async fn connect<C>(connection: C) -> ConnectResult
     where
-        C: AsyncRead + AsyncWrite + Send + Unpin + 'static,
+        C: AsyncRead + AsyncWrite + Unpin + Send + 'static,
     {
-        Self::do_connect(connection, span!(Level::DEBUG, "client connection")).await
+        let id = CONNECTION_COUNTER.fetch_add(1, Ordering::Relaxed);
+        let span = span!(Level::DEBUG, "client connection", id);
+
+        let (state_changes_sender, state_changes) = mpsc::unbounded_channel();
+        let (commands_sender, commands_receiver) = mpsc::channel(1);
+
+        let connection = connection::connect(connection, &span).await?;
+
+        let protocol_version = Arc::from(connection.codec().protocol_version());
+
+        tokio::spawn(
+            connection::run_loop(connection, commands_receiver, state_changes_sender)
+                .instrument(span!(parent: &span, Level::TRACE, "run loop")),
+        );
+
+        let state_changes = StateChanges { rx: state_changes };
+        let client = Client {
+            commands_sender,
+            protocol_version,
+            span,
+        };
+
+        Ok((client, state_changes))
     }
 
     /// Send a [command].
@@ -338,35 +303,6 @@ impl Client {
         self.commands_sender.send((commands, tx)).await?;
 
         rx.await?
-    }
-
-    async fn do_connect<C>(
-        connection: C,
-        span: Span,
-    ) -> Result<(Self, StateChanges), MpdProtocolError>
-    where
-        C: AsyncRead + AsyncWrite + Unpin + Send + 'static,
-    {
-        let (state_changes_sender, state_changes) = mpsc::unbounded_channel();
-        let (commands_sender, commands_receiver) = mpsc::channel(1);
-
-        let connection = connection::connect(connection, &span).await?;
-
-        let protocol_version = Arc::from(connection.codec().protocol_version());
-
-        tokio::spawn(
-            connection::run_loop(connection, commands_receiver, state_changes_sender)
-                .instrument(span!(parent: &span, Level::TRACE, "run loop")),
-        );
-
-        let state_changes = StateChanges { rx: state_changes };
-        let client = Client {
-            commands_sender,
-            protocol_version,
-            span,
-        };
-
-        Ok((client, state_changes))
     }
 }
 

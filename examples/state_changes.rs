@@ -1,5 +1,6 @@
 use futures::stream::StreamExt; // for .next()
 use std::error::Error;
+use tokio::net::TcpStream;
 use tracing_subscriber::{EnvFilter, FmtSubscriber};
 
 use mpd_client::{commands, Client, Subsystem};
@@ -10,38 +11,36 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .with_env_filter(EnvFilter::from_default_env())
         .init();
 
+    // Connect via TCP
+    let connection = TcpStream::connect("localhost:6600").await?;
+    // Or through a Unix socket
+    // let connection = UnixSocket::connect("/run/user/1000/mpd").await?;
+
     // The client is used to issue commands, and state_changes is an async stream of state change
     // notifications
-    let (client, mut state_changes) = Client::connect_to("localhost:6600").await?;
+    let (client, mut state_changes) = Client::connect(connection).await?;
 
-    // You can also connect to Unix sockets
-    // let (client, mut state_changes) = Client::connect_unix("/run/user/1000/mpd").await?;
-
-    // Get the song playing right as we connect
-    print_current_song(&client).await?;
-
-    // Wait for state change notifications being emitted by MPD
-    while let Some(subsys) = state_changes.next().await {
-        let subsys = subsys?;
-
-        if subsys == Subsystem::Player {
-            print_current_song(&client).await?;
+    'outer: loop {
+        match client.command(commands::CurrentSong).await? {
+            Some(song_in_queue) => {
+                println!(
+                    "\"{}\" by \"{}\"",
+                    song_in_queue.song.title().unwrap_or(""),
+                    song_in_queue.song.artists().join(", "),
+                );
+            }
+            None => println!("(none)"),
         }
-    }
 
-    Ok(())
-}
-
-async fn print_current_song(client: &Client) -> Result<(), Box<dyn Error>> {
-    match client.command(commands::CurrentSong).await? {
-        Some(song_in_queue) => {
-            println!(
-                "\"{}\" by \"{}\"",
-                song_in_queue.song.title().unwrap_or(""),
-                song_in_queue.song.artists().join(", "),
-            );
+        loop {
+            // wait for a state change notification in the player subsystem, which indicates a song
+            // change among other things
+            match state_changes.next().await.transpose()? {
+                None => break 'outer,             // connection was closed by the server
+                Some(Subsystem::Player) => break, // something relevant changed
+                Some(_) => continue,              // something changed but we don't care
+            }
         }
-        None => println!("(none)"),
     }
 
     Ok(())
