@@ -1,3 +1,12 @@
+# 0.6.0 (2021-05-17)
+
+ - Update `mpd_protocol`
+ - Add `Client::album_art` method for loading album art
+ - Add new MPD subsystems
+ - API changes:
+   - Remove `Client::connect_to` and `Client::connect_unix` methods
+   - Rename `Command::to_command` to `Command::into_command`
+
 # 0.5.1 (2021-04-28)
 
  - Fix error when parsing list of songs response containing modified timestamps for directories ([#7](https://github.com/elomatreb/mpd_client/issues/7))
