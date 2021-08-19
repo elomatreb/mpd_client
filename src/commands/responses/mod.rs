@@ -161,6 +161,21 @@ impl Response for Status {
             },
         };
 
+        let time = match raw.get("duration") {
+            None => {
+                match raw.get("time") {
+                    Some(time) => {
+                        let time = time.split(":").collect::<Vec<&str>>()[1];
+                        Some(parse!(duration, time, "duration"))
+                    },
+                    None => None
+                }
+            },
+            Some(val) => {
+                Some(parse!(duration, val, "duration"))
+            }
+        };
+
         let mut partition = raw.get("partition");
 
         if partition.as_deref() == Some("default") {
@@ -179,7 +194,7 @@ impl Response for Status {
             current_song: song_identifier!(raw, "song", "songid"),
             next_song: song_identifier!(raw, "nextsong", "nextsongid"),
             elapsed: field!(raw, "elapsed" duration optional),
-            duration: field!(raw, "duration" duration optional),
+            duration: time,
             bitrate: field!(raw, "bitrate" integer optional),
             crossfade: field!(raw, "xfade" duration default Duration::from_secs(0)),
             update_job: field!(raw, "update_job" integer optional),
