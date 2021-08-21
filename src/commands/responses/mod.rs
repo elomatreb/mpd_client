@@ -161,19 +161,21 @@ impl Response for Status {
             },
         };
 
-        let time = match raw.get("duration") {
-            None => {
-                match raw.get("time") {
-                    Some(time) => {
-                        let time = time.split(":").collect::<Vec<&str>>()[1];
-                        Some(parse!(duration, time, "duration"))
-                    },
-                    None => None
-                }
-            },
-            Some(val) => {
-                Some(parse!(duration, val, "duration"))
+        let duration = if let Some(val) = raw.get("duration") {
+            Some(parse!(duration, val, "duration"))
+        } else if let Some(time) = raw.get("time") {
+            // Backwards compatibility with protocol versions <0.20
+            if let Some((_, duration)) = time.split_once(':') {
+                Some(parse!(duration, duration, "time"))
+            } else {
+                // No separator
+                return Err(TypedResponseError {
+                    field: "time",
+                    kind: ErrorKind::InvalidValue(time),
+                });
             }
+        } else {
+            None
         };
 
         let mut partition = raw.get("partition");
@@ -194,7 +196,7 @@ impl Response for Status {
             current_song: song_identifier!(raw, "song", "songid"),
             next_song: song_identifier!(raw, "nextsong", "nextsongid"),
             elapsed: field!(raw, "elapsed" duration optional),
-            duration: time,
+            duration,
             bitrate: field!(raw, "bitrate" integer optional),
             crossfade: field!(raw, "xfade" duration default Duration::from_secs(0)),
             update_job: field!(raw, "update_job" integer optional),
