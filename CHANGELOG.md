@@ -1,3 +1,11 @@
+# 0.6.1 (2021-08-21)
+
+ - Add a limited degree of backwards compatibility for protocol versions older than 0.20 ([#9](https://github.com/elomatreb/mpd_client/pull/9), thanks to D3fus).
+   Specifically, support parsing song durations with fallback to deprecated fields.
+   **NOTE**: Other features still do **not** support these old protocols, notably the filter expressions used by certain commands.
+ - Add a utility method for retrieving MPD subsystem protocol names.
+ - Fix missing `Command` impl for `SetBinaryLimit` command.
+
 # 0.6.0 (2021-05-17)
 
  - Update `mpd_protocol`
