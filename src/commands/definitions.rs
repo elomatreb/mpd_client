@@ -683,6 +683,14 @@ impl Command for ListAllIn {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SetBinaryLimit(pub usize);
 
+impl Command for SetBinaryLimit {
+    type Response = res::Empty;
+
+    fn into_command(self) -> RawCommand {
+        RawCommand::new("binarylimit").argument(self.0.to_string())
+    }
+}
+
 /// `albumart` command.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AlbumArt {
