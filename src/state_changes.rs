@@ -79,4 +79,25 @@ impl Subsystem {
             _ => Subsystem::Other(raw.into()),
         }
     }
+
+    /// Returns the raw protocol name used for this subsystem.
+    pub fn as_str(&self) -> &str {
+        match self {
+            Subsystem::Database => "database",
+            Subsystem::Message => "message",
+            Subsystem::Mixer => "mixer",
+            Subsystem::Options => "options",
+            Subsystem::Output => "output",
+            Subsystem::Partition => "partition",
+            Subsystem::Player => "player",
+            Subsystem::Queue => "playlist",
+            Subsystem::Sticker => "sticker",
+            Subsystem::StoredPlaylist => "stored_playlist",
+            Subsystem::Subscription => "subscription",
+            Subsystem::Update => "update",
+            Subsystem::Neighbor => "neighbor",
+            Subsystem::Mount => "mount",
+            Subsystem::Other(r) => r,
+        }
+    }
 }
