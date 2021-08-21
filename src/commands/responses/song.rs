@@ -257,7 +257,18 @@ where
                         }))
                     }
                 },
-                // Just a worse "duration" field.
+                // Just a worse "duration" field, but needed for backwards compatibility with
+                // protocol versions <0.20
+                "Time" if song.duration.is_none() => match value.parse() {
+                    Ok(v) => song.duration = Some(Duration::from_secs_f64(v)),
+                    Err(e) => {
+                        return Some(Err(TypedResponseError {
+                            field: "Time",
+                            kind: ErrorKind::MalformedFloat(e),
+                        }))
+                    }
+                },
+                // If we already have a duration value, ignore the Time field
                 "Time" => (),
                 "Range" => {
                     range = match parse_range_field(value) {
@@ -434,6 +445,44 @@ mod tests {
             vec![Song {
                 url: String::from("foo/bar.baz"),
                 duration: None,
+                tags: HashMap::new(),
+                format: None,
+                last_modified: None,
+            }]
+        );
+    }
+
+    #[test]
+    fn song_parser_deprecated_time_field() {
+        let input = key_value_pairs(vec![("file", "foo/bar.baz"), ("Time", "123")]);
+
+        let songs = Song::parse_frame(input, None).unwrap();
+
+        assert_eq!(
+            songs,
+            vec![Song {
+                url: String::from("foo/bar.baz"),
+                duration: Some(Duration::from_secs(123)),
+                tags: HashMap::new(),
+                format: None,
+                last_modified: None,
+            }]
+        );
+
+        // Duration field takes priority:
+        let input = key_value_pairs(vec![
+            ("file", "foo/bar.baz"),
+            ("duration", "456.789"),
+            ("Time", "123"),
+        ]);
+
+        let songs = Song::parse_frame(input, None).unwrap();
+
+        assert_eq!(
+            songs,
+            vec![Song {
+                url: String::from("foo/bar.baz"),
+                duration: Some(Duration::from_secs_f64(456.789)),
                 tags: HashMap::new(),
                 format: None,
                 last_modified: None,
