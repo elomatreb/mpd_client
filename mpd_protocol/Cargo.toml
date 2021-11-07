@@ -16,24 +16,24 @@ categories = ["network-programming"]
 async = ["tokio", "tokio-util"]
 
 [dependencies]
-bytes = "1.0.0"
-tokio-util = { version = "0.6.0", features = ["codec"], optional = true }
-tokio = { version = "1.0.1", features = ["io-util"], optional = true  }
-tracing = "0.1.21"
-memchr = "2.3.4"
+bytes = "1.1.0"
+tokio-util = { version = "0.6.9", features = ["codec"], optional = true }
+tokio = { version = "1.13.0", features = ["io-util"], optional = true }
+tracing = "0.1.29"
+memchr = "2.4.1"
 hashbrown = "0.11.2"
 
 [dependencies.nom]
-version = "6.0.0"
+version = "7.1.0"
 default-features = false
 features = ["std"]
 
 [dev-dependencies]
-tokio = { version = "1.0.1", features = ["io-util", "rt", "macros"] }
-tokio-test = "0.4.0"
-futures = "0.3.6"
+tokio = { version = "1.13.0", features = ["io-util", "rt", "macros"] }
+tokio-test = "0.4.2"
+futures = "0.3.17"
 assert_matches = "1.5.0"
-criterion = "0.3.4"
+criterion = "0.3.5"
 
 [package.metadata.docs.rs]
 all-features = true
