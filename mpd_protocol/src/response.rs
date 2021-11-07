@@ -112,7 +112,7 @@ impl ResponseBuilder {
         src: &mut BytesMut,
     ) -> Result<Option<Response>, MpdProtocolError> {
         while !src.is_empty() {
-            let (remaining, component) = match ParsedComponent::parse(&src, &mut self.fields) {
+            let (remaining, component) = match ParsedComponent::parse(src, &mut self.fields) {
                 Err(e) if e.is_incomplete() => break,
                 Err(_) => return Err(MpdProtocolError::InvalidMessage),
                 Ok(p) => p,
