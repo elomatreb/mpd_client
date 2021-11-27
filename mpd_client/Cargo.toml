@@ -1,0 +1,26 @@
+[package]
+name = "mpd_client"
+version = "0.6.1"
+edition = "2018"
+description = "Asynchronous user-friendly MPD client"
+repository = "https://github.com/elomatreb/mpd_client"
+keywords = ["mpd", "async", "client"]
+categories = ["network-programming"]
+license = "MIT OR Apache-2.0"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+mpd_protocol = { version = "0.12.1", features = ["async"], path = "../mpd_protocol" }
+tokio = { version = "1.0.1", features = ["rt", "net", "time", "sync", "macros"] }
+tokio-util = { version = "0.6.0", features = ["codec"] }
+futures = { version = "0.3.4", default-features = false, features = ["std"] }
+tracing = "0.1.13"
+tracing-futures = "0.2.3"
+chrono = { version = "0.4.11", default-features = false, features = ["std"] }
+bytes = "1.0.1"
+
+[dev-dependencies]
+tokio = { version = "1.0.1", features = ["rt", "net", "sync", "macros"] }
+tracing-subscriber = "0.2.4"
+tokio-test = "0.4.0"
