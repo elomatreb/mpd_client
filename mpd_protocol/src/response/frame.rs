@@ -102,20 +102,23 @@ impl Frame {
 
 impl fmt::Debug for Frame {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if f.alternate() {
-            f.debug_struct("Frame")
-                .field("fields", &self.fields)
-                .field("binary", &self.binary)
-                .finish()
-        } else {
-            f.debug_struct("Frame")
-                .field("fields", &self.fields)
-                .field(
-                    "binary",
-                    &self.binary.as_ref().map(|b| format!("<{} bytes>", b.len())),
-                )
-                .finish()
+        write!(f, "Frame(")?;
+
+        let alternate = f.alternate();
+        let mut map = f.debug_map();
+        let mut map = map.entries(self.fields());
+
+        if let Some(b) = &self.binary {
+            map = if alternate {
+                map.entry(&"debug", &b)
+            } else {
+                map.entry(&"debug", &format!("<{} bytes>", b.len()))
+            };
         }
+
+        map.finish()?;
+
+        write!(f, ")")
     }
 }
 
@@ -125,12 +128,6 @@ pub(super) struct FieldsContainer(Vec<Option<(Arc<str>, String)>>);
 impl FieldsContainer {
     pub(super) fn push_field(&mut self, key: Arc<str>, value: String) {
         self.0.push(Some((key, value)));
-    }
-}
-
-impl fmt::Debug for FieldsContainer {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_map().entries(Fields(self.0.iter())).finish()
     }
 }
 

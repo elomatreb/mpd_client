@@ -6,6 +6,7 @@ use bytes::{Buf, BytesMut};
 use hashbrown::HashSet;
 use tracing::trace;
 
+use std::fmt;
 use std::iter::FusedIterator;
 use std::mem;
 use std::slice;
@@ -21,7 +22,7 @@ use crate::MpdProtocolError;
 /// to individual commands, and optionally a single [error][Error].
 ///
 /// Since an error terminates a command list, there can only be one error in a response.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Response {
     /// The sucessful responses.
     frames: Vec<Frame>,
@@ -79,6 +80,18 @@ impl Response {
     }
 }
 
+impl fmt::Debug for Response {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Response(")?;
+
+        f.debug_list()
+            .entries(&self.frames)
+            .entries(&self.error)
+            .finish()?;
+
+        write!(f, ")")
+    }
+}
 
 /// A cache for field names used in responses.
 #[derive(Clone, Debug)]
