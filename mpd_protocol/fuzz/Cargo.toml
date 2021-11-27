@@ -24,3 +24,9 @@ name = "sync_receive"
 path = "fuzz_targets/sync_receive.rs"
 test = false
 doc = false
+
+[[bin]]
+name = "sync_connect"
+path = "fuzz_targets/sync_connect.rs"
+test = false
+doc = false

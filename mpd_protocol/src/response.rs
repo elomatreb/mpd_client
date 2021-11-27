@@ -79,11 +79,32 @@ impl Response {
     }
 }
 
-pub(crate) type InternedKeys = HashSet<Arc<str>>;
 
+/// A cache for field names used in responses.
 #[derive(Clone, Debug)]
-pub(crate) struct ResponseBuilder {
-    fields: InternedKeys,
+pub(crate) struct ResponseFieldCache(HashSet<Arc<str>>);
+
+impl ResponseFieldCache {
+    /// Returns a new, empty cache.
+    pub(crate) fn new() -> ResponseFieldCache {
+        ResponseFieldCache(HashSet::new())
+    }
+
+    /// Insert a field name into the cache or retrieve a reference to an already existing entry.
+    pub(crate) fn insert(&mut self, key: &str) -> Arc<str> {
+        if let Some(k) = self.0.get(key) {
+            Arc::clone(k)
+        } else {
+            let k = Arc::from(key);
+            self.0.insert(Arc::clone(&k));
+            k
+        }
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct ResponseBuilder<'a> {
+    field_cache: &'a mut ResponseFieldCache,
     state: ResponseState,
 }
 
@@ -99,10 +120,10 @@ enum ResponseState {
     },
 }
 
-impl ResponseBuilder {
-    pub(crate) fn new() -> Self {
+impl<'a> ResponseBuilder<'a> {
+    pub(crate) fn new(field_cache: &'a mut ResponseFieldCache) -> Self {
         Self {
-            fields: HashSet::default(),
+            field_cache,
             state: ResponseState::Initial,
         }
     }
@@ -112,7 +133,7 @@ impl ResponseBuilder {
         src: &mut BytesMut,
     ) -> Result<Option<Response>, MpdProtocolError> {
         while !src.is_empty() {
-            let (remaining, component) = match ParsedComponent::parse(src, &mut self.fields) {
+            let (remaining, component) = match ParsedComponent::parse(src, self.field_cache) {
                 Err(e) if e.is_incomplete() => break,
                 Err(_) => return Err(MpdProtocolError::InvalidMessage),
                 Ok(p) => p,
@@ -133,8 +154,6 @@ impl ResponseBuilder {
                 ParsedComponent::EndOfResponse => return Ok(Some(self.finish())),
             }
         }
-
-        trace!("reached end of message segment, response incomplete");
 
         Ok(None)
     }
@@ -224,22 +243,6 @@ impl ResponseBuilder {
                 error: Some(error),
             },
         }
-    }
-}
-
-pub(crate) fn intern_key(interned_keys: &mut InternedKeys, key: &str) -> Arc<str> {
-    if let Some(k) = interned_keys.get(key) {
-        Arc::clone(k)
-    } else {
-        let k = Arc::from(key);
-        interned_keys.insert(Arc::clone(&k));
-        k
-    }
-}
-
-impl Default for ResponseBuilder {
-    fn default() -> Self {
-        ResponseBuilder::new()
     }
 }
 
@@ -427,7 +430,8 @@ mod test {
     fn simple_response() {
         let mut io = BytesMut::from("foo: bar\nOK");
 
-        let mut builder = ResponseBuilder::new();
+        let mut field_cache = ResponseFieldCache::new();
+        let mut builder = ResponseBuilder::new(&mut field_cache);
         assert_eq!(builder.state, ResponseState::Initial);
 
         // Consume fields
@@ -467,7 +471,8 @@ mod test {
     #[test]
     fn response_with_binary() {
         let mut io = BytesMut::from("foo: bar\nbinary: 6\nOK\n");
-        let mut builder = ResponseBuilder::new();
+        let mut field_cache = ResponseFieldCache::new();
+        let mut builder = ResponseBuilder::new(&mut field_cache);
 
         assert_matches!(builder.parse(&mut io), Ok(None));
         assert_eq!(
@@ -503,7 +508,8 @@ mod test {
     #[test]
     fn empty_response() {
         let mut io = BytesMut::from("OK");
-        let mut builder = ResponseBuilder::new();
+        let mut field_cache = ResponseFieldCache::new();
+        let mut builder = ResponseBuilder::new(&mut field_cache);
 
         assert_matches!(builder.parse(&mut io), Ok(None));
         assert_eq!(builder.state, ResponseState::Initial);
@@ -522,7 +528,8 @@ mod test {
     #[test]
     fn error() {
         let mut io = BytesMut::from("ACK [5@0] {} unknown command \"foo\"");
-        let mut builder = ResponseBuilder::new();
+        let mut field_cache = ResponseFieldCache::new();
+        let mut builder = ResponseBuilder::new(&mut field_cache);
 
         assert_matches!(builder.parse(&mut io), Ok(None));
         assert_eq!(builder.state, ResponseState::Initial);
@@ -547,7 +554,8 @@ mod test {
     #[test]
     fn multiple_messages() {
         let mut io = BytesMut::from("foo: bar\nOK\nhello: world\nOK\n");
-        let mut builder = ResponseBuilder::new();
+        let mut field_cache = ResponseFieldCache::new();
+        let mut builder = ResponseBuilder::new(&mut field_cache);
 
         assert_eq!(
             builder.parse(&mut io).unwrap(),
@@ -571,7 +579,8 @@ mod test {
     #[test]
     fn command_list() {
         let mut io = BytesMut::from("foo: bar\n");
-        let mut builder = ResponseBuilder::new();
+        let mut field_cache = ResponseFieldCache::new();
+        let mut builder = ResponseBuilder::new(&mut field_cache);
 
         assert_matches!(builder.parse(&mut io), Ok(None));
         assert_eq!(
@@ -618,7 +627,8 @@ mod test {
     #[test]
     fn command_list_error() {
         let mut io = BytesMut::from("list_OK\n");
-        let mut builder = ResponseBuilder::new();
+        let mut field_cache = ResponseFieldCache::new();
+        let mut builder = ResponseBuilder::new(&mut field_cache);
 
         assert_matches!(builder.parse(&mut io), Ok(None));
         assert_eq!(
@@ -650,7 +660,8 @@ mod test {
     fn key_interning() {
         let mut io = BytesMut::from("foo: bar\nfoo: baz\nOK\n");
 
-        let mut resp = ResponseBuilder::new()
+        let mut field_cache = ResponseFieldCache::new();
+        let mut resp = ResponseBuilder::new(&mut field_cache)
             .parse(&mut io)
             .expect("incomplete")
             .expect("invalid");

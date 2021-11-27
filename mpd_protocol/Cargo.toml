@@ -28,10 +28,12 @@ default-features = false
 features = ["std"]
 
 [dev-dependencies]
-tokio = { version = "1.13.0", features = ["io-util", "rt", "macros"] }
+tokio = { version = "1.13.0", features = ["io-util", "rt", "rt-multi-thread", "macros", "net"] }
 futures = "0.3.17"
 assert_matches = "1.5.0"
 criterion = "0.3.5"
+tracing-subscriber = "0.3.1"
+tokio-test = "0.4.2"
 
 [package.metadata.docs.rs]
 all-features = true

@@ -10,17 +10,25 @@
 
 //! Implementation of the client protocol for [MPD]. Supports binary responses and command lists.
 //!
+//! # Crate Features
+//!
+//! | Feature | Description                     |
+//! |---------|---------------------------------|
+//! | `async` | Async support, based on [Tokio] |
 //!
 //! [MPD]: https://musicpd.org
 //! [Tokio]: https://tokio.rs
 
 pub mod command;
 pub mod response;
-pub mod sync;
+
+mod connection;
+mod parser;
+
+pub use connection::Connection;
 
 #[cfg(feature = "async")]
-mod r#async;
-mod parser;
+pub use connection::AsyncConnection;
 
 use std::error::Error;
 use std::fmt;

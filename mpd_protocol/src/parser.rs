@@ -15,7 +15,7 @@ use nom::{
 use std::str::{self, from_utf8, FromStr};
 use std::sync::Arc;
 
-use crate::response::{intern_key, Error, InternedKeys};
+use crate::response::{Error, ResponseFieldCache};
 
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum ParsedComponent {
@@ -37,7 +37,7 @@ struct RawError<'raw> {
 impl ParsedComponent {
     pub(crate) fn parse<'i>(
         i: &'i [u8],
-        keys: &'_ mut InternedKeys,
+        field_cache: &'_ mut ResponseFieldCache,
     ) -> IResult<&'i [u8], ParsedComponent> {
         alt((
             map(tag("OK\n"), |_| ParsedComponent::EndOfResponse),
@@ -47,7 +47,7 @@ impl ParsedComponent {
                 data_length: bin.len(),
             }),
             map(key_value_field, |(k, v)| ParsedComponent::Field {
-                key: intern_key(keys, k),
+                key: field_cache.insert(k),
                 value: String::from(v),
             }),
         ))(i)
@@ -150,7 +150,6 @@ fn binary_field(i: &[u8]) -> IResult<&[u8], &[u8]> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use hashbrown::HashSet;
     use nom::{Err as NomErr, Needed};
 
     const EMPTY: &[u8] = &[];
@@ -165,7 +164,7 @@ mod test {
 
     #[test]
     fn end_markers() {
-        let keys = &mut InternedKeys::default();
+        let keys = &mut ResponseFieldCache::new();
 
         assert_eq!(
             ParsedComponent::parse(b"OK\n", keys),
@@ -190,7 +189,7 @@ mod test {
 
     #[test]
     fn parse_error() {
-        let keys = &mut HashSet::default();
+        let keys = &mut ResponseFieldCache::new();
         let no_command = b"ACK [5@0] {} unknown command \"foo\"\n";
         let with_command = b"ACK [2@0] {random} Boolean (0/1) expected: foo\n";
 
@@ -223,7 +222,7 @@ mod test {
 
     #[test]
     fn field() {
-        let keys = &mut HashSet::default();
+        let keys = &mut ResponseFieldCache::new();
 
         assert_eq!(
             ParsedComponent::parse(b"foo: OK\n", keys),
@@ -254,7 +253,7 @@ mod test {
 
     #[test]
     fn binary_field() {
-        let keys = &mut HashSet::default();
+        let keys = &mut ResponseFieldCache::new();
 
         assert_eq!(
             ParsedComponent::parse(b"binary: 6\nFOOBAR\n", keys),
