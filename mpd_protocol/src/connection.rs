@@ -27,8 +27,10 @@ pub struct Connection<IO> {
 }
 
 impl<IO> Connection<IO> {
-    #[cfg(fuzzing)]
-    pub fn new_fuzzing(io: IO) -> Connection<IO> {
+    #[cfg(any(fuzzing, criterion))]
+    #[allow(dead_code)]
+    #[doc(hidden)]
+    pub fn new_internal(io: IO) -> Connection<IO> {
         let mut recv_buf = BytesMut::new();
         recv_buf.resize(DEFAULT_BUFFER_CAPACITY, 0);
 
