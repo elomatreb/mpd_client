@@ -1,6 +1,6 @@
 //! Tools for handling state-change events emitted by MPD.
 
-use futures::stream::Stream;
+use futures_core::stream::Stream;
 use tokio::sync::mpsc::UnboundedReceiver;
 
 use std::pin::Pin;

@@ -10,8 +10,7 @@ use tokio::{
         oneshot,
     },
 };
-use tracing::{debug, error, span, trace, warn, Level, Span};
-use tracing_futures::Instrument;
+use tracing::{debug, error, span, trace, warn, Instrument, Level, Span};
 
 use std::fmt::Debug;
 use std::sync::Arc;
@@ -316,7 +315,7 @@ pub(super) async fn do_connect<IO: AsyncRead + AsyncWrite + Unpin + Send + 'stat
 mod tests {
     use super::*;
     use crate::state_changes::Subsystem;
-    use futures::StreamExt;
+    use futures_util::StreamExt;
     use tokio_test::{assert_ok, io::Builder as MockBuilder};
 
     static GREETING: &[u8] = b"OK MPD 0.21.11\n";

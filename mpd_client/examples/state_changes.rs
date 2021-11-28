@@ -1,4 +1,4 @@
-use futures::stream::StreamExt; // for .next()
+use futures_util::stream::StreamExt; // for .next()
 use std::error::Error;
 use tokio::net::TcpStream;
 use tracing_subscriber::{EnvFilter, FmtSubscriber};

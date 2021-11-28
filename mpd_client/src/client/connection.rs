@@ -4,8 +4,7 @@ use tokio::{
     sync::mpsc::{Receiver, UnboundedSender},
     time::timeout,
 };
-use tracing::{error, span, trace, warn, Level};
-use tracing_futures::Instrument;
+use tracing::{error, span, trace, warn, Instrument, Level};
 
 use std::fmt;
 use std::time::Duration;
