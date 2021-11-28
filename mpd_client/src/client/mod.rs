@@ -12,7 +12,9 @@ use tokio::{
 };
 use tracing::{debug, error, span, trace, warn, Instrument, Level, Span};
 
-use std::fmt::Debug;
+use std::error::Error;
+use std::fmt;
+use std::io;
 use std::sync::Arc;
 
 use crate::commands::{self as cmds, responses::Response, Command, CommandList};
@@ -22,11 +24,11 @@ use crate::state_changes::StateChanges;
 
 type CommandResponder = oneshot::Sender<Result<RawResponse, CommandError>>;
 
-/// Result returned by a connection attempt.
+/// Components of a connection.
 ///
-/// If successful, this contains a [`Client`] which you can use to issue commands, and a
-/// [`StateChanges`] value, which is a stream that receives notifications from the server.
-pub type ConnectResult = Result<(Client, StateChanges), MpdProtocolError>;
+/// This contains a [`Client`] which you can use to issue commands, and a [`StateChanges`] value,
+/// which is a stream that receives notifications from the server.
+pub type Connection = (Client, StateChanges);
 
 /// A client connected to an MPD instance.
 ///
@@ -56,11 +58,37 @@ impl Client {
     /// # Errors
     ///
     /// This will return an error if sending the initial commands over the given transport fails.
-    pub async fn connect<C>(connection: C) -> ConnectResult
+    pub async fn connect<C>(connection: C) -> Result<Connection, MpdProtocolError>
     where
         C: AsyncRead + AsyncWrite + Unpin + Send + 'static,
     {
-        do_connect(connection).await
+        do_connect(connection, None).await.map_err(|e| match e {
+            ConnectWithPasswordError::ProtocolError(e) => e,
+            ConnectWithPasswordError::IncorrectPassword => unreachable!(),
+        })
+    }
+
+    /// Connect to the password-protected MPD server using the given connection and password.
+    ///
+    /// Commonly used with [TCP connections](tokio::net::TcpStream) or [Unix
+    /// sockets](tokio::net::UnixStream).
+    ///
+    /// # Panics
+    ///
+    /// Since this spawns a task internally, this will panic when called outside a Tokio runtime.
+    ///
+    /// # Errors
+    ///
+    /// This will return an error if sending the initial commands over the given transport fails,
+    /// or if the password is incorrect.
+    pub async fn connect_with_password<C>(
+        connection: C,
+        password: &str,
+    ) -> Result<Connection, ConnectWithPasswordError>
+    where
+        C: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+    {
+        do_connect(connection, Some(password)).await
     }
 
     /// Send a [command].
@@ -99,25 +127,6 @@ impl Client {
         };
 
         <L as CommandList>::parse_responses(frames).map_err(Into::into)
-    }
-
-    /// Send the connection password, if necessary.
-    ///
-    /// If the MPD instance the `Client` is connected to is protected by a password, sending
-    /// commands may result in "Permission denied" errors prior to sending the correct password.
-    ///
-    /// This will not send anything if `None` is passed.
-    ///
-    /// # Errors
-    ///
-    /// Sending an incorrect password will result in a [`CommandError::ErrorResponse`], any other
-    /// errors are returned in the same conditions as [`Client::raw_command`].
-    pub async fn password(&self, password: Option<String>) -> Result<(), CommandError> {
-        if let Some(pw) = password {
-            self.command(cmds::Password(pw)).await
-        } else {
-            Ok(())
-        }
     }
 
     /// Send the given command, and return the response to it.
@@ -278,23 +287,56 @@ impl Client {
 }
 
 /// Perform the initial handshake to the server.
-pub(super) async fn do_connect<IO: AsyncRead + AsyncWrite + Unpin + Send + 'static>(
+async fn do_connect<IO: AsyncRead + AsyncWrite + Unpin + Send + 'static>(
     io: IO,
-) -> ConnectResult {
+    password: Option<&str>,
+) -> Result<Connection, ConnectWithPasswordError> {
     let span = span!(Level::DEBUG, "client connection");
 
     let (state_changes_sender, state_changes) = mpsc::unbounded_channel();
     let (commands_sender, commands_receiver) = mpsc::channel(1);
 
-    let connection = match AsyncConnection::connect(io).instrument(span.clone()).await {
+    let mut connection = match AsyncConnection::connect(io).instrument(span.clone()).await {
         Ok(c) => c,
         Err(e) => {
             error!(error = ?e, "failed to perform initial handshake");
-            return Err(e);
+            return Err(e.into());
         }
     };
 
     let protocol_version = Arc::from(connection.protocol_version());
+
+    if let Some(password) = password {
+        trace!("sending password");
+
+        if let Err(e) = connection
+            .send(RawCommand::new("password").argument(password.to_owned()))
+            .await
+        {
+            error!(error = ?e, "failed to send password");
+            return Err(e.into());
+        }
+
+        match connection.receive().await {
+            Err(e) => {
+                error!(error = ?e, "failed to receive reply to password");
+                return Err(e.into());
+            }
+            Ok(None) => {
+                error!("unexpected end of stream after sending password");
+                return Err(MpdProtocolError::Io(io::Error::new(
+                    io::ErrorKind::UnexpectedEof,
+                    "connection closed while waiting for reply to password",
+                ))
+                .into());
+            }
+            Ok(Some(response)) if response.is_error() => {
+                error!("incorrect password");
+                return Err(ConnectWithPasswordError::IncorrectPassword);
+            }
+            Ok(Some(_)) => trace!("password accepted"),
+        }
+    }
 
     tokio::spawn(
         connection::run_loop(connection, commands_receiver, state_changes_sender)
@@ -309,6 +351,40 @@ pub(super) async fn do_connect<IO: AsyncRead + AsyncWrite + Unpin + Send + 'stat
     };
 
     Ok((client, state_changes))
+}
+
+/// Error returned when [connecting with a password][Client::connect_with_password] fails.
+#[derive(Debug)]
+pub enum ConnectWithPasswordError {
+    /// The provided password was not accepted by the server.
+    IncorrectPassword,
+    /// An unrelated protocol error occured.
+    ProtocolError(MpdProtocolError),
+}
+
+impl fmt::Display for ConnectWithPasswordError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ConnectWithPasswordError::IncorrectPassword => write!(f, "incorrect password"),
+            ConnectWithPasswordError::ProtocolError(_) => write!(f, "protocol error"),
+        }
+    }
+}
+
+impl Error for ConnectWithPasswordError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            ConnectWithPasswordError::ProtocolError(e) => Some(e),
+            ConnectWithPasswordError::IncorrectPassword => None,
+        }
+    }
+}
+
+#[doc(hidden)]
+impl From<MpdProtocolError> for ConnectWithPasswordError {
+    fn from(e: MpdProtocolError) -> Self {
+        ConnectWithPasswordError::ProtocolError(e)
+    }
 }
 
 #[cfg(test)]

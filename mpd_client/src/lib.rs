@@ -21,7 +21,7 @@ pub mod filter;
 pub mod state_changes;
 pub mod tag;
 
-pub use client::{Client, ConnectResult};
+pub use client::{Client, ConnectWithPasswordError, Connection};
 pub use errors::CommandError;
 pub use filter::Filter;
 pub use state_changes::Subsystem;
