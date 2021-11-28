@@ -1,12 +1,10 @@
-use futures::{SinkExt, StreamExt};
-use mpd_protocol::{MpdCodec, Response as RawResponse};
+use mpd_protocol::{AsyncConnection, Response as RawResponse};
 use tokio::{
     io::{AsyncRead, AsyncWrite},
     sync::mpsc::{Receiver, UnboundedSender},
     time::timeout,
 };
-use tokio_util::codec::Framed;
-use tracing::{debug, error, span, trace, warn, Level, Span};
+use tracing::{error, span, trace, warn, Level};
 use tracing_futures::Instrument;
 
 use std::fmt;
@@ -15,30 +13,15 @@ use std::time::Duration;
 use super::CommandResponder;
 use crate::{
     errors::StateChangeError,
-    raw::{MpdProtocolError, RawCommand, RawCommandList},
+    raw::{RawCommand, RawCommandList},
     state_changes::Subsystem,
 };
 
 type StateChangesSender = UnboundedSender<Result<Subsystem, StateChangeError>>;
 
-/// Perform the initial handshake to the server and send the initial idle command.
-pub(super) async fn connect<IO: AsyncRead + AsyncWrite + Unpin>(
-    io: IO,
-    span: &Span,
-) -> Result<Framed<IO, MpdCodec>, MpdProtocolError> {
-    let mut c = MpdCodec::connect(io).await?;
-    debug!(parent: span, "sending initial idle command");
-    if let Err(e) = c.send(idle()).await {
-        error!(error = ?e, "failed to send initial idle command");
-        return Err(e);
-    }
-    debug!(parent: span, "connected successfully");
-    Ok(c)
-}
-
 struct State<C> {
     loop_state: LoopState,
-    connection: Framed<C, MpdCodec>,
+    connection: AsyncConnection<C>,
     commands: Receiver<(RawCommandList, CommandResponder)>,
     state_changes: StateChangesSender,
 }
@@ -67,13 +50,17 @@ fn cancel_idle() -> RawCommand {
 }
 
 pub(super) async fn run_loop<C>(
-    connection: Framed<C, MpdCodec>,
+    mut connection: AsyncConnection<C>,
     commands: Receiver<(RawCommandList, CommandResponder)>,
     state_changes: StateChangesSender,
 ) where
     C: AsyncRead + AsyncWrite + Unpin,
 {
-    trace!("entering run loop");
+    trace!("sending initial idle command");
+    if let Err(e) = connection.send(idle()).await {
+        error!(error = ?e, "failed to send initial idle command");
+        let _ = state_changes.send(Err(e.into()));
+    }
 
     let mut state = State {
         loop_state: LoopState::Idling,
@@ -81,6 +68,8 @@ pub(super) async fn run_loop<C>(
         commands,
         state_changes,
     };
+
+    trace!("entering run loop");
 
     loop {
         let span = span!(Level::TRACE, "iteration", state = ?state.loop_state);
@@ -108,9 +97,9 @@ where
             // Wait for either a command to send or a message from the server, which would be a
             // state change notification.
             tokio::select! {
-                response = state.connection.next() => {
+                response = state.connection.receive() => {
                     match response {
-                        Some(Ok(res)) => {
+                        Ok(Some(res)) => {
                             if let Some(state_change) = response_to_subsystem(res).transpose() {
                                 trace!(?state_change);
                                 let _ = state.state_changes.send(state_change);
@@ -122,12 +111,12 @@ where
                                 return None;
                             }
                         }
-                        Some(Err(e)) => {
+                        Ok(None) => return None, // The connection was closed
+                        Err(e) => {
                             error!(error = ?e, "state change error");
                             let _ = state.state_changes.send(Err(e.into()));
                             return None;
                         }
-                        None => return None, // The connection was closed
                     }
                 }
                 command = state.commands.recv() => {
@@ -145,15 +134,15 @@ where
                     }
 
                     // Response to CANCEL_IDLE above
-                    match state.connection.next().await {
-                        None => return None,
-                        Some(Ok(res)) => {
+                    match state.connection.receive().await {
+                        Ok(None) => return None,
+                        Ok(Some(res)) => {
                             if let Some(state_change) = response_to_subsystem(res).transpose() {
                                 trace!(?state_change);
                                 let _ = state.state_changes.send(state_change);
                             }
                         }
-                        Some(Err(e)) => {
+                        Err(e) => {
                             error!(error = ?e, "state change error prior to sending command");
                             let _ = responder.send(Err(e.into()));
                             return None;
@@ -162,7 +151,7 @@ where
 
                     // Actually send the command. This sets the state for the next loop
                     // iteration.
-                    match state.connection.send(command).await {
+                    match state.connection.send_list(command).await {
                         Ok(_) => state.loop_state = LoopState::WaitingForCommandReply(responder),
                         Err(e) => {
                             error!(error = ?e, "failed to send command");
@@ -178,7 +167,7 @@ where
         LoopState::WaitingForCommandReply(responder) => {
             // We're waiting for the response to the command associated with `responder`.
 
-            let response = state.connection.next().await?;
+            let response = state.connection.receive().await.transpose()?;
             trace!(?response, "response to command received");
 
             let _ = responder.send(response.map_err(Into::into));
@@ -189,7 +178,7 @@ where
             match next_command.await {
                 Ok(Some((command, responder))) => {
                     trace!(?command, "next command immediately available");
-                    match state.connection.send(command).await {
+                    match state.connection.send_list(command).await {
                         Ok(_) => state.loop_state = LoopState::WaitingForCommandReply(responder),
                         Err(e) => {
                             error!(error = ?e, "failed to send command");

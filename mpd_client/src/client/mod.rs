@@ -2,7 +2,7 @@
 
 mod connection;
 
-use mpd_protocol::Response as RawResponse;
+use mpd_protocol::{AsyncConnection, Response as RawResponse};
 use tokio::{
     io::{AsyncRead, AsyncWrite},
     sync::{
@@ -10,14 +10,11 @@ use tokio::{
         oneshot,
     },
 };
-use tracing::{debug, span, trace, warn, Level, Span};
+use tracing::{debug, error, span, trace, warn, Level, Span};
 use tracing_futures::Instrument;
 
 use std::fmt::Debug;
-use std::sync::{
-    atomic::{AtomicUsize, Ordering},
-    Arc,
-};
+use std::sync::Arc;
 
 use crate::commands::{self as cmds, responses::Response, Command, CommandList};
 use crate::errors::CommandError;
@@ -25,9 +22,6 @@ use crate::raw::{Frame, MpdProtocolError, RawCommand, RawCommandList};
 use crate::state_changes::StateChanges;
 
 type CommandResponder = oneshot::Sender<Result<RawResponse, CommandError>>;
-
-/// Counter for connection IDs for logging.
-static CONNECTION_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
 /// Result returned by a connection attempt.
 ///
@@ -67,29 +61,7 @@ impl Client {
     where
         C: AsyncRead + AsyncWrite + Unpin + Send + 'static,
     {
-        let id = CONNECTION_COUNTER.fetch_add(1, Ordering::Relaxed);
-        let span = span!(Level::DEBUG, "client connection", id);
-
-        let (state_changes_sender, state_changes) = mpsc::unbounded_channel();
-        let (commands_sender, commands_receiver) = mpsc::channel(1);
-
-        let connection = connection::connect(connection, &span).await?;
-
-        let protocol_version = Arc::from(connection.codec().protocol_version());
-
-        tokio::spawn(
-            connection::run_loop(connection, commands_receiver, state_changes_sender)
-                .instrument(span!(parent: &span, Level::TRACE, "run loop")),
-        );
-
-        let state_changes = StateChanges { rx: state_changes };
-        let client = Client {
-            commands_sender,
-            protocol_version,
-            span,
-        };
-
-        Ok((client, state_changes))
+        do_connect(connection).await
     }
 
     /// Send a [command].
@@ -304,6 +276,40 @@ impl Client {
 
         rx.await?
     }
+}
+
+/// Perform the initial handshake to the server.
+pub(super) async fn do_connect<IO: AsyncRead + AsyncWrite + Unpin + Send + 'static>(
+    io: IO,
+) -> ConnectResult {
+    let span = span!(Level::DEBUG, "client connection");
+
+    let (state_changes_sender, state_changes) = mpsc::unbounded_channel();
+    let (commands_sender, commands_receiver) = mpsc::channel(1);
+
+    let connection = match AsyncConnection::connect(io).instrument(span.clone()).await {
+        Ok(c) => c,
+        Err(e) => {
+            error!(error = ?e, "failed to perform initial handshake");
+            return Err(e);
+        }
+    };
+
+    let protocol_version = Arc::from(connection.protocol_version());
+
+    tokio::spawn(
+        connection::run_loop(connection, commands_receiver, state_changes_sender)
+            .instrument(span!(parent: &span, Level::TRACE, "run loop")),
+    );
+
+    let state_changes = StateChanges { rx: state_changes };
+    let client = Client {
+        commands_sender,
+        protocol_version,
+        span,
+    };
+
+    Ok((client, state_changes))
 }
 
 #[cfg(test)]
