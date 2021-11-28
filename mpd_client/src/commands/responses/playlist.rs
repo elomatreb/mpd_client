@@ -8,6 +8,7 @@ use super::{ErrorKind, TypedResponseError};
 ///
 /// [`listplaylists`]: crate::commands::definitions::GetPlaylists
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct Playlist {
     /// Name of the playlist.
     pub name: String,

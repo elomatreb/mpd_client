@@ -121,6 +121,7 @@ pub enum PlayState {
 /// [status-command]: https://www.musicpd.org/doc/html/protocol.html#command-status
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[allow(missing_docs)]
+#[non_exhaustive]
 pub struct Status {
     pub volume: u8,
     pub state: PlayState,
@@ -211,6 +212,7 @@ impl Response for Status {
 /// [`stats`]: crate::commands::definitions::Stats
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[allow(missing_docs)]
+#[non_exhaustive]
 pub struct Stats {
     pub artists: u64,
     pub albums: u64,

@@ -16,6 +16,7 @@ use crate::tag::Tag;
 ///
 /// [`playlistinfo`]: crate::commands::definitions::Queue
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct SongInQueue {
     /// Position in queue.
     pub position: SongPosition,
@@ -81,6 +82,7 @@ impl SongInQueue {
 /// [playlist]: crate::commands::definitions::Queue
 /// [current song]: crate::commands::definitions::CurrentSong
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct Song {
     /// Unique identifier of the song. May be a file path relative to the library root, or an URL
     /// to a remote resource.

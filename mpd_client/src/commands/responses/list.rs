@@ -7,6 +7,7 @@ use crate::tag::Tag;
 ///
 /// [`list`]: crate::commands::definitions::List
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct List {
     /// The fields returned by the command, in the order returned by MPD.
     pub fields: Vec<(Tag, String)>,
