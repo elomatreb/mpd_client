@@ -4,6 +4,8 @@ use std::borrow::Cow;
 use std::convert::TryFrom;
 use std::error::Error;
 use std::fmt;
+use std::hash::{Hash, Hasher};
+use std::mem;
 
 use mpd_protocol::command::Argument;
 
@@ -24,7 +26,7 @@ use mpd_protocol::command::Argument;
 /// so additional tags may be added without breaking compatibility.
 ///
 /// [`Song`]: crate::commands::responses::Song
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug)]
 #[allow(missing_docs)]
 #[non_exhaustive]
 pub enum Tag {
@@ -169,6 +171,33 @@ impl<'a> TryFrom<&'a str> for Tag {
         }
 
         Ok(Self::Other(raw.into()))
+    }
+}
+
+impl PartialEq for Tag {
+    fn eq(&self, other: &Tag) -> bool {
+        // Fall back to string comparison to allow forward-compatible use of the `Other` variant
+        mem::discriminant(self) == mem::discriminant(other) || self.as_str() == other.as_str()
+    }
+}
+
+impl Eq for Tag {}
+
+impl PartialOrd for Tag {
+    fn partial_cmp(&self, other: &Tag) -> Option<std::cmp::Ordering> {
+        self.as_str().partial_cmp(&other.as_str())
+    }
+}
+
+impl Ord for Tag {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.as_str().cmp(&other.as_str())
+    }
+}
+
+impl Hash for Tag {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.as_str().hash(state);
     }
 }
 
