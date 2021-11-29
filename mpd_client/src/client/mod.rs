@@ -307,23 +307,27 @@ async fn do_connect<IO: AsyncRead + AsyncWrite + Unpin + Send + 'static>(
     let protocol_version = Arc::from(connection.protocol_version());
 
     if let Some(password) = password {
-        trace!("sending password");
+        trace!(parent: &span, "sending password");
 
         if let Err(e) = connection
             .send(RawCommand::new("password").argument(password.to_owned()))
+            .instrument(span.clone())
             .await
         {
-            error!(error = ?e, "failed to send password");
+            error!(parent: &span, error = ?e, "failed to send password");
             return Err(e.into());
         }
 
-        match connection.receive().await {
+        match connection.receive().instrument(span.clone()).await {
             Err(e) => {
-                error!(error = ?e, "failed to receive reply to password");
+                error!(parent: &span, error = ?e, "failed to receive reply to password");
                 return Err(e.into());
             }
             Ok(None) => {
-                error!("unexpected end of stream after sending password");
+                error!(
+                    parent: &span,
+                    "unexpected end of stream after sending password"
+                );
                 return Err(MpdProtocolError::Io(io::Error::new(
                     io::ErrorKind::UnexpectedEof,
                     "connection closed while waiting for reply to password",
@@ -331,10 +335,12 @@ async fn do_connect<IO: AsyncRead + AsyncWrite + Unpin + Send + 'static>(
                 .into());
             }
             Ok(Some(response)) if response.is_error() => {
-                error!("incorrect password");
+                error!(parent: &span, "incorrect password");
                 return Err(ConnectWithPasswordError::IncorrectPassword);
             }
-            Ok(Some(_)) => trace!("password accepted"),
+            Ok(Some(_)) => {
+                trace!(parent: &span, "password accepted");
+            }
         }
     }
 
