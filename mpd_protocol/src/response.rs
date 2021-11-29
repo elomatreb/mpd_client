@@ -78,6 +78,10 @@ impl Response {
         // There is always at least one frame
         self.into_iter().next().unwrap()
     }
+
+    pub(crate) fn field_count(&self) -> usize {
+        self.frames.iter().map(|f| f.fields_len()).sum()
+    }
 }
 
 impl fmt::Debug for Response {

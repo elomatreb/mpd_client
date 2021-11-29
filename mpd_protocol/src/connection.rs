@@ -163,7 +163,12 @@ impl<IO> Connection<IO> {
             self.recv_buf.resize(buf_size, 0);
 
             if let Some(response) = maybe_parsed {
-                debug!("received complete response");
+                debug!(
+                    frames = response.successful_frames(),
+                    error = response.is_error(),
+                    fields = response.field_count(),
+                    "received complete response"
+                );
                 break Ok(Some(response));
             }
 
@@ -334,7 +339,12 @@ impl<IO> AsyncConnection<IO> {
 
         loop {
             if let Some(response) = response_builder.parse(&mut self.0.recv_buf)? {
-                debug!("received complete response");
+                debug!(
+                    frames = response.successful_frames(),
+                    fields = response.field_count(),
+                    error = response.is_error(),
+                    "received complete response"
+                );
                 break Ok(Some(response));
             }
 

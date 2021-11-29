@@ -167,7 +167,7 @@ where
             // We're waiting for the response to the command associated with `responder`.
 
             let response = state.connection.receive().await.transpose()?;
-            trace!(?response, "response to command received");
+            trace!("response to command received");
 
             let _ = responder.send(response.map_err(Into::into));
 
