@@ -82,8 +82,6 @@ single_arg_command!(SetConsume, bool, "consume", res::Empty);
 single_arg_command!(SetRepeat, bool, "repeat", res::Empty);
 single_arg_command!(SetPause, bool, "pause", res::Empty);
 
-single_arg_command!(Password, String, "password", res::Empty);
-
 single_arg_command!(SaveQueueAsPlaylist, String, "save", res::Empty);
 single_arg_command!(DeletePlaylist, String, "rm", res::Empty);
 single_arg_command!(GetPlaylist, String, "listplaylistinfo", Vec<res::Song>);
