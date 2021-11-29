@@ -175,7 +175,7 @@ impl Command for Seek {
 }
 
 /// `play` and `playid` commands.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Play(Option<Song>);
 
 impl Play {
@@ -285,7 +285,7 @@ impl Command for Add {
 }
 
 /// `delete` and `deleteid` commands.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Delete(Target);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -378,7 +378,7 @@ impl Command for Delete {
 }
 
 /// `move` and `moveid` commands.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Move {
     from: Target,
     to: PositionOrRelative,
@@ -415,7 +415,7 @@ impl Move {
 ///
 /// Returned by methods on [`Move`].
 #[must_use]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MoveBuilder(Target);
 
 impl MoveBuilder {
