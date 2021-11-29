@@ -5,7 +5,6 @@ use std::convert::TryFrom;
 use std::error::Error;
 use std::fmt;
 use std::hash::{Hash, Hasher};
-use std::mem;
 
 use mpd_protocol::command::Argument;
 
@@ -176,8 +175,7 @@ impl<'a> TryFrom<&'a str> for Tag {
 
 impl PartialEq for Tag {
     fn eq(&self, other: &Tag) -> bool {
-        // Fall back to string comparison to allow forward-compatible use of the `Other` variant
-        mem::discriminant(self) == mem::discriminant(other) || self.as_str() == other.as_str()
+        self.as_str() == other.as_str()
     }
 }
 
@@ -264,5 +262,15 @@ mod tests {
     fn as_arg() {
         assert_eq!(Tag::Album.as_str(), "Album");
         assert_eq!(Tag::Other(Box::from("foo")).as_str(), "foo");
+    }
+
+    #[test]
+    fn equality() {
+        assert_eq!(Tag::Album, Tag::Other(Box::from("Album")));
+        assert_eq!(
+            Tag::Other(Box::from("Album")),
+            Tag::Other(Box::from("Album"))
+        );
+        assert_ne!(Tag::Other(Box::from("Foo")), Tag::Other(Box::from("Bar")));
     }
 }
