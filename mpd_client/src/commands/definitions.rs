@@ -205,14 +205,31 @@ impl Command for Play {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum PositionOrRelative {
+    Absolute(SongPosition),
+    BeforeCurrent(usize),
+    AfterCurrent(usize),
+}
+
+impl Argument for PositionOrRelative {
+    fn render(self) -> Cow<'static, str> {
+        match self {
+            PositionOrRelative::Absolute(pos) => pos.render(),
+            PositionOrRelative::AfterCurrent(x) => Cow::Owned(format!("+{}", x)),
+            PositionOrRelative::BeforeCurrent(x) => Cow::Owned(format!("-{}", x)),
+        }
+    }
+}
+
 /// `addid` command.
 ///
-/// Add a song to the queue, returning its ID. If [`Add::at`] is not used, the song will be appended to
-/// the queue.
+/// Add a song to the queue, returning its ID. If neither of [`Add::at`], [`Add::before_current`],
+/// or [`Add::after_current`] is used, the song will be appended to the queue.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Add {
     uri: String,
-    position: Option<SongPosition>,
+    position: Option<PositionOrRelative>,
 }
 
 impl Add {
@@ -228,7 +245,27 @@ impl Add {
 
     /// Add the URI at the given position in the queue.
     pub fn at<P: Into<SongPosition>>(mut self, position: P) -> Self {
-        self.position = Some(position.into());
+        self.position = Some(PositionOrRelative::Absolute(position.into()));
+        self
+    }
+
+    /// Add the URI `delta` positions before the current song.
+    ///
+    /// A `delta` of 0 is immediately before the current song.
+    ///
+    /// **NOTE**: Supported on protocol versions later than 0.23.
+    pub fn before_current(mut self, delta: usize) -> Self {
+        self.position = Some(PositionOrRelative::BeforeCurrent(delta));
+        self
+    }
+
+    /// Add the URI `delta` positions after the current song.
+    ///
+    /// A `delta` of 0 is immediately after the current song.
+    ///
+    /// **NOTE**: Supported on protocol versions later than 0.23.
+    pub fn after_current(mut self, delta: usize) -> Self {
+        self.position = Some(PositionOrRelative::AfterCurrent(delta));
         self
     }
 }
@@ -344,34 +381,69 @@ impl Command for Delete {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Move {
     from: Target,
-    to: SongPosition,
+    to: PositionOrRelative,
 }
 
 impl Move {
-    /// Move the song with the given ID to the given position.
-    pub fn id(id: SongId, to: SongPosition) -> Self {
-        Self {
-            from: Target::Id(id),
-            to,
-        }
+    /// Move the song with the given ID.
+    pub fn id(id: SongId) -> MoveBuilder {
+        MoveBuilder(Target::Id(id))
     }
 
-    /// Move the song at the given position to the given position.
-    pub fn position(from: SongPosition, to: SongPosition) -> Self {
-        Self {
-            from: Target::Range(SongRange::new(from..=from)),
-            to,
-        }
+    /// Move the song at the given position.
+    pub fn position(position: SongPosition) -> MoveBuilder {
+        MoveBuilder(Target::Range(SongRange::new(position..=position)))
     }
 
-    /// Move the given range of song positions to the given position.
-    pub fn range<R>(range: R, to: SongPosition) -> Self
+    /// Move the given range of song positions.
+    ///
+    /// **NOTE**: The given range must have an end. If a range with an open end is passed, this
+    /// function will panic.
+    pub fn range<R>(range: R) -> MoveBuilder
     where
         R: RangeBounds<SongPosition>,
     {
-        Self {
-            from: Target::Range(SongRange::new(range)),
-            to,
+        if let Bound::Unbounded = range.end_bound() {
+            panic!("move commands must not have an open end");
+        }
+
+        MoveBuilder(Target::Range(SongRange::new(range)))
+    }
+}
+
+/// Builder for `move` or `moveid` commands.
+///
+/// Returned by methods on [`Move`].
+#[must_use]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct MoveBuilder(Target);
+
+impl MoveBuilder {
+    /// Move the selection to the given absolute queue position.
+    pub fn to_position(self, position: SongPosition) -> Move {
+        Move {
+            from: self.0,
+            to: PositionOrRelative::Absolute(position),
+        }
+    }
+
+    /// Move the selection to the given `delta` after the current song.
+    ///
+    /// A `delta` of 0 means immediately after the current song.
+    pub fn after_current(self, delta: usize) -> Move {
+        Move {
+            from: self.0,
+            to: PositionOrRelative::AfterCurrent(delta),
+        }
+    }
+
+    /// Move the selection to the given `delta` before the current song.
+    ///
+    /// A `delta` of 0 means immediately before the current song.
+    pub fn before_current(self, delta: usize) -> Move {
+        Move {
+            from: self.0,
+            to: PositionOrRelative::BeforeCurrent(delta),
         }
     }
 }
@@ -566,16 +638,31 @@ impl Command for LoadPlaylist {
 }
 
 /// `playlistadd` command.
+///
+/// If [`AddToPlalist::at`] is not used, the song will be appended to the playlist.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AddToPlaylist {
     playlist: String,
     song_url: String,
+    position: Option<SongPosition>,
 }
 
 impl AddToPlaylist {
     /// Add `song_url` to `playlist`.
     pub fn new(playlist: String, song_url: String) -> Self {
-        Self { playlist, song_url }
+        Self {
+            playlist,
+            song_url,
+            position: None,
+        }
+    }
+
+    /// Add the URI at the given position in the queue.
+    ///
+    /// **NOTE**: Supported on protocol versions later than 0.23.3.
+    pub fn at<P: Into<SongPosition>>(mut self, position: P) -> Self {
+        self.position = Some(position.into());
+        self
     }
 }
 
@@ -583,9 +670,15 @@ impl Command for AddToPlaylist {
     type Response = res::Empty;
 
     fn into_command(self) -> RawCommand {
-        RawCommand::new("playlistadd")
+        let mut command = RawCommand::new("playlistadd")
             .argument(self.playlist)
-            .argument(self.song_url)
+            .argument(self.song_url);
+
+        if let Some(pos) = self.position {
+            command.add_argument(pos).unwrap();
+        }
+
+        command
     }
 }
 
@@ -593,15 +686,32 @@ impl Command for AddToPlaylist {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RemoveFromPlaylist {
     playlist: String,
-    song_position: usize,
+    target: PositionOrRange,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum PositionOrRange {
+    Position(usize),
+    Range(SongRange),
 }
 
 impl RemoveFromPlaylist {
-    /// Delete the song at `song_position` from `playlist`.
-    pub fn new(playlist: String, song_position: usize) -> Self {
+    /// Delete the song at `position` from `playlist`.
+    pub fn position(playlist: String, position: usize) -> Self {
         RemoveFromPlaylist {
             playlist,
-            song_position,
+            target: PositionOrRange::Position(position),
+        }
+    }
+
+    /// Delete the specified range of songs from `playlist`.
+    pub fn range<R>(playlist: String, range: R) -> Self
+    where
+        R: RangeBounds<SongPosition>,
+    {
+        RemoveFromPlaylist {
+            playlist,
+            target: PositionOrRange::Range(SongRange::new(range)),
         }
     }
 }
@@ -610,9 +720,12 @@ impl Command for RemoveFromPlaylist {
     type Response = res::Empty;
 
     fn into_command(self) -> RawCommand {
-        RawCommand::new("playlistdelete")
-            .argument(self.playlist)
-            .argument(self.song_position.to_string())
+        let command = RawCommand::new("playlistdelete").argument(self.playlist);
+
+        match self.target {
+            PositionOrRange::Position(p) => command.argument(p.to_string()),
+            PositionOrRange::Range(r) => command.argument(r),
+        }
     }
 }
 
@@ -760,6 +873,7 @@ mod tests {
         assert_eq!(SongRange::new_usize(2..=5).render(), "2:6");
         assert_eq!(SongRange::new_usize(..5).render(), "0:5");
         assert_eq!(SongRange::new_usize(..).render(), "0:");
+        assert_eq!(SongRange::new_usize(1..=1).render(), "1:2");
     }
 
     #[test]
@@ -838,7 +952,17 @@ mod tests {
         );
         assert_eq!(
             Add::uri(uri.clone()).at(5).into_command(),
-            RawCommand::new("addid").argument(uri).argument("5")
+            RawCommand::new("addid").argument(uri.clone()).argument("5")
+        );
+        assert_eq!(
+            Add::uri(uri.clone()).before_current(5).into_command(),
+            RawCommand::new("addid")
+                .argument(uri.clone())
+                .argument("-5")
+        );
+        assert_eq!(
+            Add::uri(uri.clone()).after_current(5).into_command(),
+            RawCommand::new("addid").argument(uri).argument("+5")
         );
     }
 
@@ -863,22 +987,42 @@ mod tests {
     #[test]
     fn command_move() {
         assert_eq!(
-            Move::position(SongPosition(2), SongPosition(4)).into_command(),
+            Move::position(SongPosition(2))
+                .to_position(SongPosition(4))
+                .into_command(),
             RawCommand::new("move").argument("2:3").argument("4")
         );
 
         assert_eq!(
-            Move::id(SongId(2), SongPosition(4)).into_command(),
+            Move::id(SongId(2))
+                .to_position(SongPosition(4))
+                .into_command(),
             RawCommand::new("moveid")
                 .argument(SongId(2))
                 .argument(SongPosition(4))
         );
 
         assert_eq!(
-            Move::range(SongPosition(3)..SongPosition(5), SongPosition(4)).into_command(),
+            Move::range(SongPosition(3)..SongPosition(5))
+                .to_position(SongPosition(4))
+                .into_command(),
             RawCommand::new("move")
                 .argument("3:5")
                 .argument(SongPosition(4))
+        );
+
+        assert_eq!(
+            Move::position(SongPosition(2))
+                .after_current(3)
+                .into_command(),
+            RawCommand::new("move").argument("2:3").argument("+3")
+        );
+
+        assert_eq!(
+            Move::position(SongPosition(2))
+                .before_current(3)
+                .into_command(),
+            RawCommand::new("move").argument("2:3").argument("-3")
         );
     }
 
@@ -923,6 +1067,24 @@ mod tests {
         assert_eq!(
             ListAllIn::directory(String::from("foo")).into_command(),
             RawCommand::new("listallinfo").argument("foo")
+        );
+    }
+
+    #[test]
+    fn command_playlistdelete() {
+        assert_eq!(
+            RemoveFromPlaylist::position(String::from("foo"), 5).into_command(),
+            RawCommand::new("playlistdelete")
+                .argument("foo")
+                .argument("5"),
+        );
+
+        assert_eq!(
+            RemoveFromPlaylist::range(String::from("foo"), SongPosition(3)..SongPosition(6))
+                .into_command(),
+            RawCommand::new("playlistdelete")
+                .argument("foo")
+                .argument("3:6"),
         );
     }
 }
