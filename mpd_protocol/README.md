@@ -1,21 +1,12 @@
 # `mpd_protocol`
 
-Implementation of the client protocol for [MPD][mpd].
-
-See also [`mpd_client`][mpd-client], a crate that uses this library to implement a complete asynchronous client including connection management.
+Implementation of the client protocol for [MPD].
 
 ## Features
 
  - Protocol support including binary responses and command lists
- - Asynchronous IO support through an implementation of [Tokio]'s [codec][tokio-codec] subsystem (requires the `async` feature flag)
+ - Support for traditional blocking IO as well as asynchronous IO (through [Tokio], requires the `async` feature flag)
  - Utilities for assembling commands and escaping arguments
-
-## Installation
-
-```toml
-[dependencies]
-mpd_protocol = "0.12"
-```
 
 ## License
 
@@ -30,7 +21,5 @@ at your option.
 
 Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in the work by you, as defined in the Apache-2.0 license, shall be dual licensed as above, without any additional terms or conditions.
 
-[mpd]: https://musicpd.org
-[tokio]: https://tokio.rs
-[tokio-codec]: https://docs.rs/tokio-util/0.6.6/tokio_util/codec/index.html
-[mpd-client]: https://crates.io/crates/mpd_client
+[MPD]: https://musicpd.org
+[Tokio]: https://tokio.rs
