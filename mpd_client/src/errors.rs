@@ -27,21 +27,27 @@ pub enum CommandError {
 impl fmt::Display for CommandError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            CommandError::ConnectionClosed => write!(f, "The connection is closed"),
-            CommandError::Protocol(_) => write!(f, "Protocol error"),
+            CommandError::ConnectionClosed => write!(f, "the connection is closed"),
+            CommandError::Protocol(_) => write!(f, "protocol error"),
             CommandError::InvalidTypedResponse(_) => {
-                write!(f, "Response was invalid for typed command")
+                write!(f, "response was invalid for typed command")
             }
             CommandError::ErrorResponse {
                 error,
                 succesful_frames,
-            } => write!(
-                f,
-                "Command returned an error (code {} - {:?}) after {} successful frames",
-                error.code,
-                error.message,
-                succesful_frames.len()
-            ),
+            } => {
+                write!(
+                    f,
+                    "command returned an error [code {}]: {}",
+                    error.code, error.message,
+                )?;
+
+                if !succesful_frames.is_empty() {
+                    write!(f, " (after {} succesful frames)", succesful_frames.len())?;
+                }
+
+                Ok(())
+            }
         }
     }
 }
@@ -106,10 +112,10 @@ pub enum StateChangeError {
 impl fmt::Display for StateChangeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            StateChangeError::Protocol(_) => write!(f, "Protocol error"),
+            StateChangeError::Protocol(_) => write!(f, "protocol error"),
             StateChangeError::ErrorMessage(ErrorResponse { code, message, .. }) => write!(
                 f,
-                "Message contained an error frame (code {} - {:?})",
+                "message contained an error frame [code {}]: {}",
                 code, message
             ),
         }

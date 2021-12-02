@@ -206,8 +206,6 @@ impl Argument for Tag {
 }
 
 /// Errors that may occur when attempting to create a [`Tag`].
-///
-/// [`Tag`]: crate::tag::Tag
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TagError {
     /// The raw tag was empty.
@@ -224,9 +222,9 @@ pub enum TagError {
 impl fmt::Display for TagError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Empty => write!(f, "Empty tag"),
+            Self::Empty => write!(f, "empty tag"),
             Self::InvalidCharacter { chr, pos } => {
-                write!(f, "Invalid character {:?} at index {}", chr, pos)
+                write!(f, "invalid character {:?} at index {}", chr, pos)
             }
         }
     }

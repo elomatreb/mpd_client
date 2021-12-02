@@ -66,12 +66,12 @@ impl fmt::Display for TypedResponseError {
         write!(f, "Error converting response: ")?;
 
         match &self.kind {
-            ErrorKind::Missing => write!(f, "field {:?} is but missing", self.field),
+            ErrorKind::Missing => write!(f, "field {:?} is required but missing", self.field),
             ErrorKind::InvalidValue(val) => {
                 write!(f, "value {:?} is invalid for field {:?}", val, self.field)
             }
             ErrorKind::UnexpectedField(found) => {
-                write!(f, "Expected field {:?} but found {:?}", self.field, found)
+                write!(f, "expected field {:?} but found {:?}", self.field, found)
             }
             ErrorKind::MalformedInteger(_) => write!(f, "field {:?} is not an integer", self.field),
             ErrorKind::MalformedFloat(_) => write!(f, "field {:?} is not a float", self.field),
