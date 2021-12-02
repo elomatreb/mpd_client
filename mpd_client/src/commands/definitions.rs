@@ -637,7 +637,7 @@ impl Command for LoadPlaylist {
 
 /// `playlistadd` command.
 ///
-/// If [`AddToPlalist::at`] is not used, the song will be appended to the playlist.
+/// If [`AddToPlaylist::at`] is not used, the song will be appended to the playlist.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AddToPlaylist {
     playlist: String,
