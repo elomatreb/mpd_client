@@ -149,7 +149,7 @@ impl Client {
     /// *any* of the commands in the list return an error condition, the entire list will be
     /// treated as an error.
     ///
-    /// You may recover possible succesful fields in a response from the [error].
+    /// You may recover possible successful fields in a response from the [error].
     ///
     /// [error]: crate::errors::CommandError::ErrorResponse
     pub async fn raw_command_list(
@@ -190,7 +190,7 @@ impl Client {
     ///
     /// # Return value
     ///
-    /// If this method returns succesfully, a return value of  `None` indicates that no album art
+    /// If this method returns successfully, a return value of  `None` indicates that no album art
     /// for the given URI was found. Otherwise, you will get a tuple consisting of the raw binary
     /// data, and an optional string value that contains a MIME type for the data, if one was
     /// provided by the server.
@@ -242,7 +242,7 @@ impl Client {
                 out.extend_from_slice(resp.data());
                 debug!(length = expected_size, "found separate file album art");
             } else {
-                debug!("no embedded or separte album art found");
+                debug!("no embedded or separate album art found");
                 return Ok(None);
             }
         }
@@ -362,7 +362,7 @@ async fn do_connect<IO: AsyncRead + AsyncWrite + Unpin + Send + 'static>(
 pub enum ConnectWithPasswordError {
     /// The provided password was not accepted by the server.
     IncorrectPassword,
-    /// An unrelated protocol error occured.
+    /// An unrelated protocol error occurred.
     ProtocolError(MpdProtocolError),
 }
 

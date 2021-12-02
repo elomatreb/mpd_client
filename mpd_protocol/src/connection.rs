@@ -66,7 +66,7 @@ impl<IO> Connection<IO> {
 
             match parser::greeting(data) {
                 Ok((_, version)) => {
-                    info!(?version, "connected succesfully");
+                    info!(?version, "connected successfully");
                     break Box::from(version);
                 }
                 Err(e) if e.is_incomplete() => {
@@ -251,7 +251,7 @@ impl<IO> AsyncConnection<IO> {
 
             match parser::greeting(&recv_buf) {
                 Ok((_, version)) => {
-                    info!(?version, "connected succesfully");
+                    info!(?version, "connected successfully");
                     break Box::from(version);
                 }
                 Err(e) if e.is_incomplete() => {

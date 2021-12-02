@@ -11,13 +11,13 @@ use crate::raw::{ErrorResponse, Frame, MpdProtocolError};
 pub enum CommandError {
     /// The connection to MPD was closed cleanly
     ConnectionClosed,
-    /// An underlying protocol error occured, including IO errors
+    /// An underlying protocol error occurred, including IO errors
     Protocol(MpdProtocolError),
     /// Command returned an error
     ErrorResponse {
         /// The error
         error: ErrorResponse,
-        /// Possible sucessful frames in the same response, empty if not in a command list
+        /// Possible successful frames in the same response, empty if not in a command list
         succesful_frames: Vec<Frame>,
     },
     /// A [typed command](crate::commands) failed to convert its response.
@@ -37,7 +37,7 @@ impl fmt::Display for CommandError {
                 succesful_frames,
             } => write!(
                 f,
-                "Command returned an error (code {} - {:?}) after {} succesful frames",
+                "Command returned an error (code {} - {:?}) after {} successful frames",
                 error.code,
                 error.message,
                 succesful_frames.len()
@@ -97,7 +97,7 @@ impl From<TypedResponseError> for CommandError {
 /// Errors which may occur while listening for state change events.
 #[derive(Debug)]
 pub enum StateChangeError {
-    /// An underlying protocol error occured, including IO errors
+    /// An underlying protocol error occurred, including IO errors
     Protocol(MpdProtocolError),
     /// The state change message contained an error frame
     ErrorMessage(ErrorResponse),

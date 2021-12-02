@@ -40,9 +40,9 @@ pub use response::Response;
 /// Unrecoverable errors.
 #[derive(Debug)]
 pub enum MpdProtocolError {
-    /// IO error occured
+    /// IO error occurred
     Io(io::Error),
-    /// A message could not be parsed succesfully.
+    /// A message could not be parsed successfully.
     InvalidMessage,
 }
 

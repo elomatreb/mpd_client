@@ -24,14 +24,14 @@ use crate::MpdProtocolError;
 /// Since an error terminates a command list, there can only be one error in a response.
 #[derive(Clone, PartialEq, Eq)]
 pub struct Response {
-    /// The sucessful responses.
+    /// The successful responses.
     frames: Vec<Frame>,
-    /// The error, if one occured.
+    /// The error, if one occurred.
     error: Option<Error>,
 }
 
 impl Response {
-    /// Construct a new "empty" response. This is the simplest possible succesful response,
+    /// Construct a new "empty" response. This is the simplest possible successful response,
     /// consisting of a single empty frame.
     pub(crate) fn empty() -> Self {
         Self {
@@ -42,18 +42,18 @@ impl Response {
 
     /// Returns `true` if the response contains an error.
     ///
-    /// Even if this returns `true`, there may still be succesful frames in the response when the
+    /// Even if this returns `true`, there may still be successful frames in the response when the
     /// response is to a command list.
     pub fn is_error(&self) -> bool {
         self.error.is_some()
     }
 
-    /// Returns `true` if the response was entirely succesful (i.e. no errors).
+    /// Returns `true` if the response was entirely successful (i.e. no errors).
     pub fn is_success(&self) -> bool {
         !self.is_error()
     }
 
-    /// Get the number of succesful frames in the response.
+    /// Get the number of successful frames in the response.
     ///
     /// May be 0 if the response only consists of an error.
     pub fn successful_frames(&self) -> usize {
@@ -62,7 +62,7 @@ impl Response {
 
     /// Create an iterator over references to the frames in the response.
     ///
-    /// This yields `Result`s, with succesful frames becoming `Ok()`s and an error becoming a
+    /// This yields `Result`s, with successful frames becoming `Ok()`s and an error becoming a
     /// (final) `Err()`.
     pub fn frames(&self) -> FramesRef<'_> {
         FramesRef {
@@ -282,7 +282,7 @@ impl<'a> Iterator for FramesRef<'a> {
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
-        // .len() returns the number of succesful frames, add 1 if there is also an error
+        // .len() returns the number of successful frames, add 1 if there is also an error
         let len = self.frames.len() + if self.error.is_some() { 1 } else { 0 };
 
         (len, Some(len))
@@ -331,7 +331,7 @@ impl Iterator for Frames {
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
-        // .len() returns the number of succesful frames, add 1 if there is also an error
+        // .len() returns the number of successful frames, add 1 if there is also an error
         let len = self.frames.len() + if self.error.is_some() { 1 } else { 0 };
 
         (len, Some(len))

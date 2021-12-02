@@ -1,4 +1,4 @@
-//! A succesful response to a command.
+//! A successful response to a command.
 
 use bytes::BytesMut;
 
@@ -8,7 +8,7 @@ use std::slice;
 use std::sync::Arc;
 use std::vec;
 
-/// A succesful response to a command.
+/// A successful response to a command.
 ///
 /// Consists of zero or more key-value pairs, where the keys are not unique, and optionally a
 /// single binary blob.

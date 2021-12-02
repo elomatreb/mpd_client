@@ -159,7 +159,7 @@ where
                         }
                     }
 
-                    trace!("command sent succesfully");
+                    trace!("command sent successfully");
                 }
             }
         }
