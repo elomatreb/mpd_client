@@ -194,6 +194,11 @@ impl<IO> Connection<IO> {
     pub fn protocol_version(&self) -> &str {
         &self.protocol_version
     }
+
+    /// Extract the connection instance.
+    pub fn into_inner(self) -> IO {
+        self.io
+    }
 }
 
 fn read_to_buffer<'a, R: Read>(
@@ -369,6 +374,11 @@ impl<IO> AsyncConnection<IO> {
     /// Returns the protocol version the server is using.
     pub fn protocol_version(&self) -> &str {
         &self.0.protocol_version
+    }
+
+    /// Extract the connection instance.
+    pub fn into_inner(self) -> IO {
+        self.0.io
     }
 }
 
