@@ -140,6 +140,7 @@ impl<IO> Connection<IO> {
     ///  - Reading from the given IO resource returns an error
     ///  - Malformed response data is received
     ///  - The connection is closed while a response is in progress
+    #[tracing::instrument(skip(self), err)]
     pub fn receive(&mut self) -> Result<Option<Response>, MpdProtocolError>
     where
         IO: Read,
@@ -218,7 +219,7 @@ fn read_to_buffer<'a, R: Read>(
     Ok((&buf[..*total], read))
 }
 
-/// An **asynchronous** cconnection to an MPD server.
+/// An **asynchronous** connection to an MPD server.
 #[cfg(feature = "async")]
 #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
 #[derive(Debug)]
