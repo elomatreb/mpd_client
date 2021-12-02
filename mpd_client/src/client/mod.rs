@@ -10,7 +10,7 @@ use tokio::{
         oneshot,
     },
 };
-use tracing::{debug, error, span, trace, warn, Instrument, Level, Span};
+use tracing::{debug, error, span, trace, warn, Instrument, Level};
 
 use std::error::Error;
 use std::fmt;
@@ -42,7 +42,6 @@ pub type Connection = (Client, StateChanges);
 pub struct Client {
     commands_sender: Sender<(RawCommandList, CommandResponder)>,
     protocol_version: Arc<str>,
-    span: Span,
 }
 
 impl Client {
@@ -353,7 +352,6 @@ async fn do_connect<IO: AsyncRead + AsyncWrite + Unpin + Send + 'static>(
     let client = Client {
         commands_sender,
         protocol_version,
-        span,
     };
 
     Ok((client, state_changes))
