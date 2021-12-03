@@ -191,6 +191,64 @@ impl<IO> Connection<IO> {
         }
     }
 
+    /// Send a command and receive its response.
+    ///
+    /// This is essentially a shorthand for [`Connection::send`] followed by [`Connection::receive`].
+    ///
+    /// # Errors
+    ///
+    /// This will return an error if:
+    ///
+    ///  - Writing to or reading from the connection returns an error
+    ///  - Malformed response data is received
+    ///  - The connection is closed
+    #[tracing::instrument(skip(self), err)]
+    pub fn command(&mut self, command: Command) -> Result<Response, MpdProtocolError>
+    where
+        IO: Read + Write,
+    {
+        self.send(command)?;
+
+        if let Some(r) = self.receive()? {
+            Ok(r)
+        } else {
+            error!("connection was closed without a response to the command");
+            Err(MpdProtocolError::Io(io::Error::new(
+                io::ErrorKind::UnexpectedEof,
+                "connection was closed without a response to the command",
+            )))
+        }
+    }
+
+    /// Send a command list and receive its response(s).
+    ///
+    /// This is essentially a shorthand for [`Connection::send_list`] followed by [`Connection::receive`].
+    ///
+    /// # Errors
+    ///
+    /// This will return an error if:
+    ///
+    ///  - Writing to or reading from the connection returns an error
+    ///  - Malformed response data is received
+    ///  - The connection is closed
+    #[tracing::instrument(skip(self), err)]
+    pub fn command_list(&mut self, command_list: CommandList) -> Result<Response, MpdProtocolError>
+    where
+        IO: Read + Write,
+    {
+        self.send_list(command_list)?;
+
+        if let Some(r) = self.receive()? {
+            Ok(r)
+        } else {
+            error!("connection was closed without a response to the command");
+            Err(MpdProtocolError::Io(io::Error::new(
+                io::ErrorKind::UnexpectedEof,
+                "connection was closed without a response to the command",
+            )))
+        }
+    }
+
     /// Returns the protocol version the server is using.
     pub fn protocol_version(&self) -> &str {
         &self.protocol_version
@@ -369,6 +427,69 @@ impl<IO> AsyncConnection<IO> {
                     break Ok(None);
                 }
             }
+        }
+    }
+
+    /// Send a command and receive its response.
+    ///
+    /// This is essentially a shorthand for [`AsyncConnection::send`] followed by
+    /// [`AsyncConnection::receive`].
+    ///
+    /// # Errors
+    ///
+    /// This will return an error if:
+    ///
+    ///  - Writing to or reading from the connection returns an error
+    ///  - Malformed response data is received
+    ///  - The connection is closed
+    #[tracing::instrument(skip(self), err)]
+    pub async fn command(&mut self, command: Command) -> Result<Response, MpdProtocolError>
+    where
+        IO: AsyncRead + AsyncWrite + Unpin,
+    {
+        self.send(command).await?;
+
+        if let Some(r) = self.receive().await? {
+            Ok(r)
+        } else {
+            error!("connection was closed without a response to the command");
+            Err(MpdProtocolError::Io(io::Error::new(
+                io::ErrorKind::UnexpectedEof,
+                "connection was closed without a response to the command",
+            )))
+        }
+    }
+
+    /// Send a command list and receive its response(s).
+    ///
+    /// This is essentially a shorthand for [`AsyncConnection::send_list`] followed by
+    /// [`AsyncConnection::receive`].
+    ///
+    /// # Errors
+    ///
+    /// This will return an error if:
+    ///
+    ///  - Writing to or reading from the connection returns an error
+    ///  - Malformed response data is received
+    ///  - The connection is closed
+    #[tracing::instrument(skip(self), err)]
+    pub async fn command_list(
+        &mut self,
+        command_list: CommandList,
+    ) -> Result<Response, MpdProtocolError>
+    where
+        IO: AsyncRead + AsyncWrite + Unpin,
+    {
+        self.send_list(command_list).await?;
+
+        if let Some(r) = self.receive().await? {
+            Ok(r)
+        } else {
+            error!("connection was closed without a response to the command");
+            Err(MpdProtocolError::Io(io::Error::new(
+                io::ErrorKind::UnexpectedEof,
+                "connection was closed without a response to the command",
+            )))
         }
     }
 
@@ -610,5 +731,17 @@ mod tests_async {
 
         let response = connection.receive().await.unwrap();
         assert_matches!(response, None);
+    }
+
+    #[tokio::test]
+    async fn command() {
+        let io = MockBuilder::new()
+            .write(b"foo\n")
+            .read(b"bar: baz\nOK\n")
+            .build();
+        let mut connection = new_conn(io);
+
+        let resp = connection.command(Command::new("foo")).await.unwrap();
+        assert_eq!(resp.field_count(), 1);
     }
 }

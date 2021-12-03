@@ -18,8 +18,8 @@ pub use frame::Frame;
 use crate::parser::ParsedComponent;
 use crate::MpdProtocolError;
 
-/// Response to a command, consisting of an abitrary amount of [frames][Frame], which are responses
-/// to individual commands, and optionally a single [error][Error].
+/// Response to a command, consisting of an arbitrary amount of [frames][Frame], which are
+/// responses to individual commands, and optionally a single [error][Error].
 ///
 /// Since an error terminates a command list, there can only be one error in a response.
 #[derive(Clone, PartialEq, Eq)]
