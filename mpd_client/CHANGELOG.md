@@ -1,3 +1,19 @@
+# 0.7.0 (2021-12-09)
+
+ - Response types for typed commands are now marked as `#[non_exhaustive]` where reasonable.
+
+   This will allow future fields added to MPD to be added to the responses without breaking compatibility. As a result, the `Password` command and the `Client` method have been removed.
+ - Rework connection password handling.
+
+   Passwords are now specified on the initial connect and sent immediately after. This avoids issues where the `idle` command of the background task is sent before the password, resulting in spurious "permission denied" errors with restrictively configured MPD servers ([#10](https://github.com/elomatreb/mpd_client/issues/10)).
+ - Added new features introduced in version 0.23 of MPD:
+   - New tags (`ComposerSort`, `Ensemble`, `Location`, `Movement`, `MovementNumber`)
+   - New position options for certain commands (`Add`, `AddToPlaylist`, `RemoveFromPlaylist`)
+   - Rework `Move` command to use a builder
+ - Command types are no longer `Copy` if they have private fields (to aid in forward compatibility).
+ - The `Tag` enum now has forward-compatible equality based on the string representation. If a new variant is added, it will be equal to the `Other(_)` variant containing the same string.
+ - Updated `mpd_protocol` dependency.
+
 # 0.6.1 (2021-08-21)
 
  - Add a limited degree of backwards compatibility for protocol versions older than 0.20 ([#9](https://github.com/elomatreb/mpd_client/pull/9), thanks to D3fus).
