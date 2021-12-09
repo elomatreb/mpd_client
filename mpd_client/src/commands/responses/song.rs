@@ -203,23 +203,10 @@ where
     type Item = Result<(Song, Option<SongQueueData>), TypedResponseError>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let (mut key, mut value) = self.fields.next()?;
-
-        // Skip directory entries, encountered when using e.g. the `listallinfo` command.
-        if key.as_ref() == "directory" {
-            loop {
-                let next = self.fields.next()?;
-                match next.0.as_ref() {
-                    "directory" => continue,
-                    "Last-Modified" => continue,
-                    _ => {
-                        key = next.0;
-                        value = next.1;
-                        break;
-                    }
-                }
-            }
-        }
+        let (key, value) = self
+            .fields
+            // Skip directory entries, encountered when using e.g. the `listallinfo` command.
+            .find(|(k, _)| &**k != "directory" && &**k != "Last-Modified")?;
 
         let mut song = if key.as_ref() == "file" {
             Song::new(value)
