@@ -16,7 +16,7 @@ async = ["tokio"]
 
 [dependencies]
 bytes = "1.1.0"
-tokio = { version = "1.13.0", features = ["io-util", "macros"], optional = true }
+tokio = { version = "1.13.0", features = ["io-util"], optional = true }
 tracing = "0.1.29"
 hashbrown = "0.11.2"
 
