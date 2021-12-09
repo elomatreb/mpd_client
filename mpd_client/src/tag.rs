@@ -24,6 +24,9 @@ use mpd_protocol::command::Argument;
 /// are encountered using the `Other` variant. Additionally the enum is marked as non-exhaustive,
 /// so additional tags may be added without breaking compatibility.
 ///
+/// The equality is checked using the string representation, so `Other` variants are
+/// forward-compatible with new variants being added.
+///
 /// [`Song`]: crate::commands::responses::Song
 #[derive(Clone, Debug)]
 #[allow(missing_docs)]
@@ -181,6 +184,12 @@ impl PartialEq for Tag {
 
 impl Eq for Tag {}
 
+impl<'a> PartialEq<&'a str> for Tag {
+    fn eq(&self, other: &&'a str) -> bool {
+        self.as_str() == *other
+    }
+}
+
 impl PartialOrd for Tag {
     fn partial_cmp(&self, other: &Tag) -> Option<std::cmp::Ordering> {
         self.as_str().partial_cmp(&other.as_str())
@@ -270,5 +279,8 @@ mod tests {
             Tag::Other(Box::from("Album"))
         );
         assert_ne!(Tag::Other(Box::from("Foo")), Tag::Other(Box::from("Bar")));
+
+        assert_eq!(Tag::Artist, "Artist");
+        assert_eq!(Tag::Other(Box::from("Foo")), "Foo");
     }
 }
