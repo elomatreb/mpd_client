@@ -1,3 +1,10 @@
+# 0.13.0 (2021-12-09)
+
+ - Redesign connection interface.
+   - Instead of standalone functions for the synchronous API and a `Codec` implementation for the asynchronous API, connections are now represented as structs with either synchronous or asynchronous methods (`Connection` and `AsyncConnection`).
+
+     As a result, the asynchronous API no longer consists of a `Sink` for commands and a corresponding `Stream` of responses, but individual methods that either write commands or read a response.
+
 # 0.12.1 (2021-05-13)
 
  - No external changes (only doc fixes)
