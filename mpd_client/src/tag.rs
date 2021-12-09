@@ -1,7 +1,6 @@
 //! Metadata tags.
 
 use std::borrow::Cow;
-use std::convert::TryFrom;
 use std::error::Error;
 use std::fmt;
 use std::hash::{Hash, Hasher};

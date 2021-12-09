@@ -1,5 +1,3 @@
-use std::convert::TryFrom;
-
 use super::KeyValuePair;
 use crate::tag::Tag;
 
