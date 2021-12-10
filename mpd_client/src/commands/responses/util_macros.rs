@@ -50,10 +50,7 @@ macro_rules! parse {
         }
     };
     (duration, $value:ident, $field:literal) => {
-        Duration::from_secs_f64($value.parse().map_err(|e| TypedResponseError {
-            field: $field,
-            kind: ErrorKind::MalformedFloat(e),
-        })?)
+        $crate::commands::responses::parse_duration($field, &$value)?
     };
 }
 

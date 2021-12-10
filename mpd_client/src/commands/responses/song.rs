@@ -7,7 +7,7 @@ use std::num::ParseIntError;
 use std::path::Path;
 use std::time::Duration;
 
-use super::{ErrorKind, KeyValuePair, TypedResponseError};
+use super::{parse_duration, ErrorKind, KeyValuePair, TypedResponseError};
 use crate::commands::{SongId, SongPosition};
 use crate::tag::Tag;
 
@@ -222,6 +222,8 @@ where
         let mut range = None;
         let mut priority = 0;
 
+        let mut deprecated_time = None;
+
         loop {
             match self.fields.peek() {
                 Some((k, _)) => {
@@ -236,34 +238,17 @@ where
             let (key, value) = self.fields.next().unwrap();
             match key.as_ref() {
                 "file" => unreachable!(),
-                "duration" => match value.parse() {
-                    Ok(v) => song.duration = Some(Duration::from_secs_f64(v)),
-                    Err(e) => {
-                        return Some(Err(TypedResponseError {
-                            field: "duration",
-                            kind: ErrorKind::MalformedFloat(e),
-                        }))
-                    }
+                "duration" => match parse_duration("duration", &value) {
+                    Ok(d) => song.duration = Some(d),
+                    Err(e) => return Some(Err(e)),
                 },
-                // Just a worse "duration" field, but needed for backwards compatibility with
+                // Just a worse "duration" field, but present for backwards compatibility with
                 // protocol versions <0.20
-                "Time" if song.duration.is_none() => match value.parse() {
-                    Ok(v) => song.duration = Some(Duration::from_secs_f64(v)),
-                    Err(e) => {
-                        return Some(Err(TypedResponseError {
-                            field: "Time",
-                            kind: ErrorKind::MalformedFloat(e),
-                        }))
-                    }
+                "Time" => deprecated_time = Some(value),
+                "Range" => match parse_range_field(value) {
+                    Ok(r) => range = Some(r),
+                    Err(e) => return Some(Err(e)),
                 },
-                // If we already have a duration value, ignore the Time field
-                "Time" => (),
-                "Range" => {
-                    range = match parse_range_field(value) {
-                        Ok(r) => Some(r),
-                        Err(e) => return Some(Err(e)),
-                    }
-                }
                 "Format" => song.format = Some(value),
                 "Last-Modified" => {
                     let ts = match DateTime::parse_from_rfc3339(&value) {
@@ -305,6 +290,14 @@ where
             SongRange { from, to }
         });
 
+        // Fall back to deprecated `Time` field for the duration if we found no `duration` field.
+        if song.duration.is_none() && deprecated_time.is_some() {
+            match parse_duration("Time", deprecated_time.as_deref().unwrap()) {
+                Ok(d) => song.duration = Some(d),
+                Err(e) => return Some(Err(e)),
+            }
+        }
+
         let queue_data = match (song_pos, song_id) {
             (Some(position), Some(id)) => Some(SongQueueData {
                 position,
@@ -321,38 +314,25 @@ where
 
 fn parse_range_field(raw: String) -> Result<(Duration, Option<Duration>), TypedResponseError> {
     // The range follows the form "<start>-<end?>"
-    let sep = match raw.find('-') {
-        Some(s) => s,
+    let (from, to) = match raw.split_once('-') {
+        Some(v) => v,
         None => {
             return Err(TypedResponseError {
                 field: "Range",
                 kind: ErrorKind::InvalidValue(raw),
-            })
+            });
         }
     };
 
-    let from = raw[..sep].parse().map_err(|e| TypedResponseError {
-        field: "Range",
-        kind: ErrorKind::MalformedFloat(e),
-    })?;
-
-    let to = &raw[(sep + 1)..];
+    let from = parse_duration("Range", from)?;
 
     let to = if to.is_empty() {
         None
     } else {
-        let parsed = to.parse().map_err(|e| TypedResponseError {
-            field: "Range",
-            kind: ErrorKind::MalformedFloat(e),
-        })?;
-
-        Some(parsed)
+        Some(parse_duration("Range", to)?)
     };
 
-    Ok((
-        Duration::from_secs_f64(from),
-        to.map(Duration::from_secs_f64),
-    ))
+    Ok((from, to))
 }
 
 fn parse_field_error(field: &'static str, error: ParseIntError) -> TypedResponseError {
@@ -438,6 +418,30 @@ mod tests {
                 last_modified: None,
             }]
         );
+    }
+
+    #[test]
+    fn song_parser_invalid_durations() {
+        let input = key_value_pairs(vec![("file", "foo/bar.baz"), ("duration", "-1")]);
+        let err = Song::parse_frame(input, None).unwrap_err();
+        assert_eq!(err.kind, ErrorKind::InvalidTimestamp);
+        assert_eq!(err.field, "duration");
+
+        let input = key_value_pairs(vec![("file", "foo/bar.baz"), ("Time", "-1")]);
+        let err = Song::parse_frame(input, None).unwrap_err();
+        assert_eq!(err.kind, ErrorKind::InvalidTimestamp);
+        assert_eq!(err.field, "Time");
+
+        let input = key_value_pairs(vec![("file", "foo/bar.baz"), ("duration", "NaN")]);
+        let err = Song::parse_frame(input, None).unwrap_err();
+        assert_eq!(err.kind, ErrorKind::InvalidTimestamp);
+        assert_eq!(err.field, "duration");
+
+        let max = Box::leak(f64::MAX.to_string().into_boxed_str());
+        let input = key_value_pairs(vec![("file", "foo/bar.baz"), ("duration", &*max)]);
+        let err = Song::parse_frame(input, None).unwrap_err();
+        assert_eq!(err.kind, ErrorKind::InvalidTimestamp);
+        assert_eq!(err.field, "duration");
     }
 
     #[test]
@@ -546,13 +550,20 @@ mod tests {
             Ok((Duration::from_secs_f64(1.5), None))
         );
 
-        let err_string = String::from("foo");
         assert_eq!(
-            parse_range_field(err_string.clone()),
+            parse_range_field(String::from("foo")),
             Err(TypedResponseError {
                 field: "Range",
-                kind: ErrorKind::InvalidValue(err_string),
+                kind: ErrorKind::InvalidValue(String::from("foo")),
             })
+        );
+
+        assert_eq!(
+            parse_range_field(String::from("1.000--5.000")),
+            Err(TypedResponseError {
+                field: "Range",
+                kind: ErrorKind::InvalidTimestamp,
+            }),
         );
     }
 }

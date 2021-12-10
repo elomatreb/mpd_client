@@ -57,14 +57,14 @@ enum ErrorKind {
     MalformedInteger(ParseIntError),
     /// A field containing a float (duration) failed to parse.
     MalformedFloat(ParseFloatError),
+    /// A field containing a duration contained an impossible value (e.g. negative or NaN).
+    InvalidTimestamp,
     /// A field containing a timestamp failed to parse.
     MalformedTimestamp(ParseError),
 }
 
 impl fmt::Display for TypedResponseError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Error converting response: ")?;
-
         match &self.kind {
             ErrorKind::Missing => write!(f, "field {:?} is required but missing", self.field),
             ErrorKind::InvalidValue(val) => {
@@ -74,9 +74,11 @@ impl fmt::Display for TypedResponseError {
                 write!(f, "expected field {:?} but found {:?}", self.field, found)
             }
             ErrorKind::MalformedInteger(_) => write!(f, "field {:?} is not an integer", self.field),
-            ErrorKind::MalformedFloat(_) => write!(f, "field {:?} is not a float", self.field),
+            ErrorKind::MalformedFloat(_) | ErrorKind::InvalidTimestamp => {
+                write!(f, "field {:?} is not a valid duration", self.field)
+            }
             ErrorKind::MalformedTimestamp(_) => {
-                write!(f, "field {:?} is not a timestamp", self.field)
+                write!(f, "field {:?} is not a valid timestamp", self.field)
             }
         }
     }
@@ -90,6 +92,23 @@ impl Error for TypedResponseError {
             ErrorKind::MalformedTimestamp(e) => Some(e),
             _ => None,
         }
+    }
+}
+
+fn parse_duration(field: &'static str, value: &str) -> Result<Duration, TypedResponseError> {
+    let value = value.parse::<f64>().map_err(|e| TypedResponseError {
+        field,
+        kind: ErrorKind::MalformedFloat(e),
+    })?;
+
+    // Check if the parsed value is a reasonable duration, to avoid a panic from `from_secs_f64`
+    if value >= 0.0 && value <= Duration::MAX.as_secs_f64() && value.is_finite() {
+        Ok(Duration::from_secs_f64(value))
+    } else {
+        Err(TypedResponseError {
+            field,
+            kind: ErrorKind::InvalidTimestamp,
+        })
     }
 }
 
