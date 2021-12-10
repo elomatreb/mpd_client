@@ -1,3 +1,7 @@
+# 0.7.1 (2021-12-10)
+
+ - Fix panic when parsing a `Song` response that contains negative or invalid duration values.
+
 # 0.7.0 (2021-12-09)
 
  - Response types for typed commands are now marked as `#[non_exhaustive]` where reasonable.
