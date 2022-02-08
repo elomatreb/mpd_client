@@ -14,7 +14,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Connect via TCP
     let connection = TcpStream::connect("localhost:6600").await?;
     // Or through a Unix socket
-    // let connection = UnixSocket::connect("/run/user/1000/mpd").await?;
+    // let connection = UnixStream::connect("/run/user/1000/mpd").await?;
 
     // The client is used to issue commands, and state_changes is an async stream of state change
     // notifications
