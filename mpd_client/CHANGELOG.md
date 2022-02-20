@@ -1,3 +1,8 @@
+# 0.7.2 (2022-02-20)
+
+ - Add a utility method for connecting with an *optional* password (`Client::connect_with_password_opt`).
+ - Require tokio 0.16.1.
+
 # 0.7.1 (2021-12-10)
 
  - Fix panic when parsing a `Song` response that contains negative or invalid duration values.
