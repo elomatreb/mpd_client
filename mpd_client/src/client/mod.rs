@@ -90,6 +90,29 @@ impl Client {
         do_connect(connection, Some(password)).await
     }
 
+    /// Connect to the possibly password-protected MPD server using the given connection and password.
+    ///
+    /// Commonly used with [TCP connections](tokio::net::TcpStream) or [Unix
+    /// sockets](tokio::net::UnixStream).
+    ///
+    /// # Panics
+    ///
+    /// Since this spawns a task internally, this will panic when called outside a Tokio runtime.
+    ///
+    /// # Errors
+    ///
+    /// This will return an error if sending the initial commands over the given transport fails,
+    /// or if the password is incorrect.
+    pub async fn connect_with_password_opt<C>(
+        connection: C,
+        password: Option<&str>,
+    ) -> Result<Connection, ConnectWithPasswordError>
+    where
+        C: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+    {
+        do_connect(connection, password).await
+    }
+
     /// Send a [command].
     ///
     /// This will automatically parse the response to a proper type.
