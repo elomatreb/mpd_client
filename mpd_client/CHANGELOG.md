@@ -1,3 +1,7 @@
+# 0.7.3 (2022-03-15)
+
+ - Fix `List::group_by` generating invalid commands when used (due to missing keyword).
+
 # 0.7.2 (2022-02-20)
 
  - Add a utility method for connecting with an *optional* password (`Client::connect_with_password_opt`).
