@@ -567,6 +567,7 @@ impl Command for List {
         }
 
         if let Some(group_by) = self.group_by {
+            command.add_argument("group").unwrap();
             command.add_argument(group_by).unwrap();
         }
 
@@ -1052,6 +1053,33 @@ mod tests {
                 .argument("Artist")
                 .argument("window")
                 .argument("3:")
+        );
+    }
+
+    #[test]
+    fn command_list() {
+        assert_eq!(
+            List::new(Tag::Album).into_command(),
+            RawCommand::new("list").argument("Album")
+        );
+
+        let filter = Filter::tag(Tag::Artist, "Foo");
+        assert_eq!(
+            List::new(Tag::Album).filter(filter.clone()).into_command(),
+            RawCommand::new("list").argument("Album").argument(filter)
+        );
+
+        let filter = Filter::tag(Tag::Artist, "Foo");
+        assert_eq!(
+            List::new(Tag::Album)
+                .filter(filter.clone())
+                .group_by(Tag::AlbumArtist)
+                .into_command(),
+            RawCommand::new("list")
+                .argument("Album")
+                .argument(filter)
+                .argument("group")
+                .argument("AlbumArtist")
         );
     }
 
