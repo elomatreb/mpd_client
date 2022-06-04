@@ -1,3 +1,7 @@
+# 0.7.4 (2022-06-04)
+
+ - Fix `ListAllIn` error when response includes playlist objects.
+
 # 0.7.3 (2022-03-15)
 
  - Fix `List::group_by` generating invalid commands when used (due to missing keyword).
