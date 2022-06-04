@@ -205,10 +205,11 @@ where
     fn next(&mut self) -> Option<Self::Item> {
         let (key, value) = self
             .fields
-            // Skip directory entries, encountered when using e.g. the `listallinfo` command.
-            .find(|(k, _)| &**k != "directory" && &**k != "Last-Modified")?;
+            // Skip directory or playlist entries, encountered when using e.g. the `listallinfo`
+            // command, as well as the associated modification time.
+            .find(|(k, _)| !matches!(&**k, "directory" | "playlist" | "Last-Modified"))?;
 
-        let mut song = if key.as_ref() == "file" {
+        let mut song = if &*key == "file" {
             Song::new(value)
         } else {
             return Some(Err(TypedResponseError {
@@ -228,7 +229,7 @@ where
             match self.fields.peek() {
                 Some((k, _)) => {
                     // If the next key starts another file, the current iteration is done
-                    if k.as_ref() == "file" || k.as_ref() == "directory" {
+                    if let "file" | "directory" | "playlist" = &**k {
                         break;
                     }
                 }
@@ -236,8 +237,8 @@ where
             }
 
             let (key, value) = self.fields.next().unwrap();
-            match key.as_ref() {
-                "file" => unreachable!(),
+            match &*key {
+                "file" | "directory" | "playlist" => unreachable!(),
                 "duration" => match parse_duration("duration", &value) {
                     Ok(d) => song.duration = Some(d),
                     Err(e) => return Some(Err(e)),
@@ -417,6 +418,38 @@ mod tests {
                 format: None,
                 last_modified: None,
             }]
+        );
+    }
+
+    #[test]
+    fn song_parser_playlist_item() {
+        // https://github.com/elomatreb/mpd_client/issues/11
+        let input = key_value_pairs(vec![
+            ("file", "foo/bar.baz"),
+            ("playlist", "foo/asdf.m3u"),
+            ("file", "foo/qux.baz"),
+        ]);
+
+        let songs = Song::parse_frame(input, None).unwrap();
+
+        assert_eq!(
+            songs,
+            vec![
+                Song {
+                    url: String::from("foo/bar.baz"),
+                    duration: None,
+                    tags: HashMap::new(),
+                    format: None,
+                    last_modified: None,
+                },
+                Song {
+                    url: String::from("foo/qux.baz"),
+                    duration: None,
+                    tags: HashMap::new(),
+                    format: None,
+                    last_modified: None,
+                }
+            ]
         );
     }
 
