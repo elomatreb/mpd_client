@@ -64,6 +64,8 @@ macro_rules! single_arg_command {
     };
 }
 
+argless_command!(Ping, "ping", res::Empty);
+
 argless_command!(Next, "next", res::Empty);
 argless_command!(Previous, "previous", res::Empty);
 argless_command!(Stop, "stop", res::Empty);
