@@ -863,6 +863,79 @@ impl Command for AlbumArtEmbedded {
     }
 }
 
+/// `tagtypes` command.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TagTypes(TagTypesAction);
+
+impl TagTypes {
+    /// Enable all tags.
+    pub fn enable_all() -> TagTypes {
+        TagTypes(TagTypesAction::EnableAll)
+    }
+
+    /// Disable all tags.
+    pub fn disable_all() -> TagTypes {
+        TagTypes(TagTypesAction::Clear)
+    }
+
+    /// Disable the given list of tags.
+    ///
+    /// # Panics
+    ///
+    /// Panics if called with an empty list of tags.
+    pub fn disable(tags: Vec<Tag>) -> TagTypes {
+        assert_ne!(tags.len(), 0, "The list of tags must not be empty");
+        TagTypes(TagTypesAction::Disable(tags))
+    }
+
+    /// Enable the given list of tags.
+    ///
+    /// # Panics
+    ///
+    /// Panics if called with an empty list of tags.
+    pub fn enable(tags: Vec<Tag>) -> TagTypes {
+        assert_ne!(tags.len(), 0, "The list of tags must not be empty");
+        TagTypes(TagTypesAction::Enable(tags))
+    }
+}
+
+impl Command for TagTypes {
+    type Response = res::Empty;
+
+    fn into_command(self) -> RawCommand {
+        let mut cmd = RawCommand::new("tagtypes");
+
+        match self.0 {
+            TagTypesAction::EnableAll => cmd.add_argument("all").unwrap(),
+            TagTypesAction::Clear => cmd.add_argument("clear").unwrap(),
+            TagTypesAction::Disable(tags) => {
+                cmd.add_argument("disable").unwrap();
+
+                for tag in tags {
+                    cmd.add_argument(tag).unwrap();
+                }
+            }
+            TagTypesAction::Enable(tags) => {
+                cmd.add_argument("enable").unwrap();
+
+                for tag in tags {
+                    cmd.add_argument(tag).unwrap();
+                }
+            }
+        }
+
+        cmd
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum TagTypesAction {
+    EnableAll,
+    Clear,
+    Disable(Vec<Tag>),
+    Enable(Vec<Tag>),
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1113,6 +1186,35 @@ mod tests {
             RawCommand::new("playlistdelete")
                 .argument("foo")
                 .argument("3:6"),
+        );
+    }
+
+    #[test]
+    fn command_tagtypes() {
+        assert_eq!(
+            TagTypes::enable_all().into_command(),
+            RawCommand::new("tagtypes").argument("all"),
+        );
+
+        assert_eq!(
+            TagTypes::disable_all().into_command(),
+            RawCommand::new("tagtypes").argument("clear"),
+        );
+
+        assert_eq!(
+            TagTypes::disable(vec![Tag::Album, Tag::Title]).into_command(),
+            RawCommand::new("tagtypes")
+                .argument("disable")
+                .argument("Album")
+                .argument("Title")
+        );
+
+        assert_eq!(
+            TagTypes::enable(vec![Tag::Album, Tag::Title]).into_command(),
+            RawCommand::new("tagtypes")
+                .argument("enable")
+                .argument("Album")
+                .argument("Title")
         );
     }
 }
