@@ -1,3 +1,8 @@
+# 0.7.5
+
+ - Add `Ping` command.
+ - Add commands for managing enabled metadata tags (`TagTypes` and `EnabledTagTypes`).
+
 # 0.7.4 (2022-06-04)
 
  - Fix `ListAllIn` error when response includes playlist objects.
