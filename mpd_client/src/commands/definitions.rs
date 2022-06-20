@@ -79,6 +79,8 @@ argless_command!(CurrentSong, "currentsong", Option<res::SongInQueue>);
 
 argless_command!(GetPlaylists, "listplaylists", Vec<res::Playlist>);
 
+argless_command!(EnabledTagTypes, "tagtypes", Vec<Tag>);
+
 single_arg_command!(SetRandom, bool, "random", res::Empty);
 single_arg_command!(SetConsume, bool, "consume", res::Empty);
 single_arg_command!(SetRepeat, bool, "repeat", res::Empty);
@@ -863,7 +865,7 @@ impl Command for AlbumArtEmbedded {
     }
 }
 
-/// `tagtypes` command.
+/// Manage enabled tag types.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TagTypes(TagTypesAction);
 
@@ -1216,5 +1218,10 @@ mod tests {
                 .argument("Album")
                 .argument("Title")
         );
+    }
+
+    #[test]
+    fn command_enabled_tagtypes() {
+        assert_eq!(EnabledTagTypes.into_command(), RawCommand::new("tagtypes"));
     }
 }

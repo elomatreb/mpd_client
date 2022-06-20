@@ -19,6 +19,7 @@ use std::time::Duration;
 use crate::commands::{SingleMode, SongId, SongPosition};
 use crate::raw::Frame;
 use crate::sealed;
+use crate::tag::Tag;
 
 pub use list::List;
 pub use playlist::Playlist;
@@ -334,5 +335,29 @@ impl Response for Option<AlbumArt> {
             mime: frame.get("type"),
             data,
         }))
+    }
+}
+
+impl sealed::Sealed for Vec<Tag> {}
+impl Response for Vec<Tag> {
+    fn from_frame(frame: Frame) -> Result<Self, TypedResponseError> {
+        let mut out = Vec::with_capacity(frame.fields_len());
+        for (key, value) in frame {
+            if &*key != "tagtype" {
+                return Err(TypedResponseError {
+                    field: "tagtype",
+                    kind: ErrorKind::UnexpectedField(String::from(&*key)),
+                });
+            }
+
+            let tag = Tag::try_from(&*value).map_err(|_| TypedResponseError {
+                field: "tagtype",
+                kind: ErrorKind::InvalidValue(value),
+            })?;
+
+            out.push(tag);
+        }
+
+        Ok(out)
     }
 }
