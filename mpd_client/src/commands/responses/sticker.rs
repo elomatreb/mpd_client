@@ -17,7 +17,7 @@ impl StickerGet {
 
         // server returns the key/value
         // we know the key so just get the value
-        let value = pair.splitn(2, "=").nth(1).unwrap().to_string();
+        let value = pair.split_once('=').unwrap().1.to_string();
 
         Self { value }
     }
@@ -44,10 +44,10 @@ impl StickerList {
         let value = raw
             .into_iter()
             .map(|(_, value): KeyValuePair| {
-                let mut split = value.splitn(2, "=");
+                let split = value.split_once('=').unwrap();
                 (
-                    split.next().unwrap().to_string(),
-                    split.next().unwrap().to_string(),
+                    split.0.to_string(),
+                    split.1.to_string(),
                 )
             })
             .collect();
@@ -74,8 +74,6 @@ pub struct StickerFind {
 
 impl StickerFind {
     pub(crate) fn from_frame(raw: impl IntoIterator<Item = KeyValuePair>) -> Self {
-        // println!("{:?}", raw.into_iter().collect::<Vec<(KeyValuePair)>>());
-
         let mut map = HashMap::new();
 
         let mut file = String::new();
@@ -84,9 +82,8 @@ impl StickerFind {
             |(key, value): KeyValuePair| match key.to_string().as_str() {
                 "file" => file = value,
                 "sticker" => {
-                    let mut split = value.splitn(2, "=");
-                    let value = split.nth(1).unwrap().to_string();
-                    map.insert(file.clone(), value);
+                    let (_, value) = value.split_once('=').unwrap();
+                    map.insert(file.clone(), value.to_string());
                 }
                 _ => panic!("Invalid response received from server"),
             },
