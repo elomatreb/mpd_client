@@ -938,6 +938,189 @@ enum TagTypesAction {
     Enable(Vec<Tag>),
 }
 
+/// `sticker get` command
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StickerGet {
+    uri: String,
+    name: String,
+}
+
+impl StickerGet {
+    /// Get the sticker `name` for the song at `uri`
+    pub fn new(uri: String, name: String) -> Self {
+        Self { uri, name }
+    }
+}
+
+impl Command for StickerGet {
+    type Response = res::StickerGet;
+
+    fn into_command(self) -> RawCommand {
+        RawCommand::new("sticker")
+            .argument("get")
+            .argument("song")
+            .argument(self.uri)
+            .argument(self.name)
+    }
+}
+
+/// `sticker set` command
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StickerSet {
+    uri: String,
+    name: String,
+    value: String,
+}
+
+impl StickerSet {
+    /// Set the sticker `name` to `value` for the song at `uri`
+    pub fn new(uri: String, name: String, value: String) -> Self {
+        Self { uri, name, value }
+    }
+}
+
+impl Command for StickerSet {
+    type Response = res::Empty;
+
+    fn into_command(self) -> RawCommand {
+        RawCommand::new("sticker")
+            .argument("set")
+            .argument("song")
+            .argument(self.uri)
+            .argument(self.name)
+            .argument(self.value)
+    }
+}
+
+/// `sticker delete` command
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StickerDelete {
+    uri: String,
+    name: String,
+}
+
+impl StickerDelete {
+    /// Delete the sticker `name` for the song at `uri`
+    pub fn new(uri: String, name: String) -> Self {
+        Self { uri, name }
+    }
+}
+
+impl Command for StickerDelete {
+    type Response = res::Empty;
+
+    fn into_command(self) -> RawCommand {
+        RawCommand::new("sticker")
+            .argument("delete")
+            .argument("song")
+            .argument(self.uri)
+            .argument(self.name)
+    }
+}
+
+/// `sticker list` command
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StickerList {
+    uri: String,
+}
+
+impl StickerList {
+    /// Lists all stickers on the song at `uri`
+    pub fn new(uri: String) -> Self {
+        Self { uri }
+    }
+}
+
+impl Command for StickerList {
+    type Response = res::StickerList;
+
+    fn into_command(self) -> RawCommand {
+        RawCommand::new("sticker")
+            .argument("list")
+            .argument("song")
+            .argument(self.uri)
+    }
+}
+
+/// Operator for full (filtered) version
+/// of `sticker find` command
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum StickerFindOperator {
+    /// = operator
+    Equals,
+    /// < operator
+    LessThan,
+    /// > operator
+    GreaterThan,
+}
+
+/// `sticker find` command
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StickerFind {
+    uri: String,
+    name: String,
+    operator: Option<StickerFindOperator>,
+    value: Option<String>,
+}
+
+impl StickerFind {
+    /// Lists all stickers on the song at `uri`
+    pub fn new(uri: String, name: String) -> Self {
+        Self {
+            uri,
+            name,
+            operator: None,
+            value: None,
+        }
+    }
+
+    /// Find stickers where their value is equal to `value`
+    pub fn where_eq(&self, value: String) -> Self {
+        self.r#where(StickerFindOperator::Equals, value)
+    }
+
+    /// Find stickers where their value is greater than `value`
+    pub fn where_gt(&self, value: String) -> Self {
+        self.r#where(StickerFindOperator::GreaterThan, value)
+    }
+
+    /// Find stickers where their value is less than `value`
+    pub fn where_lt(&self, value: String) -> Self {
+        self.r#where(StickerFindOperator::LessThan, value)
+    }
+
+    fn r#where(&self, operator: StickerFindOperator, value: String) -> Self {
+        Self {
+            name: self.name.clone(),
+            uri: self.uri.clone(),
+            operator: Some(operator),
+            value: Some(value),
+        }
+    }
+}
+
+impl Command for StickerFind {
+    type Response = res::StickerFind;
+
+    fn into_command(self) -> RawCommand {
+        let base = RawCommand::new("sticker")
+            .argument("find")
+            .argument("song")
+            .argument(self.uri)
+            .argument(self.name);
+
+        if let (Some(operator), Some(value)) = (self.operator, self.value) {
+            match operator {
+                StickerFindOperator::Equals => base.argument("=").argument(value),
+                StickerFindOperator::GreaterThan => base.argument(">").argument(value),
+                StickerFindOperator::LessThan => base.argument("<").argument(value),
+            }
+        } else {
+            base
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1223,5 +1406,78 @@ mod tests {
     #[test]
     fn command_enabled_tagtypes() {
         assert_eq!(EnabledTagTypes.into_command(), RawCommand::new("tagtypes"));
+    }
+
+    #[test]
+    fn command_sticker_get() {
+        assert_eq!(
+            StickerGet::new("foo".to_string(), "bar".to_string()).into_command(),
+            RawCommand::new("sticker")
+                .argument("get")
+                .argument("song")
+                .argument("foo")
+                .argument("bar")
+        );
+    }
+
+    #[test]
+    fn command_sticker_set() {
+        assert_eq!(
+            StickerSet::new("foo".to_string(), "bar".to_string(), "baz".to_string()).into_command(),
+            RawCommand::new("sticker")
+                .argument("set")
+                .argument("song")
+                .argument("foo")
+                .argument("bar")
+                .argument("baz")
+        );
+    }
+
+    #[test]
+    fn command_sticker_delete() {
+        assert_eq!(
+            StickerDelete::new("foo".to_string(), "bar".to_string()).into_command(),
+            RawCommand::new("sticker")
+                .argument("delete")
+                .argument("song")
+                .argument("foo")
+                .argument("bar")
+        );
+    }
+
+    #[test]
+    fn command_sticker_list() {
+        assert_eq!(
+            StickerList::new("foo".to_string()).into_command(),
+            RawCommand::new("sticker")
+                .argument("list")
+                .argument("song")
+                .argument("foo")
+        );
+    }
+
+    #[test]
+    fn command_sticker_find() {
+        assert_eq!(
+            StickerFind::new("foo".to_string(), "bar".to_string()).into_command(),
+            RawCommand::new("sticker")
+                .argument("find")
+                .argument("song")
+                .argument("foo")
+                .argument("bar")
+        );
+
+        assert_eq!(
+            StickerFind::new("foo".to_string(), "bar".to_string())
+                .where_eq("baz".to_string())
+                .into_command(),
+            RawCommand::new("sticker")
+                .argument("find")
+                .argument("song")
+                .argument("foo")
+                .argument("bar")
+                .argument("=")
+                .argument("baz")
+        );
     }
 }
