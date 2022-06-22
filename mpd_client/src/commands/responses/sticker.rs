@@ -45,10 +45,7 @@ impl StickerList {
             .into_iter()
             .map(|(_, value): KeyValuePair| {
                 let split = value.split_once('=').unwrap();
-                (
-                    split.0.to_string(),
-                    split.1.to_string(),
-                )
+                (split.0.to_string(), split.1.to_string())
             })
             .collect();
 
