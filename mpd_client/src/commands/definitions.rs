@@ -1059,7 +1059,7 @@ enum StickerFindOperator {
 pub struct StickerFind {
     uri: String,
     name: String,
-    filter: Option<(StickerFindOperator, String)>
+    filter: Option<(StickerFindOperator, String)>,
 }
 
 impl StickerFind {
@@ -1068,7 +1068,7 @@ impl StickerFind {
         Self {
             uri,
             name,
-            filter: None
+            filter: None,
         }
     }
 
@@ -1091,7 +1091,7 @@ impl StickerFind {
         Self {
             name: self.name,
             uri: self.uri,
-            filter: Some((operator, value))
+            filter: Some((operator, value)),
         }
     }
 }
