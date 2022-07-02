@@ -343,21 +343,21 @@ impl Response for Option<AlbumArt> {
 impl sealed::Sealed for StickerGet {}
 impl Response for StickerGet {
     fn from_frame(frame: Frame) -> Result<Self, TypedResponseError> {
-        Ok(StickerGet::from_frame(frame))
+        StickerGet::from_frame(frame)
     }
 }
 
 impl sealed::Sealed for StickerList {}
 impl Response for StickerList {
     fn from_frame(frame: Frame) -> Result<Self, TypedResponseError> {
-        Ok(StickerList::from_frame(frame))
+        StickerList::from_frame(frame)
     }
 }
 
 impl sealed::Sealed for StickerFind {}
 impl Response for StickerFind {
     fn from_frame(frame: Frame) -> Result<Self, TypedResponseError> {
-        Ok(StickerFind::from_frame(frame))
+        StickerFind::from_frame(frame)
     }
 }
 

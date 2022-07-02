@@ -1045,7 +1045,7 @@ impl Command for StickerList {
 /// Operator for full (filtered) version
 /// of `sticker find` command
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum StickerFindOperator {
+enum StickerFindOperator {
     /// = operator
     Equals,
     /// < operator
@@ -1059,8 +1059,7 @@ pub enum StickerFindOperator {
 pub struct StickerFind {
     uri: String,
     name: String,
-    operator: Option<StickerFindOperator>,
-    value: Option<String>,
+    filter: Option<(StickerFindOperator, String)>
 }
 
 impl StickerFind {
@@ -1069,32 +1068,30 @@ impl StickerFind {
         Self {
             uri,
             name,
-            operator: None,
-            value: None,
+            filter: None
         }
     }
 
     /// Find stickers where their value is equal to `value`
-    pub fn where_eq(&self, value: String) -> Self {
-        self.r#where(StickerFindOperator::Equals, value)
+    pub fn where_eq(self, value: String) -> Self {
+        self.add_filter(StickerFindOperator::Equals, value)
     }
 
     /// Find stickers where their value is greater than `value`
-    pub fn where_gt(&self, value: String) -> Self {
-        self.r#where(StickerFindOperator::GreaterThan, value)
+    pub fn where_gt(self, value: String) -> Self {
+        self.add_filter(StickerFindOperator::GreaterThan, value)
     }
 
     /// Find stickers where their value is less than `value`
-    pub fn where_lt(&self, value: String) -> Self {
-        self.r#where(StickerFindOperator::LessThan, value)
+    pub fn where_lt(self, value: String) -> Self {
+        self.add_filter(StickerFindOperator::LessThan, value)
     }
 
-    fn r#where(&self, operator: StickerFindOperator, value: String) -> Self {
+    fn add_filter(self, operator: StickerFindOperator, value: String) -> Self {
         Self {
-            name: self.name.clone(),
-            uri: self.uri.clone(),
-            operator: Some(operator),
-            value: Some(value),
+            name: self.name,
+            uri: self.uri,
+            filter: Some((operator, value))
         }
     }
 }
@@ -1109,7 +1106,7 @@ impl Command for StickerFind {
             .argument(self.uri)
             .argument(self.name);
 
-        if let (Some(operator), Some(value)) = (self.operator, self.value) {
+        if let Some((operator, value)) = self.filter {
             match operator {
                 StickerFindOperator::Equals => base.argument("=").argument(value),
                 StickerFindOperator::GreaterThan => base.argument(">").argument(value),

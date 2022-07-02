@@ -1,4 +1,6 @@
 use super::KeyValuePair;
+use crate::commands::responses::ErrorKind::UnexpectedField;
+use crate::commands::responses::{ErrorKind, TypedResponseError};
 use std::collections::HashMap;
 
 /// Response to the [`sticker get`] command.
@@ -12,14 +14,16 @@ pub struct StickerGet {
 }
 
 impl StickerGet {
-    pub(crate) fn from_frame(raw: impl IntoIterator<Item = KeyValuePair>) -> Self {
+    pub(crate) fn from_frame(
+        raw: impl IntoIterator<Item = KeyValuePair>,
+    ) -> Result<Self, TypedResponseError> {
         let pair: String = raw.into_iter().map(|(_, value)| value).next().unwrap();
 
         // server returns the key/value
         // we know the key so just get the value
-        let value = pair.split_once('=').unwrap().1.to_string();
+        let (_, value) = parse_tag(pair)?;
 
-        Self { value }
+        Ok(Self { value })
     }
 }
 
@@ -40,16 +44,15 @@ pub struct StickerList {
 }
 
 impl StickerList {
-    pub(crate) fn from_frame(raw: impl IntoIterator<Item = KeyValuePair>) -> Self {
+    pub(crate) fn from_frame(
+        raw: impl IntoIterator<Item = KeyValuePair>,
+    ) -> Result<Self, TypedResponseError> {
         let value = raw
             .into_iter()
-            .map(|(_, value): KeyValuePair| {
-                let split = value.split_once('=').unwrap();
-                (split.0.to_string(), split.1.to_string())
-            })
-            .collect();
+            .map(|(_, tag): KeyValuePair| parse_tag(tag))
+            .collect::<Result<_, _>>();
 
-        Self { value }
+        Ok(Self { value: value? })
     }
 }
 
@@ -70,22 +73,40 @@ pub struct StickerFind {
 }
 
 impl StickerFind {
-    pub(crate) fn from_frame(raw: impl IntoIterator<Item = KeyValuePair>) -> Self {
+    pub(crate) fn from_frame(
+        raw: impl IntoIterator<Item = KeyValuePair>,
+    ) -> Result<Self, TypedResponseError> {
         let mut map = HashMap::new();
 
         let mut file = String::new();
 
-        raw.into_iter().for_each(
-            |(key, value): KeyValuePair| match key.to_string().as_str() {
-                "file" => file = value,
+        for (key, tag) in raw {
+            match &*key {
+                "file" => file = tag,
                 "sticker" => {
-                    let (_, value) = value.split_once('=').unwrap();
+                    let (_, value) = parse_tag(tag)?;
                     map.insert(file.clone(), value.to_string());
                 }
-                _ => panic!("Invalid response received from server"),
-            },
-        );
+                _ => {
+                    return Err(TypedResponseError {
+                        field: "sticker",
+                        kind: UnexpectedField(key.to_string()),
+                    })
+                }
+            }
+        }
 
-        Self { value: map }
+        Ok(Self { value: map })
+    }
+}
+
+/// Parses a `key=value` tag into its key and value strings
+fn parse_tag(tag: String) -> Result<(String, String), TypedResponseError> {
+    match tag.split_once('=') {
+        Some((key, value)) => Ok((key.to_string(), value.to_string())),
+        None => Err(TypedResponseError {
+            field: "sticker",
+            kind: ErrorKind::InvalidValue(tag),
+        }),
     }
 }
