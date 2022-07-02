@@ -579,6 +579,44 @@ impl Command for List {
     }
 }
 
+/// `count` command.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Count {
+    filter: Filter,
+    group_by: Option<Tag>,
+}
+
+impl Count {
+    /// Count the number of songs and their total playtime matching the given `filter`.
+    pub fn new(filter: Filter) -> Self {
+        Count {
+            filter,
+            group_by: None,
+        }
+    }
+
+    /// Group results by the given tag.
+    pub fn group_by(mut self, group_by: Tag) -> Self {
+        self.group_by = Some(group_by);
+        self
+    }
+}
+
+impl Command for Count {
+    type Response = res::List;
+
+    fn into_command(self) -> RawCommand {
+        let mut command = RawCommand::new("count").argument(self.filter);
+
+        if let Some(group_by) = self.group_by {
+            command.add_argument("group").unwrap();
+            command.add_argument(group_by).unwrap();
+        }
+
+        command
+    }
+}
+
 /// `rename` command.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RenamePlaylist {
@@ -1154,6 +1192,26 @@ mod tests {
                 .into_command(),
             RawCommand::new("list")
                 .argument("Album")
+                .argument(filter)
+                .argument("group")
+                .argument("AlbumArtist")
+        );
+    }
+
+    #[test]
+    fn command_count() {
+        let filter = Filter::tag(Tag::Artist, "Foo");
+        assert_eq!(
+            Count::new(filter.clone()).into_command(),
+            RawCommand::new("count").argument(filter)
+        );
+
+        let filter = Filter::tag(Tag::Artist, "Foo");
+        assert_eq!(
+            Count::new(filter.clone())
+                .group_by(Tag::AlbumArtist)
+                .into_command(),
+            RawCommand::new("count")
                 .argument(filter)
                 .argument("group")
                 .argument("AlbumArtist")
