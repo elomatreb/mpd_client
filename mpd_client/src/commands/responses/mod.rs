@@ -6,6 +6,7 @@ mod util_macros;
 mod list;
 mod playlist;
 mod song;
+mod sticker;
 
 use bytes::Bytes;
 use chrono::ParseError;
@@ -24,6 +25,7 @@ use crate::tag::Tag;
 pub use list::List;
 pub use playlist::Playlist;
 pub use song::{Song, SongInQueue, SongRange};
+pub use sticker::{StickerFind, StickerGet, StickerList};
 
 type KeyValuePair = (Arc<str>, String);
 
@@ -335,6 +337,27 @@ impl Response for Option<AlbumArt> {
             mime: frame.get("type"),
             data,
         }))
+    }
+}
+
+impl sealed::Sealed for StickerGet {}
+impl Response for StickerGet {
+    fn from_frame(frame: Frame) -> Result<Self, TypedResponseError> {
+        StickerGet::from_frame(frame)
+    }
+}
+
+impl sealed::Sealed for StickerList {}
+impl Response for StickerList {
+    fn from_frame(frame: Frame) -> Result<Self, TypedResponseError> {
+        StickerList::from_frame(frame)
+    }
+}
+
+impl sealed::Sealed for StickerFind {}
+impl Response for StickerFind {
+    fn from_frame(frame: Frame) -> Result<Self, TypedResponseError> {
+        StickerFind::from_frame(frame)
     }
 }
 
