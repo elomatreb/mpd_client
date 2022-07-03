@@ -103,6 +103,7 @@ macro_rules! impl_command_list_tuple {
 impl_command_list_tuple!(A,);
 impl_command_list_tuple!(A, B => 1);
 impl_command_list_tuple!(A, B => 1, C => 2);
+impl_command_list_tuple!(A, B => 1, C => 2, D => 3);
 impl_command_list_tuple!(A, B => 1, C => 2, D => 3, E => 4);
 impl_command_list_tuple!(A, B => 1, C => 2, D => 3, E => 4, F => 5);
 impl_command_list_tuple!(A, B => 1, C => 2, D => 3, E => 4, F => 5, G => 6);
