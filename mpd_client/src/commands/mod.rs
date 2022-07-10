@@ -21,12 +21,11 @@ use std::time::Duration;
 
 use mpd_protocol::{command::Argument, response::Frame};
 
+use crate::errors::TypedResponseError;
 use crate::raw::RawCommand;
 
 pub use command_list::CommandList;
 pub use definitions::*;
-
-use self::responses::TypedResponseError;
 
 /// Stable identifier of a song in the queue.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]

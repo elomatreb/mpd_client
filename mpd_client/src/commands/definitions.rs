@@ -7,10 +7,10 @@ use std::cmp::min;
 use std::ops::{Bound, RangeBounds};
 use std::time::Duration;
 
-use crate::commands::responses::{ErrorKind, TypedResponseError};
 use crate::commands::{
     responses as res, Command, SeekMode, SingleMode, Song, SongId, SongPosition,
 };
+use crate::errors::{ErrorKind, TypedResponseError};
 use crate::raw::{Frame, RawCommand};
 use crate::tag::Tag;
 use crate::Filter;

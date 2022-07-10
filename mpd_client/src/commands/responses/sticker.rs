@@ -1,6 +1,5 @@
 use super::KeyValuePair;
-use crate::commands::responses::ErrorKind::UnexpectedField;
-use crate::commands::responses::{ErrorKind, TypedResponseError};
+use crate::errors::{ErrorKind, TypedResponseError};
 use std::collections::HashMap;
 
 /// Response to the [`sticker get`] command.
@@ -90,7 +89,7 @@ impl StickerFind {
                 _ => {
                     return Err(TypedResponseError {
                         field: "sticker",
-                        kind: UnexpectedField(key.to_string()),
+                        kind: ErrorKind::UnexpectedField(key.to_string()),
                     })
                 }
             }

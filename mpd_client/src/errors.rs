@@ -1,9 +1,10 @@
+use chrono::ParseError;
 use tokio::sync::{mpsc::error::SendError, oneshot::error::RecvError};
 
 use std::error::Error;
 use std::fmt;
+use std::num::{ParseFloatError, ParseIntError};
 
-use crate::commands::responses::TypedResponseError;
 use crate::raw::{ErrorResponse, Frame, MpdProtocolError};
 
 /// Errors which can occur when issuing a command.
@@ -142,5 +143,65 @@ impl From<ErrorResponse> for StateChangeError {
 impl From<MpdProtocolError> for StateChangeError {
     fn from(e: MpdProtocolError) -> Self {
         StateChangeError::Protocol(e)
+    }
+}
+
+/// Error returned when failing to convert a raw [`Frame`] into the proper typed response.
+///
+/// [`Frame`]: crate::raw::Frame
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TypedResponseError {
+    pub(crate) field: &'static str,
+    pub(crate) kind: ErrorKind,
+}
+
+/// Types of parse errors.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum ErrorKind {
+    /// A required field was missing entirely.
+    Missing,
+    /// We expected a certain field, but found another.
+    UnexpectedField(String),
+    /// A field had a unexpected value.
+    InvalidValue(String),
+    /// A field containing an integer failed to parse.
+    MalformedInteger(ParseIntError),
+    /// A field containing a float (duration) failed to parse.
+    MalformedFloat(ParseFloatError),
+    /// A field containing a duration contained an impossible value (e.g. negative or NaN).
+    InvalidTimestamp,
+    /// A field containing a timestamp failed to parse.
+    MalformedTimestamp(ParseError),
+}
+
+impl fmt::Display for TypedResponseError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match &self.kind {
+            ErrorKind::Missing => write!(f, "field {:?} is required but missing", self.field),
+            ErrorKind::InvalidValue(val) => {
+                write!(f, "value {:?} is invalid for field {:?}", val, self.field)
+            }
+            ErrorKind::UnexpectedField(found) => {
+                write!(f, "expected field {:?} but found {:?}", self.field, found)
+            }
+            ErrorKind::MalformedInteger(_) => write!(f, "field {:?} is not an integer", self.field),
+            ErrorKind::MalformedFloat(_) | ErrorKind::InvalidTimestamp => {
+                write!(f, "field {:?} is not a valid duration", self.field)
+            }
+            ErrorKind::MalformedTimestamp(_) => {
+                write!(f, "field {:?} is not a valid timestamp", self.field)
+            }
+        }
+    }
+}
+
+impl Error for TypedResponseError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match &self.kind {
+            ErrorKind::MalformedFloat(e) => Some(e),
+            ErrorKind::MalformedInteger(e) => Some(e),
+            ErrorKind::MalformedTimestamp(e) => Some(e),
+            _ => None,
+        }
     }
 }

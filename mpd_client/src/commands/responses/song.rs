@@ -7,8 +7,9 @@ use std::num::ParseIntError;
 use std::path::Path;
 use std::time::Duration;
 
-use super::{parse_duration, ErrorKind, KeyValuePair, TypedResponseError};
+use super::{parse_duration, KeyValuePair};
 use crate::commands::{SongId, SongPosition};
+use crate::errors::{ErrorKind, TypedResponseError};
 use crate::tag::Tag;
 
 /// A [`Song`] in the current queue, as returned by the [`playlistinfo`] command.
