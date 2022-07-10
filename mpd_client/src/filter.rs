@@ -4,9 +4,11 @@
 //! [filter expressions]: https://www.musicpd.org/doc/html/protocol.html#filters
 
 use std::borrow::Cow;
+use std::fmt::Write;
 use std::ops::Not;
 
-use mpd_protocol::command::{escape_argument, Argument};
+use bytes::{BufMut, BytesMut};
+use mpd_protocol::command::Argument;
 
 use crate::Tag;
 
@@ -24,7 +26,7 @@ enum FilterType {
     Tag {
         tag: Tag,
         operator: Operator,
-        value: Cow<'static, str>,
+        value: String,
     },
     Not(Box<FilterType>),
     And(Vec<FilterType>),
@@ -35,17 +37,7 @@ impl Filter {
     /// given `value`.
     ///
     /// See also [`Tag::any()`].
-    ///
-    /// ```
-    /// use mpd_protocol::command::Argument;
-    /// use mpd_client::{Tag, filter::{Filter, Operator}};
-    ///
-    /// assert_eq!(
-    ///     Filter::new(Tag::Artist, Operator::Equal, "foo\'s bar\"").render(),
-    ///     "(Artist == \"foo\\\'s bar\\\"\")"
-    /// );
-    /// ```
-    pub fn new(tag: Tag, operator: Operator, value: impl Into<Cow<'static, str>>) -> Self {
+    pub fn new<V: Into<String>>(tag: Tag, operator: Operator, value: V) -> Self {
         Self(FilterType::Tag {
             tag,
             operator,
@@ -56,44 +48,24 @@ impl Filter {
     /// Create a filter which checks where the given `tag` is equal to the given `value`.
     ///
     /// Shorthand method that always checks for equality.
-    ///
-    /// ```
-    /// use mpd_protocol::command::Argument;
-    /// use mpd_client::{Filter, Tag};
-    ///
-    /// assert_eq!(
-    ///     Filter::tag(Tag::Artist, "hello world").render(),
-    ///     "(Artist == \"hello world\")"
-    /// );
-    /// ```
-    pub fn tag(tag: Tag, value: impl Into<Cow<'static, str>>) -> Self {
+    pub fn tag<V: Into<String>>(tag: Tag, value: V) -> Self {
         Filter::new(tag, Operator::Equal, value)
     }
 
     /// Create a filter which checks for the existence of `tag` (with any value).
     pub fn tag_exists(tag: Tag) -> Self {
-        Filter::new(tag, Operator::NotEqual, TAG_IS_ABSENT)
+        Filter::new(tag, Operator::NotEqual, String::from(TAG_IS_ABSENT))
     }
 
     /// Create a filter which checks for the absence of `tag`.
     pub fn tag_absent(tag: Tag) -> Self {
-        Filter::new(tag, Operator::Equal, TAG_IS_ABSENT)
+        Filter::new(tag, Operator::Equal, String::from(TAG_IS_ABSENT))
     }
 
     /// Negate the filter.
     ///
     /// You can also use the negation operator (`!`) if you prefer to negate at the start of an
     /// expression.
-    ///
-    /// ```
-    /// use mpd_protocol::command::Argument;
-    /// use mpd_client::{Filter, Tag};
-    ///
-    /// assert_eq!(
-    ///     Filter::tag(Tag::Artist, "hello").negate().render(),
-    ///     "(!(Artist == \"hello\"))"
-    /// );
-    /// ```
     pub fn negate(mut self) -> Self {
         self.0 = FilterType::Not(Box::new(self.0));
         self
@@ -102,16 +74,6 @@ impl Filter {
     /// Chain the given filter onto this one with an `AND`.
     ///
     /// Automatically flattens nested `AND` conditions.
-    ///
-    /// ```
-    /// use mpd_protocol::command::Argument;
-    /// use mpd_client::{Filter, Tag};
-    ///
-    /// assert_eq!(
-    ///     Filter::tag(Tag::Artist, "foo").and(Filter::tag(Tag::Album, "bar")).render(),
-    ///     "((Artist == \"foo\") AND (Album == \"bar\"))"
-    /// );
-    /// ```
     pub fn and(self, other: Self) -> Self {
         let mut out = match self.0 {
             FilterType::And(inner) => inner,
@@ -133,11 +95,17 @@ impl Filter {
 
         Self(FilterType::And(out))
     }
+
+    fn render(&self, buf: &mut BytesMut) {
+        buf.put_u8(b'"');
+        self.0.render(buf);
+        buf.put_u8(b'"');
+    }
 }
 
 impl Argument for Filter {
-    fn render(self) -> Cow<'static, str> {
-        Cow::Owned(self.0.render())
+    fn render(&self, buf: &mut BytesMut) {
+        self.render(buf);
     }
 }
 
@@ -150,22 +118,51 @@ impl Not for Filter {
 }
 
 impl FilterType {
-    fn render(self) -> String {
+    fn render(&self, buf: &mut BytesMut) {
         match self {
             FilterType::Tag {
                 tag,
                 operator,
                 value,
-            } => format!(
-                "({} {} \"{}\")",
-                tag.as_str(),
-                operator.as_str(),
-                escape_argument(&value)
-            ),
-            FilterType::Not(inner) => format!("(!{})", inner.render()),
+            } => {
+                write!(
+                    buf,
+                    r#"({} {} \"{}\")"#,
+                    tag.as_str(),
+                    operator.as_str(),
+                    escape_filter_value(value)
+                )
+                .unwrap();
+            }
+            FilterType::Not(inner) => {
+                buf.put_slice(b"(!");
+                inner.render(buf);
+                buf.put_u8(b')');
+            }
             FilterType::And(inner) => {
                 assert!(inner.len() >= 2);
-                let inner = inner.into_iter().map(|s| s.render()).collect::<Vec<_>>();
+
+                buf.put_u8(b'(');
+
+                let mut first = true;
+                for filter in inner {
+                    if first {
+                        first = false;
+                    } else {
+                        buf.put_slice(b" AND ");
+                    }
+
+                    filter.render(buf);
+                }
+
+                buf.put_u8(b')');
+            }
+        }
+        /*
+        match self {
+            FilterType::And(inner) => {
+                assert!(inner.len() >= 2);
+                let inner = inner.iter().map(|s| s.render()).collect::<Vec<_>>();
 
                 // Wrapping parens
                 let mut capacity = 2;
@@ -194,6 +191,7 @@ impl FilterType {
                 out
             }
         }
+        */
     }
 }
 
@@ -224,54 +222,68 @@ impl Operator {
     }
 }
 
+fn escape_filter_value(value: &str) -> Cow<'_, str> {
+    if value.contains('"') {
+        Cow::Owned(value.replace('"', r#"\\""#))
+    } else {
+        Cow::Borrowed(value)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn filter_simple_equal() {
-        assert_eq!(
-            Filter::tag(Tag::Artist, "foo\'s bar\"").render(),
-            "(Artist == \"foo\\\'s bar\\\"\")"
-        );
+    fn filter_escaping() {
+        let mut buf = BytesMut::new();
+
+        Filter::tag(Tag::Artist, "foo").render(&mut buf);
+        assert_eq!(buf, r#""(Artist == \"foo\")""#);
+        buf.clear();
+
+        Filter::tag(Tag::Artist, "foo\'s bar\"").render(&mut buf);
+        assert_eq!(buf, r#""(Artist == \"foo's bar\\"\")""#);
+        buf.clear();
     }
 
     #[test]
     fn filter_other_operator() {
-        assert_eq!(
-            Filter::new(Tag::Artist, Operator::Contain, "mep mep").render(),
-            "(Artist contains \"mep mep\")"
-        );
+        let mut buf = BytesMut::new();
+        Filter::new(Tag::Artist, Operator::Contain, "mep mep").render(&mut buf);
+        assert_eq!(buf, r#""(Artist contains \"mep mep\")""#);
     }
 
     #[test]
     fn filter_not() {
-        assert_eq!(
-            Filter::tag(Tag::Artist, "hello").negate().render(),
-            "(!(Artist == \"hello\"))"
-        );
+        let mut buf = BytesMut::new();
+        Filter::tag(Tag::Artist, "hello").negate().render(&mut buf);
+        assert_eq!(buf, r#""(!(Artist == \"hello\"))""#);
     }
 
     #[test]
     fn filter_and() {
+        let mut buf = BytesMut::new();
+
         let first = Filter::tag(Tag::Artist, "hello");
         let second = Filter::tag(Tag::Album, "world");
 
-        assert_eq!(
-            first.and(second).render(),
-            "((Artist == \"hello\") AND (Album == \"world\"))"
-        );
+        first.and(second).render(&mut buf);
+        assert_eq!(buf, r#""((Artist == \"hello\") AND (Album == \"world\"))""#);
     }
 
     #[test]
     fn filter_and_multiple() {
+        let mut buf = BytesMut::new();
+
         let first = Filter::tag(Tag::Artist, "hello");
         let second = Filter::tag(Tag::Album, "world");
         let third = Filter::tag(Tag::Title, "foo");
 
+        first.and(second).and(third).render(&mut buf);
         assert_eq!(
-            first.and(second).and(third).render(),
-            "((Artist == \"hello\") AND (Album == \"world\") AND (Title == \"foo\"))"
+            buf,
+            r#""((Artist == \"hello\") AND (Album == \"world\") AND (Title == \"foo\"))""#
         );
     }
 }

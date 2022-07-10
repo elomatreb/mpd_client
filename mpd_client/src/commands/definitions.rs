@@ -1,9 +1,10 @@
 //! Definitions of commands.
 
+use bytes::BytesMut;
 use mpd_protocol::command::Argument;
 
-use std::borrow::Cow;
 use std::cmp::min;
+use std::fmt::Write;
 use std::ops::{Bound, RangeBounds};
 use std::time::Duration;
 
@@ -63,7 +64,7 @@ macro_rules! single_arg_command {
 
             fn command(&self) -> RawCommand {
                 RawCommand::new($command)
-                    .argument(self.0.clone())
+                    .argument(&self.0)
             }
 
             fn response(self, _: Frame) -> Result<Self::Response, TypedResponseError> {
@@ -366,11 +367,11 @@ enum PositionOrRelative {
 }
 
 impl Argument for PositionOrRelative {
-    fn render(self) -> Cow<'static, str> {
+    fn render(&self, buf: &mut BytesMut) {
         match self {
-            PositionOrRelative::Absolute(pos) => pos.render(),
-            PositionOrRelative::AfterCurrent(x) => Cow::Owned(format!("+{}", x)),
-            PositionOrRelative::BeforeCurrent(x) => Cow::Owned(format!("-{}", x)),
+            PositionOrRelative::Absolute(pos) => pos.render(buf),
+            PositionOrRelative::AfterCurrent(x) => write!(buf, "+{}", x).unwrap(),
+            PositionOrRelative::BeforeCurrent(x) => write!(buf, "-{}", x).unwrap(),
         }
     }
 }
@@ -427,7 +428,7 @@ impl Command for Add {
     type Response = SongId;
 
     fn command(&self) -> RawCommand {
-        let mut command = RawCommand::new("addid").argument(self.uri.clone());
+        let mut command = RawCommand::new("addid").argument(&self.uri);
 
         if let Some(pos) = self.position {
             command.add_argument(pos).unwrap();
@@ -515,11 +516,12 @@ impl SongRange {
 }
 
 impl Argument for SongRange {
-    fn render(self) -> Cow<'static, str> {
-        Cow::Owned(match self.to {
-            Some(to) => format!("{}:{}", self.from, to),
-            None => format!("{}:", self.from),
-        })
+    fn render(&self, buf: &mut BytesMut) {
+        if let Some(to) = self.to {
+            write!(buf, "{}:{}", self.from, to).unwrap();
+        } else {
+            write!(buf, "{}:", self.from).unwrap();
+        }
     }
 }
 
@@ -674,7 +676,7 @@ impl Command for Find {
     type Response = Vec<res::Song>;
 
     fn command(&self) -> RawCommand {
-        let mut command = RawCommand::new("find").argument(self.filter.clone());
+        let mut command = RawCommand::new("find").argument(&self.filter);
 
         if let Some(sort) = &self.sort {
             command.add_argument("sort").unwrap();
@@ -731,13 +733,13 @@ impl Command for List {
     type Response = res::List;
 
     fn command(&self) -> RawCommand {
-        let mut command = RawCommand::new("list").argument(self.tag.clone());
+        let mut command = RawCommand::new("list").argument(&self.tag);
 
-        if let Some(filter) = self.filter.clone() {
+        if let Some(filter) = self.filter.as_ref() {
             command.add_argument(filter).unwrap();
         }
 
-        if let Some(group_by) = self.group_by.clone() {
+        if let Some(group_by) = self.group_by.as_ref() {
             command.add_argument("group").unwrap();
             command.add_argument(group_by).unwrap();
         }
@@ -769,8 +771,8 @@ impl Command for RenamePlaylist {
 
     fn command(&self) -> RawCommand {
         RawCommand::new("rename")
-            .argument(self.from.clone())
-            .argument(self.to.clone())
+            .argument(&self.from)
+            .argument(&self.to)
     }
 
     fn response(self, _: Frame) -> Result<Self::Response, TypedResponseError> {
@@ -805,7 +807,7 @@ impl Command for LoadPlaylist {
     type Response = ();
 
     fn command(&self) -> RawCommand {
-        let mut command = RawCommand::new("load").argument(self.name.clone());
+        let mut command = RawCommand::new("load").argument(&self.name);
 
         if let Some(range) = self.range {
             command.add_argument(range).unwrap();
@@ -853,8 +855,8 @@ impl Command for AddToPlaylist {
 
     fn command(&self) -> RawCommand {
         let mut command = RawCommand::new("playlistadd")
-            .argument(self.playlist.clone())
-            .argument(self.song_url.clone());
+            .argument(&self.playlist)
+            .argument(&self.song_url);
 
         if let Some(pos) = self.position {
             command.add_argument(pos).unwrap();
@@ -906,7 +908,7 @@ impl Command for RemoveFromPlaylist {
     type Response = ();
 
     fn command(&self) -> RawCommand {
-        let command = RawCommand::new("playlistdelete").argument(self.playlist.clone());
+        let command = RawCommand::new("playlistdelete").argument(&self.playlist);
 
         match self.target {
             PositionOrRange::Position(p) => command.argument(p.to_string()),
@@ -939,7 +941,7 @@ impl Command for MoveInPlaylist {
 
     fn command(&self) -> RawCommand {
         RawCommand::new("playlistmove")
-            .argument(self.playlist.clone())
+            .argument(&self.playlist)
             .argument(self.from.to_string())
             .argument(self.to.to_string())
     }
@@ -976,7 +978,7 @@ impl Command for ListAllIn {
         let mut command = RawCommand::new("listallinfo");
 
         if !self.directory.is_empty() {
-            command.add_argument(self.directory.clone()).unwrap();
+            command.add_argument(&self.directory).unwrap();
         }
 
         command
@@ -1030,7 +1032,7 @@ impl Command for AlbumArt {
 
     fn command(&self) -> RawCommand {
         RawCommand::new("albumart")
-            .argument(self.uri.clone())
+            .argument(&self.uri)
             .argument(self.offset.to_string())
     }
 
@@ -1063,7 +1065,7 @@ impl Command for AlbumArtEmbedded {
 
     fn command(&self) -> RawCommand {
         RawCommand::new("readpicture")
-            .argument(self.uri.clone())
+            .argument(&self.uri)
             .argument(self.offset.to_string())
     }
 
@@ -1121,14 +1123,14 @@ impl Command for TagTypes {
                 cmd.add_argument("disable").unwrap();
 
                 for tag in tags {
-                    cmd.add_argument(tag.clone()).unwrap();
+                    cmd.add_argument(tag).unwrap();
                 }
             }
             TagTypesAction::Enable(tags) => {
                 cmd.add_argument("enable").unwrap();
 
                 for tag in tags {
-                    cmd.add_argument(tag.clone()).unwrap();
+                    cmd.add_argument(tag).unwrap();
                 }
             }
         }
@@ -1170,8 +1172,8 @@ impl Command for StickerGet {
         RawCommand::new("sticker")
             .argument("get")
             .argument("song")
-            .argument(self.uri.clone())
-            .argument(self.name.clone())
+            .argument(&self.uri)
+            .argument(&self.name)
     }
 
     fn response(self, frame: Frame) -> Result<Self::Response, TypedResponseError> {
@@ -1201,9 +1203,9 @@ impl Command for StickerSet {
         RawCommand::new("sticker")
             .argument("set")
             .argument("song")
-            .argument(self.uri.clone())
-            .argument(self.name.clone())
-            .argument(self.value.clone())
+            .argument(&self.uri)
+            .argument(&self.name)
+            .argument(&self.value)
     }
 
     fn response(self, _: Frame) -> Result<Self::Response, TypedResponseError> {
@@ -1232,8 +1234,8 @@ impl Command for StickerDelete {
         RawCommand::new("sticker")
             .argument("delete")
             .argument("song")
-            .argument(self.uri.clone())
-            .argument(self.name.clone())
+            .argument(&self.uri)
+            .argument(&self.name)
     }
 
     fn response(self, _: Frame) -> Result<Self::Response, TypedResponseError> {
@@ -1261,7 +1263,7 @@ impl Command for StickerList {
         RawCommand::new("sticker")
             .argument("list")
             .argument("song")
-            .argument(self.uri.clone())
+            .argument(&self.uri)
     }
 
     fn response(self, frame: Frame) -> Result<Self::Response, TypedResponseError> {
@@ -1330,10 +1332,10 @@ impl Command for StickerFind {
         let base = RawCommand::new("sticker")
             .argument("find")
             .argument("song")
-            .argument(self.uri.clone())
-            .argument(self.name.clone());
+            .argument(&self.uri)
+            .argument(&self.name);
 
-        if let Some((operator, value)) = self.filter.clone() {
+        if let Some((operator, value)) = self.filter.as_ref() {
             match operator {
                 StickerFindOperator::Equals => base.argument("=").argument(value),
                 StickerFindOperator::GreaterThan => base.argument(">").argument(value),
@@ -1355,12 +1357,31 @@ mod tests {
 
     #[test]
     fn range_arg() {
-        assert_eq!(SongRange::new_usize(2..4).render(), "2:4");
-        assert_eq!(SongRange::new_usize(3..).render(), "3:");
-        assert_eq!(SongRange::new_usize(2..=5).render(), "2:6");
-        assert_eq!(SongRange::new_usize(..5).render(), "0:5");
-        assert_eq!(SongRange::new_usize(..).render(), "0:");
-        assert_eq!(SongRange::new_usize(1..=1).render(), "1:2");
+        let mut buf = BytesMut::new();
+
+        SongRange::new_usize(2..4).render(&mut buf);
+        assert_eq!(buf, "2:4");
+        buf.clear();
+
+        SongRange::new_usize(3..).render(&mut buf);
+        assert_eq!(buf, "3:");
+        buf.clear();
+
+        SongRange::new_usize(2..=5).render(&mut buf);
+        assert_eq!(buf, "2:6");
+        buf.clear();
+
+        SongRange::new_usize(..5).render(&mut buf);
+        assert_eq!(buf, "0:5");
+        buf.clear();
+
+        SongRange::new_usize(..).render(&mut buf);
+        assert_eq!(buf, "0:");
+        buf.clear();
+
+        SongRange::new_usize(1..=1).render(&mut buf);
+        assert_eq!(buf, "1:2");
+        buf.clear();
     }
 
     #[test]

@@ -5,6 +5,7 @@ use std::error::Error;
 use std::fmt;
 use std::hash::{Hash, Hasher};
 
+use bytes::{BufMut, BytesMut};
 use mpd_protocol::command::Argument;
 
 /// Tags which can be set on a [`Song`].
@@ -208,8 +209,8 @@ impl Hash for Tag {
 }
 
 impl Argument for Tag {
-    fn render(self) -> Cow<'static, str> {
-        self.as_str()
+    fn render(&self, buf: &mut BytesMut) {
+        buf.put_slice(self.as_str().as_bytes());
     }
 }
 

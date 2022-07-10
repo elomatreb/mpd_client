@@ -16,9 +16,10 @@ pub mod responses;
 
 mod command_list;
 
-use std::borrow::Cow;
+use std::fmt::Write;
 use std::time::Duration;
 
+use bytes::BytesMut;
 use mpd_protocol::{command::Argument, response::Frame};
 
 use crate::errors::TypedResponseError;
@@ -38,8 +39,8 @@ impl From<u64> for SongId {
 }
 
 impl Argument for SongId {
-    fn render(self) -> Cow<'static, str> {
-        Cow::Owned(self.0.to_string())
+    fn render(&self, buf: &mut BytesMut) {
+        write!(buf, "{}", self.0).unwrap();
     }
 }
 
@@ -56,8 +57,8 @@ impl From<usize> for SongPosition {
 }
 
 impl Argument for SongPosition {
-    fn render(self) -> Cow<'static, str> {
-        Cow::Owned(self.0.to_string())
+    fn render(&self, buf: &mut BytesMut) {
+        write!(buf, "{}", self.0).unwrap();
     }
 }
 

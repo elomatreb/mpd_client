@@ -1,4 +1,4 @@
-use bytes::BytesMut;
+use bytes::{BufMut, BytesMut};
 use tracing::{debug, error, info, trace};
 
 #[cfg(feature = "async")]
@@ -23,7 +23,6 @@ pub struct Connection<IO> {
     field_cache: ResponseFieldCache,
     recv_buf: BytesMut,
     total_received: usize,
-    send_buf: BytesMut,
 }
 
 impl<IO> Connection<IO> {
@@ -40,7 +39,6 @@ impl<IO> Connection<IO> {
             field_cache: ResponseFieldCache::new(),
             recv_buf,
             total_received: 0,
-            send_buf: BytesMut::new(),
         }
     }
 
@@ -86,7 +84,6 @@ impl<IO> Connection<IO> {
             field_cache: ResponseFieldCache::new(),
             recv_buf,
             total_received: 0,
-            send_buf: BytesMut::new(),
         })
     }
 
@@ -96,16 +93,13 @@ impl<IO> Connection<IO> {
     ///
     /// This will return an error if writing to the given IO resource fails.
     #[tracing::instrument(skip(self), err)]
-    pub fn send(&mut self, command: Command) -> Result<(), MpdProtocolError>
+    pub fn send(&mut self, mut command: Command) -> Result<(), MpdProtocolError>
     where
         IO: Write,
     {
-        CommandList::new(command).render(&mut self.send_buf);
-
-        self.io.write_all(&self.send_buf)?;
-        debug!(length = self.send_buf.len(), "sent command");
-        self.send_buf.clear();
-
+        command.0.put_u8(b'\n');
+        self.io.write_all(&command.0)?;
+        debug!(length = command.0.len(), "sent command");
         Ok(())
     }
 
@@ -119,11 +113,9 @@ impl<IO> Connection<IO> {
     where
         IO: Write,
     {
-        command_list.render(&mut self.send_buf);
-
-        self.io.write_all(&self.send_buf)?;
-        debug!(length = self.send_buf.len(), "sent command list");
-        self.send_buf.clear();
+        let buf = command_list.render();
+        self.io.write_all(&buf)?;
+        debug!(length = buf.len(), "sent command list");
 
         Ok(())
     }
@@ -337,7 +329,6 @@ impl<IO> AsyncConnection<IO> {
             field_cache: ResponseFieldCache::new(),
             recv_buf,
             total_received: 0,
-            send_buf: BytesMut::new(),
         }))
     }
 
@@ -348,16 +339,13 @@ impl<IO> AsyncConnection<IO> {
     /// This will return an error if writing to the given IO resource fails.
     #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
     #[tracing::instrument(skip(self), err)]
-    pub async fn send(&mut self, command: Command) -> Result<(), MpdProtocolError>
+    pub async fn send(&mut self, mut command: Command) -> Result<(), MpdProtocolError>
     where
         IO: AsyncWrite + Unpin,
     {
-        CommandList::new(command).render(&mut self.0.send_buf);
-
-        self.0.io.write_all(&self.0.send_buf).await?;
-        debug!(length = self.0.send_buf.len(), "sent command");
-        self.0.send_buf.clear();
-
+        command.0.put_u8(b'\n');
+        self.0.io.write_all(&command.0).await?;
+        debug!(length = command.0.len(), "sent command");
         Ok(())
     }
 
@@ -372,12 +360,9 @@ impl<IO> AsyncConnection<IO> {
     where
         IO: AsyncWrite + Unpin,
     {
-        command_list.render(&mut self.0.send_buf);
-
-        self.0.io.write_all(&self.0.send_buf).await?;
-        debug!(length = self.0.send_buf.len(), "sent command list");
-        self.0.send_buf.clear();
-
+        let buf = command_list.render();
+        self.0.io.write_all(&buf).await?;
+        debug!(length = buf.len(), "sent command");
         Ok(())
     }
 
@@ -519,7 +504,6 @@ mod tests_sync {
             protocol_version: Box::from(""),
             recv_buf,
             total_received: 0,
-            send_buf: BytesMut::new(),
         }
     }
 
@@ -610,7 +594,6 @@ mod tests_async {
             protocol_version: Box::from(""),
             recv_buf: BytesMut::new(),
             total_received: 0,
-            send_buf: BytesMut::new(),
         })
     }
 
