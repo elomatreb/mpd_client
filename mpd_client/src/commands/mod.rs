@@ -8,6 +8,9 @@
 //!
 //! [mpd-docs]: https://www.musicpd.org/doc/html/protocol.html#command-reference
 
+#[macro_use]
+mod util_macros;
+
 pub mod definitions;
 pub mod responses;
 
@@ -16,13 +19,14 @@ mod command_list;
 use std::borrow::Cow;
 use std::time::Duration;
 
-use mpd_protocol::command::Argument;
+use mpd_protocol::{command::Argument, response::Frame};
 
 use crate::raw::RawCommand;
-use responses::Response;
 
 pub use command_list::CommandList;
 pub use definitions::*;
+
+use self::responses::TypedResponseError;
 
 /// Stable identifier of a song in the queue.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -102,8 +106,11 @@ impl From<SongPosition> for Song {
 /// Types which can be used as pre-built properly typed commands.
 pub trait Command {
     /// The response this command expects.
-    type Response: Response;
+    type Response;
 
     /// Create the "raw" command representation for transmission.
-    fn into_command(self) -> RawCommand;
+    fn command(&self) -> RawCommand;
+
+    /// Create the response type from the raw response.
+    fn response(self, frame: Frame) -> Result<Self::Response, TypedResponseError>;
 }

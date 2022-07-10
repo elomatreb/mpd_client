@@ -17,7 +17,7 @@ pub struct Playlist {
 }
 
 impl Playlist {
-    pub(super) fn parse_frame(
+    pub(crate) fn parse_frame(
         frame: impl IntoIterator<Item = (Arc<str>, String)>,
         field_count: usize,
     ) -> Result<Vec<Self>, TypedResponseError> {

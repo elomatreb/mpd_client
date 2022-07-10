@@ -7,10 +7,11 @@ use std::cmp::min;
 use std::ops::{Bound, RangeBounds};
 use std::time::Duration;
 
+use crate::commands::responses::{ErrorKind, TypedResponseError};
 use crate::commands::{
     responses as res, Command, SeekMode, SingleMode, Song, SongId, SongPosition,
 };
-use crate::raw::RawCommand;
+use crate::raw::{Frame, RawCommand};
 use crate::tag::Tag;
 use crate::Filter;
 
@@ -22,17 +23,21 @@ macro_rules! argless_command {
         #[derive(Clone, Copy, Debug, PartialEq, Eq)]
         $item
     };
-    ($name:ident, $command:literal, $response:ty) => {
+    ($name:ident, $command:literal) => {
         argless_command!(
             #[doc = concat!("`", $command, "` command.")],
             pub struct $name;
         );
 
         impl Command for $name {
-            type Response = $response;
+            type Response = ();
 
-            fn into_command(self) -> RawCommand {
+            fn command(&self) -> RawCommand {
                 RawCommand::new($command)
+            }
+
+            fn response(self, _: Frame) -> Result<Self::Response, TypedResponseError> {
+                Ok(())
             }
         }
     };
@@ -47,62 +52,169 @@ macro_rules! single_arg_command {
         #[allow(missing_copy_implementations)]
         $item
     };
-    ($name:ident, $argtype:ty, $command:literal, $response:ty) => {
+    ($name:ident, $argtype:ty, $command:literal) => {
         single_arg_command!(
             #[doc = concat!("`", $command, "` command.")],
             pub struct $name(pub $argtype);
         );
 
         impl Command for $name {
-            type Response = $response;
+            type Response = ();
 
-            fn into_command(self) -> RawCommand {
+            fn command(&self) -> RawCommand {
                 RawCommand::new($command)
-                    .argument(self.0)
+                    .argument(self.0.clone())
+            }
+
+            fn response(self, _: Frame) -> Result<Self::Response, TypedResponseError> {
+                Ok(())
             }
         }
     };
 }
 
-argless_command!(Ping, "ping", res::Empty);
+argless_command!(ClearQueue, "clear");
+argless_command!(Next, "next");
+argless_command!(Ping, "ping");
+argless_command!(Previous, "previous");
+argless_command!(Stop, "stop");
 
-argless_command!(Next, "next", res::Empty);
-argless_command!(Previous, "previous", res::Empty);
-argless_command!(Stop, "stop", res::Empty);
-argless_command!(ClearQueue, "clear", res::Empty);
+single_arg_command!(ClearPlaylist, String, "playlistclear");
+single_arg_command!(DeletePlaylist, String, "rm");
+single_arg_command!(SaveQueueAsPlaylist, String, "save");
+single_arg_command!(SetConsume, bool, "consume");
+single_arg_command!(SetPause, bool, "pause");
+single_arg_command!(SetRandom, bool, "random");
+single_arg_command!(SetRepeat, bool, "repeat");
 
-argless_command!(Status, "status", res::Status);
-argless_command!(Stats, "stats", res::Stats);
-
-argless_command!(Queue, "playlistinfo", Vec<res::SongInQueue>);
-argless_command!(CurrentSong, "currentsong", Option<res::SongInQueue>);
-
-argless_command!(GetPlaylists, "listplaylists", Vec<res::Playlist>);
-
-argless_command!(EnabledTagTypes, "tagtypes", Vec<Tag>);
-
-single_arg_command!(SetRandom, bool, "random", res::Empty);
-single_arg_command!(SetConsume, bool, "consume", res::Empty);
-single_arg_command!(SetRepeat, bool, "repeat", res::Empty);
-single_arg_command!(SetPause, bool, "pause", res::Empty);
-
-single_arg_command!(SaveQueueAsPlaylist, String, "save", res::Empty);
-single_arg_command!(DeletePlaylist, String, "rm", res::Empty);
-single_arg_command!(GetPlaylist, String, "listplaylistinfo", Vec<res::Song>);
-single_arg_command!(ClearPlaylist, String, "playlistclear", res::Empty);
-
-/// `crossfade` command.
-///
-/// The given duration is truncated to the seconds.
+/// `status` command.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Crossfade(pub Duration);
+pub struct Status;
 
-impl Command for Crossfade {
-    type Response = res::Empty;
+impl Command for Status {
+    type Response = res::Status;
 
-    fn into_command(self) -> RawCommand {
-        let seconds = self.0.as_secs();
-        RawCommand::new("crossfade").argument(seconds.to_string())
+    fn command(&self) -> RawCommand {
+        RawCommand::new("status")
+    }
+
+    fn response(self, frame: Frame) -> Result<Self::Response, TypedResponseError> {
+        res::Status::from_frame(frame)
+    }
+}
+
+/// `stats` command.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Stats;
+
+impl Command for Stats {
+    type Response = res::Stats;
+
+    fn command(&self) -> RawCommand {
+        RawCommand::new("stats")
+    }
+
+    fn response(self, frame: Frame) -> Result<Self::Response, TypedResponseError> {
+        res::Stats::from_frame(frame)
+    }
+}
+
+/// `playlistinfo` command.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Queue;
+
+impl Command for Queue {
+    type Response = Vec<res::SongInQueue>;
+
+    fn command(&self) -> RawCommand {
+        RawCommand::new("playlistinfo")
+    }
+
+    fn response(self, frame: Frame) -> Result<Self::Response, TypedResponseError> {
+        res::SongInQueue::parse_frame(frame, None)
+    }
+}
+
+/// `currentsong` command.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct CurrentSong;
+
+impl Command for CurrentSong {
+    type Response = Option<res::SongInQueue>;
+
+    fn command(&self) -> RawCommand {
+        RawCommand::new("currentsong")
+    }
+
+    fn response(self, frame: Frame) -> Result<Self::Response, TypedResponseError> {
+        let mut s = res::SongInQueue::parse_frame(frame, Some(1))?;
+        Ok(s.pop())
+    }
+}
+
+/// `listplaylists` command.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct GetPlaylists;
+
+impl Command for GetPlaylists {
+    type Response = Vec<res::Playlist>;
+
+    fn command(&self) -> RawCommand {
+        RawCommand::new("listplaylists")
+    }
+
+    fn response(self, frame: Frame) -> Result<Self::Response, TypedResponseError> {
+        let field_count = frame.fields_len();
+        res::Playlist::parse_frame(frame, field_count)
+    }
+}
+
+/// `tagtypes` command.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct GetEnabledTagTypes;
+
+impl Command for GetEnabledTagTypes {
+    type Response = Vec<Tag>;
+
+    fn command(&self) -> RawCommand {
+        RawCommand::new("tagtypes")
+    }
+
+    fn response(self, frame: Frame) -> Result<Self::Response, TypedResponseError> {
+        let mut out = Vec::with_capacity(frame.fields_len());
+        for (key, value) in frame {
+            if &*key != "tagtype" {
+                return Err(TypedResponseError {
+                    field: "tagtype",
+                    kind: ErrorKind::UnexpectedField(String::from(&*key)),
+                });
+            }
+
+            let tag = Tag::try_from(&*value).map_err(|_| TypedResponseError {
+                field: "tagtype",
+                kind: ErrorKind::InvalidValue(value),
+            })?;
+
+            out.push(tag);
+        }
+
+        Ok(out)
+    }
+}
+
+/// `listplaylistinfo` command.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct GetPlaylist(pub String);
+
+impl Command for GetPlaylist {
+    type Response = Vec<res::Song>;
+
+    fn command(&self) -> RawCommand {
+        RawCommand::new("listplaylistinfo")
+    }
+
+    fn response(self, frame: Frame) -> Result<Self::Response, TypedResponseError> {
+        res::Song::parse_frame(frame, None)
     }
 }
 
@@ -113,11 +225,15 @@ impl Command for Crossfade {
 pub struct SetVolume(pub u8);
 
 impl Command for SetVolume {
-    type Response = res::Empty;
+    type Response = ();
 
-    fn into_command(self) -> RawCommand {
+    fn command(&self) -> RawCommand {
         let volume = min(self.0, 100);
         RawCommand::new("setvol").argument(volume.to_string())
+    }
+
+    fn response(self, _: Frame) -> Result<Self::Response, TypedResponseError> {
+        Ok(())
     }
 }
 
@@ -126,9 +242,9 @@ impl Command for SetVolume {
 pub struct SetSingle(pub SingleMode);
 
 impl Command for SetSingle {
-    type Response = res::Empty;
+    type Response = ();
 
-    fn into_command(self) -> RawCommand {
+    fn command(&self) -> RawCommand {
         let single = match self.0 {
             SingleMode::Disabled => "0",
             SingleMode::Enabled => "1",
@@ -137,6 +253,29 @@ impl Command for SetSingle {
 
         RawCommand::new("single").argument(single)
     }
+
+    fn response(self, _: Frame) -> Result<Self::Response, TypedResponseError> {
+        Ok(())
+    }
+}
+
+/// `crossfade` command.
+///
+/// The given duration is rounded down to whole seconds.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Crossfade(pub Duration);
+
+impl Command for Crossfade {
+    type Response = ();
+
+    fn command(&self) -> RawCommand {
+        let seconds = self.0.as_secs();
+        RawCommand::new("crossfade").argument(seconds.to_string())
+    }
+
+    fn response(self, _: Frame) -> Result<Self::Response, TypedResponseError> {
+        Ok(())
+    }
 }
 
 /// `seek` and `seekid` commands.
@@ -144,15 +283,19 @@ impl Command for SetSingle {
 pub struct SeekTo(pub Song, pub Duration);
 
 impl Command for SeekTo {
-    type Response = res::Empty;
+    type Response = ();
 
-    fn into_command(self) -> RawCommand {
+    fn command(&self) -> RawCommand {
         let command = match self.0 {
             Song::Position(pos) => RawCommand::new("seek").argument(pos),
             Song::Id(id) => RawCommand::new("seekid").argument(id),
         };
 
         command.argument(self.1)
+    }
+
+    fn response(self, _: Frame) -> Result<Self::Response, TypedResponseError> {
+        Ok(())
     }
 }
 
@@ -163,9 +306,9 @@ impl Command for SeekTo {
 pub struct Seek(pub SeekMode);
 
 impl Command for Seek {
-    type Response = res::Empty;
+    type Response = ();
 
-    fn into_command(self) -> RawCommand {
+    fn command(&self) -> RawCommand {
         let time = match self.0 {
             SeekMode::Absolute(pos) => format!("{:.3}", pos.as_secs_f64()),
             SeekMode::Forward(time) => format!("+{:.3}", time.as_secs_f64()),
@@ -173,6 +316,10 @@ impl Command for Seek {
         };
 
         RawCommand::new("seekcur").argument(time)
+    }
+
+    fn response(self, _: Frame) -> Result<Self::Response, TypedResponseError> {
+        Ok(())
     }
 }
 
@@ -196,14 +343,18 @@ impl Play {
 }
 
 impl Command for Play {
-    type Response = res::Empty;
+    type Response = ();
 
-    fn into_command(self) -> RawCommand {
+    fn command(&self) -> RawCommand {
         match self.0 {
             None => RawCommand::new("play"),
             Some(Song::Position(pos)) => RawCommand::new("play").argument(pos),
             Some(Song::Id(id)) => RawCommand::new("playid").argument(id),
         }
+    }
+
+    fn response(self, _: Frame) -> Result<Self::Response, TypedResponseError> {
+        Ok(())
     }
 }
 
@@ -275,14 +426,18 @@ impl Add {
 impl Command for Add {
     type Response = SongId;
 
-    fn into_command(self) -> RawCommand {
-        let mut command = RawCommand::new("addid").argument(self.uri);
+    fn command(&self) -> RawCommand {
+        let mut command = RawCommand::new("addid").argument(self.uri.clone());
 
         if let Some(pos) = self.position {
             command.add_argument(pos).unwrap();
         }
 
         command
+    }
+
+    fn response(self, mut frame: Frame) -> Result<Self::Response, TypedResponseError> {
+        Ok(SongId(field!(frame, "Id" integer)))
     }
 }
 
@@ -369,13 +524,17 @@ impl Argument for SongRange {
 }
 
 impl Command for Delete {
-    type Response = res::Empty;
+    type Response = ();
 
-    fn into_command(self) -> RawCommand {
+    fn command(&self) -> RawCommand {
         match self.0 {
             Target::Id(id) => RawCommand::new("deleteid").argument(id),
             Target::Range(range) => RawCommand::new("delete").argument(range),
         }
+    }
+
+    fn response(self, _: Frame) -> Result<Self::Response, TypedResponseError> {
+        Ok(())
     }
 }
 
@@ -451,15 +610,19 @@ impl MoveBuilder {
 }
 
 impl Command for Move {
-    type Response = res::Empty;
+    type Response = ();
 
-    fn into_command(self) -> RawCommand {
+    fn command(&self) -> RawCommand {
         let command = match self.from {
             Target::Id(id) => RawCommand::new("moveid").argument(id),
             Target::Range(range) => RawCommand::new("move").argument(range),
         };
 
         command.argument(self.to)
+    }
+
+    fn response(self, _: Frame) -> Result<Self::Response, TypedResponseError> {
+        Ok(())
     }
 }
 
@@ -510,10 +673,10 @@ impl Find {
 impl Command for Find {
     type Response = Vec<res::Song>;
 
-    fn into_command(self) -> RawCommand {
-        let mut command = RawCommand::new("find").argument(self.filter);
+    fn command(&self) -> RawCommand {
+        let mut command = RawCommand::new("find").argument(self.filter.clone());
 
-        if let Some(sort) = self.sort {
+        if let Some(sort) = &self.sort {
             command.add_argument("sort").unwrap();
             command
                 .add_argument(sort.as_str())
@@ -526,6 +689,10 @@ impl Command for Find {
         }
 
         command
+    }
+
+    fn response(self, frame: Frame) -> Result<Self::Response, TypedResponseError> {
+        res::Song::parse_frame(frame, None)
     }
 }
 
@@ -563,19 +730,23 @@ impl List {
 impl Command for List {
     type Response = res::List;
 
-    fn into_command(self) -> RawCommand {
-        let mut command = RawCommand::new("list").argument(self.tag);
+    fn command(&self) -> RawCommand {
+        let mut command = RawCommand::new("list").argument(self.tag.clone());
 
-        if let Some(filter) = self.filter {
+        if let Some(filter) = self.filter.clone() {
             command.add_argument(filter).unwrap();
         }
 
-        if let Some(group_by) = self.group_by {
+        if let Some(group_by) = self.group_by.clone() {
             command.add_argument("group").unwrap();
             command.add_argument(group_by).unwrap();
         }
 
         command
+    }
+
+    fn response(self, frame: Frame) -> Result<Self::Response, TypedResponseError> {
+        Ok(res::List::from_frame(frame))
     }
 }
 
@@ -594,12 +765,16 @@ impl RenamePlaylist {
 }
 
 impl Command for RenamePlaylist {
-    type Response = res::Empty;
+    type Response = ();
 
-    fn into_command(self) -> RawCommand {
+    fn command(&self) -> RawCommand {
         RawCommand::new("rename")
-            .argument(self.from)
-            .argument(self.to)
+            .argument(self.from.clone())
+            .argument(self.to.clone())
+    }
+
+    fn response(self, _: Frame) -> Result<Self::Response, TypedResponseError> {
+        Ok(())
     }
 }
 
@@ -627,16 +802,20 @@ impl LoadPlaylist {
 }
 
 impl Command for LoadPlaylist {
-    type Response = res::Empty;
+    type Response = ();
 
-    fn into_command(self) -> RawCommand {
-        let mut command = RawCommand::new("load").argument(self.name);
+    fn command(&self) -> RawCommand {
+        let mut command = RawCommand::new("load").argument(self.name.clone());
 
         if let Some(range) = self.range {
             command.add_argument(range).unwrap();
         }
 
         command
+    }
+
+    fn response(self, _: Frame) -> Result<Self::Response, TypedResponseError> {
+        Ok(())
     }
 }
 
@@ -670,18 +849,22 @@ impl AddToPlaylist {
 }
 
 impl Command for AddToPlaylist {
-    type Response = res::Empty;
+    type Response = ();
 
-    fn into_command(self) -> RawCommand {
+    fn command(&self) -> RawCommand {
         let mut command = RawCommand::new("playlistadd")
-            .argument(self.playlist)
-            .argument(self.song_url);
+            .argument(self.playlist.clone())
+            .argument(self.song_url.clone());
 
         if let Some(pos) = self.position {
             command.add_argument(pos).unwrap();
         }
 
         command
+    }
+
+    fn response(self, _: Frame) -> Result<Self::Response, TypedResponseError> {
+        Ok(())
     }
 }
 
@@ -720,15 +903,19 @@ impl RemoveFromPlaylist {
 }
 
 impl Command for RemoveFromPlaylist {
-    type Response = res::Empty;
+    type Response = ();
 
-    fn into_command(self) -> RawCommand {
-        let command = RawCommand::new("playlistdelete").argument(self.playlist);
+    fn command(&self) -> RawCommand {
+        let command = RawCommand::new("playlistdelete").argument(self.playlist.clone());
 
         match self.target {
             PositionOrRange::Position(p) => command.argument(p.to_string()),
             PositionOrRange::Range(r) => command.argument(r),
         }
+    }
+
+    fn response(self, _: Frame) -> Result<Self::Response, TypedResponseError> {
+        Ok(())
     }
 }
 
@@ -748,13 +935,17 @@ impl MoveInPlaylist {
 }
 
 impl Command for MoveInPlaylist {
-    type Response = res::Empty;
+    type Response = ();
 
-    fn into_command(self) -> RawCommand {
+    fn command(&self) -> RawCommand {
         RawCommand::new("playlistmove")
-            .argument(self.playlist)
+            .argument(self.playlist.clone())
             .argument(self.from.to_string())
             .argument(self.to.to_string())
+    }
+
+    fn response(self, _: Frame) -> Result<Self::Response, TypedResponseError> {
+        Ok(())
     }
 }
 
@@ -781,14 +972,18 @@ impl ListAllIn {
 impl Command for ListAllIn {
     type Response = Vec<res::Song>;
 
-    fn into_command(self) -> RawCommand {
+    fn command(&self) -> RawCommand {
         let mut command = RawCommand::new("listallinfo");
 
         if !self.directory.is_empty() {
-            command.add_argument(self.directory).unwrap();
+            command.add_argument(self.directory.clone()).unwrap();
         }
 
         command
+    }
+
+    fn response(self, frame: Frame) -> Result<Self::Response, TypedResponseError> {
+        res::Song::parse_frame(frame, None)
     }
 }
 
@@ -800,10 +995,14 @@ impl Command for ListAllIn {
 pub struct SetBinaryLimit(pub usize);
 
 impl Command for SetBinaryLimit {
-    type Response = res::Empty;
+    type Response = ();
 
-    fn into_command(self) -> RawCommand {
+    fn command(&self) -> RawCommand {
         RawCommand::new("binarylimit").argument(self.0.to_string())
+    }
+
+    fn response(self, _: Frame) -> Result<Self::Response, TypedResponseError> {
+        Ok(())
     }
 }
 
@@ -829,10 +1028,14 @@ impl AlbumArt {
 impl Command for AlbumArt {
     type Response = Option<res::AlbumArt>;
 
-    fn into_command(self) -> RawCommand {
+    fn command(&self) -> RawCommand {
         RawCommand::new("albumart")
-            .argument(self.uri)
+            .argument(self.uri.clone())
             .argument(self.offset.to_string())
+    }
+
+    fn response(self, frame: Frame) -> Result<Self::Response, TypedResponseError> {
+        res::AlbumArt::from_frame(frame)
     }
 }
 
@@ -858,10 +1061,14 @@ impl AlbumArtEmbedded {
 impl Command for AlbumArtEmbedded {
     type Response = Option<res::AlbumArt>;
 
-    fn into_command(self) -> RawCommand {
+    fn command(&self) -> RawCommand {
         RawCommand::new("readpicture")
-            .argument(self.uri)
+            .argument(self.uri.clone())
             .argument(self.offset.to_string())
+    }
+
+    fn response(self, frame: Frame) -> Result<Self::Response, TypedResponseError> {
+        res::AlbumArt::from_frame(frame)
     }
 }
 
@@ -902,31 +1109,35 @@ impl TagTypes {
 }
 
 impl Command for TagTypes {
-    type Response = res::Empty;
+    type Response = ();
 
-    fn into_command(self) -> RawCommand {
+    fn command(&self) -> RawCommand {
         let mut cmd = RawCommand::new("tagtypes");
 
-        match self.0 {
+        match &self.0 {
             TagTypesAction::EnableAll => cmd.add_argument("all").unwrap(),
             TagTypesAction::Clear => cmd.add_argument("clear").unwrap(),
             TagTypesAction::Disable(tags) => {
                 cmd.add_argument("disable").unwrap();
 
                 for tag in tags {
-                    cmd.add_argument(tag).unwrap();
+                    cmd.add_argument(tag.clone()).unwrap();
                 }
             }
             TagTypesAction::Enable(tags) => {
                 cmd.add_argument("enable").unwrap();
 
                 for tag in tags {
-                    cmd.add_argument(tag).unwrap();
+                    cmd.add_argument(tag.clone()).unwrap();
                 }
             }
         }
 
         cmd
+    }
+
+    fn response(self, _: Frame) -> Result<Self::Response, TypedResponseError> {
+        Ok(())
     }
 }
 
@@ -955,12 +1166,16 @@ impl StickerGet {
 impl Command for StickerGet {
     type Response = res::StickerGet;
 
-    fn into_command(self) -> RawCommand {
+    fn command(&self) -> RawCommand {
         RawCommand::new("sticker")
             .argument("get")
             .argument("song")
-            .argument(self.uri)
-            .argument(self.name)
+            .argument(self.uri.clone())
+            .argument(self.name.clone())
+    }
+
+    fn response(self, frame: Frame) -> Result<Self::Response, TypedResponseError> {
+        res::StickerGet::from_frame(frame)
     }
 }
 
@@ -980,15 +1195,19 @@ impl StickerSet {
 }
 
 impl Command for StickerSet {
-    type Response = res::Empty;
+    type Response = ();
 
-    fn into_command(self) -> RawCommand {
+    fn command(&self) -> RawCommand {
         RawCommand::new("sticker")
             .argument("set")
             .argument("song")
-            .argument(self.uri)
-            .argument(self.name)
-            .argument(self.value)
+            .argument(self.uri.clone())
+            .argument(self.name.clone())
+            .argument(self.value.clone())
+    }
+
+    fn response(self, _: Frame) -> Result<Self::Response, TypedResponseError> {
+        Ok(())
     }
 }
 
@@ -1007,14 +1226,18 @@ impl StickerDelete {
 }
 
 impl Command for StickerDelete {
-    type Response = res::Empty;
+    type Response = ();
 
-    fn into_command(self) -> RawCommand {
+    fn command(&self) -> RawCommand {
         RawCommand::new("sticker")
             .argument("delete")
             .argument("song")
-            .argument(self.uri)
-            .argument(self.name)
+            .argument(self.uri.clone())
+            .argument(self.name.clone())
+    }
+
+    fn response(self, _: Frame) -> Result<Self::Response, TypedResponseError> {
+        Ok(())
     }
 }
 
@@ -1034,11 +1257,15 @@ impl StickerList {
 impl Command for StickerList {
     type Response = res::StickerList;
 
-    fn into_command(self) -> RawCommand {
+    fn command(&self) -> RawCommand {
         RawCommand::new("sticker")
             .argument("list")
             .argument("song")
-            .argument(self.uri)
+            .argument(self.uri.clone())
+    }
+
+    fn response(self, frame: Frame) -> Result<Self::Response, TypedResponseError> {
+        res::StickerList::from_frame(frame)
     }
 }
 
@@ -1099,14 +1326,14 @@ impl StickerFind {
 impl Command for StickerFind {
     type Response = res::StickerFind;
 
-    fn into_command(self) -> RawCommand {
+    fn command(&self) -> RawCommand {
         let base = RawCommand::new("sticker")
             .argument("find")
             .argument("song")
-            .argument(self.uri)
-            .argument(self.name);
+            .argument(self.uri.clone())
+            .argument(self.name.clone());
 
-        if let Some((operator, value)) = self.filter {
+        if let Some((operator, value)) = self.filter.clone() {
             match operator {
                 StickerFindOperator::Equals => base.argument("=").argument(value),
                 StickerFindOperator::GreaterThan => base.argument(">").argument(value),
@@ -1115,6 +1342,10 @@ impl Command for StickerFind {
         } else {
             base
         }
+    }
+
+    fn response(self, frame: Frame) -> Result<Self::Response, TypedResponseError> {
+        res::StickerFind::from_frame(frame)
     }
 }
 
@@ -1135,7 +1366,7 @@ mod tests {
     #[test]
     fn command_crossfade() {
         assert_eq!(
-            Crossfade(Duration::from_secs_f64(2.345)).into_command(),
+            Crossfade(Duration::from_secs_f64(2.345)).command(),
             RawCommand::new("crossfade").argument("2")
         );
     }
@@ -1143,7 +1374,7 @@ mod tests {
     #[test]
     fn command_volume() {
         assert_eq!(
-            SetVolume(150).into_command(),
+            SetVolume(150).command(),
             RawCommand::new("setvol").argument("100")
         );
     }
@@ -1153,14 +1384,14 @@ mod tests {
         let duration = Duration::from_secs(2);
 
         assert_eq!(
-            SeekTo(SongId(2).into(), duration).into_command(),
+            SeekTo(SongId(2).into(), duration).command(),
             RawCommand::new("seekid")
                 .argument(SongId(2))
                 .argument(duration)
         );
 
         assert_eq!(
-            SeekTo(SongPosition(2).into(), duration).into_command(),
+            SeekTo(SongPosition(2).into(), duration).command(),
             RawCommand::new("seek")
                 .argument(SongPosition(2))
                 .argument(duration)
@@ -1172,28 +1403,28 @@ mod tests {
         let duration = Duration::from_secs(1);
 
         assert_eq!(
-            Seek(SeekMode::Absolute(duration)).into_command(),
+            Seek(SeekMode::Absolute(duration)).command(),
             RawCommand::new("seekcur").argument("1.000")
         );
         assert_eq!(
-            Seek(SeekMode::Forward(duration)).into_command(),
+            Seek(SeekMode::Forward(duration)).command(),
             RawCommand::new("seekcur").argument("+1.000")
         );
         assert_eq!(
-            Seek(SeekMode::Backward(duration)).into_command(),
+            Seek(SeekMode::Backward(duration)).command(),
             RawCommand::new("seekcur").argument("-1.000")
         );
     }
 
     #[test]
     fn command_play() {
-        assert_eq!(Play::current().into_command(), RawCommand::new("play"));
+        assert_eq!(Play::current().command(), RawCommand::new("play"));
         assert_eq!(
-            Play::song(SongPosition(2)).into_command(),
+            Play::song(SongPosition(2)).command(),
             RawCommand::new("play").argument(SongPosition(2))
         );
         assert_eq!(
-            Play::song(SongId(2)).into_command(),
+            Play::song(SongId(2)).command(),
             RawCommand::new("playid").argument(SongId(2))
         );
     }
@@ -1203,21 +1434,21 @@ mod tests {
         let uri = String::from("foo/bar.mp3");
 
         assert_eq!(
-            Add::uri(uri.clone()).into_command(),
+            Add::uri(uri.clone()).command(),
             RawCommand::new("addid").argument(uri.clone())
         );
         assert_eq!(
-            Add::uri(uri.clone()).at(5).into_command(),
+            Add::uri(uri.clone()).at(5).command(),
             RawCommand::new("addid").argument(uri.clone()).argument("5")
         );
         assert_eq!(
-            Add::uri(uri.clone()).before_current(5).into_command(),
+            Add::uri(uri.clone()).before_current(5).command(),
             RawCommand::new("addid")
                 .argument(uri.clone())
                 .argument("-5")
         );
         assert_eq!(
-            Add::uri(uri.clone()).after_current(5).into_command(),
+            Add::uri(uri.clone()).after_current(5).command(),
             RawCommand::new("addid").argument(uri).argument("+5")
         );
     }
@@ -1225,17 +1456,17 @@ mod tests {
     #[test]
     fn command_delete() {
         assert_eq!(
-            Delete::id(SongId(2)).into_command(),
+            Delete::id(SongId(2)).command(),
             RawCommand::new("deleteid").argument(SongId(2))
         );
 
         assert_eq!(
-            Delete::position(SongPosition(2)).into_command(),
+            Delete::position(SongPosition(2)).command(),
             RawCommand::new("delete").argument("2:3")
         );
 
         assert_eq!(
-            Delete::range(SongPosition(2)..SongPosition(4)).into_command(),
+            Delete::range(SongPosition(2)..SongPosition(4)).command(),
             RawCommand::new("delete").argument("2:4")
         );
     }
@@ -1245,14 +1476,12 @@ mod tests {
         assert_eq!(
             Move::position(SongPosition(2))
                 .to_position(SongPosition(4))
-                .into_command(),
+                .command(),
             RawCommand::new("move").argument("2:3").argument("4")
         );
 
         assert_eq!(
-            Move::id(SongId(2))
-                .to_position(SongPosition(4))
-                .into_command(),
+            Move::id(SongId(2)).to_position(SongPosition(4)).command(),
             RawCommand::new("moveid")
                 .argument(SongId(2))
                 .argument(SongPosition(4))
@@ -1261,23 +1490,19 @@ mod tests {
         assert_eq!(
             Move::range(SongPosition(3)..SongPosition(5))
                 .to_position(SongPosition(4))
-                .into_command(),
+                .command(),
             RawCommand::new("move")
                 .argument("3:5")
                 .argument(SongPosition(4))
         );
 
         assert_eq!(
-            Move::position(SongPosition(2))
-                .after_current(3)
-                .into_command(),
+            Move::position(SongPosition(2)).after_current(3).command(),
             RawCommand::new("move").argument("2:3").argument("+3")
         );
 
         assert_eq!(
-            Move::position(SongPosition(2))
-                .before_current(3)
-                .into_command(),
+            Move::position(SongPosition(2)).before_current(3).command(),
             RawCommand::new("move").argument("2:3").argument("-3")
         );
     }
@@ -1287,12 +1512,12 @@ mod tests {
         let filter = Filter::tag(Tag::Artist, "Foo");
 
         assert_eq!(
-            Find::new(filter.clone()).into_command(),
+            Find::new(filter.clone()).command(),
             RawCommand::new("find").argument(filter.clone())
         );
 
         assert_eq!(
-            Find::new(filter.clone()).window(..3).into_command(),
+            Find::new(filter.clone()).window(..3).command(),
             RawCommand::new("find")
                 .argument(filter.clone())
                 .argument("window")
@@ -1303,7 +1528,7 @@ mod tests {
             Find::new(filter.clone())
                 .window(3..)
                 .sort(Tag::Artist)
-                .into_command(),
+                .command(),
             RawCommand::new("find")
                 .argument(filter)
                 .argument("sort")
@@ -1316,13 +1541,13 @@ mod tests {
     #[test]
     fn command_list() {
         assert_eq!(
-            List::new(Tag::Album).into_command(),
+            List::new(Tag::Album).command(),
             RawCommand::new("list").argument("Album")
         );
 
         let filter = Filter::tag(Tag::Artist, "Foo");
         assert_eq!(
-            List::new(Tag::Album).filter(filter.clone()).into_command(),
+            List::new(Tag::Album).filter(filter.clone()).command(),
             RawCommand::new("list").argument("Album").argument(filter)
         );
 
@@ -1331,7 +1556,7 @@ mod tests {
             List::new(Tag::Album)
                 .filter(filter.clone())
                 .group_by(Tag::AlbumArtist)
-                .into_command(),
+                .command(),
             RawCommand::new("list")
                 .argument("Album")
                 .argument(filter)
@@ -1342,13 +1567,10 @@ mod tests {
 
     #[test]
     fn command_listallinfo() {
-        assert_eq!(
-            ListAllIn::root().into_command(),
-            RawCommand::new("listallinfo")
-        );
+        assert_eq!(ListAllIn::root().command(), RawCommand::new("listallinfo"));
 
         assert_eq!(
-            ListAllIn::directory(String::from("foo")).into_command(),
+            ListAllIn::directory(String::from("foo")).command(),
             RawCommand::new("listallinfo").argument("foo")
         );
     }
@@ -1356,7 +1578,7 @@ mod tests {
     #[test]
     fn command_playlistdelete() {
         assert_eq!(
-            RemoveFromPlaylist::position(String::from("foo"), 5).into_command(),
+            RemoveFromPlaylist::position(String::from("foo"), 5).command(),
             RawCommand::new("playlistdelete")
                 .argument("foo")
                 .argument("5"),
@@ -1364,7 +1586,7 @@ mod tests {
 
         assert_eq!(
             RemoveFromPlaylist::range(String::from("foo"), SongPosition(3)..SongPosition(6))
-                .into_command(),
+                .command(),
             RawCommand::new("playlistdelete")
                 .argument("foo")
                 .argument("3:6"),
@@ -1374,17 +1596,17 @@ mod tests {
     #[test]
     fn command_tagtypes() {
         assert_eq!(
-            TagTypes::enable_all().into_command(),
+            TagTypes::enable_all().command(),
             RawCommand::new("tagtypes").argument("all"),
         );
 
         assert_eq!(
-            TagTypes::disable_all().into_command(),
+            TagTypes::disable_all().command(),
             RawCommand::new("tagtypes").argument("clear"),
         );
 
         assert_eq!(
-            TagTypes::disable(vec![Tag::Album, Tag::Title]).into_command(),
+            TagTypes::disable(vec![Tag::Album, Tag::Title]).command(),
             RawCommand::new("tagtypes")
                 .argument("disable")
                 .argument("Album")
@@ -1392,7 +1614,7 @@ mod tests {
         );
 
         assert_eq!(
-            TagTypes::enable(vec![Tag::Album, Tag::Title]).into_command(),
+            TagTypes::enable(vec![Tag::Album, Tag::Title]).command(),
             RawCommand::new("tagtypes")
                 .argument("enable")
                 .argument("Album")
@@ -1401,14 +1623,14 @@ mod tests {
     }
 
     #[test]
-    fn command_enabled_tagtypes() {
-        assert_eq!(EnabledTagTypes.into_command(), RawCommand::new("tagtypes"));
+    fn command_get_enabled_tagtypes() {
+        assert_eq!(GetEnabledTagTypes.command(), RawCommand::new("tagtypes"));
     }
 
     #[test]
     fn command_sticker_get() {
         assert_eq!(
-            StickerGet::new("foo".to_string(), "bar".to_string()).into_command(),
+            StickerGet::new("foo".to_string(), "bar".to_string()).command(),
             RawCommand::new("sticker")
                 .argument("get")
                 .argument("song")
@@ -1420,7 +1642,7 @@ mod tests {
     #[test]
     fn command_sticker_set() {
         assert_eq!(
-            StickerSet::new("foo".to_string(), "bar".to_string(), "baz".to_string()).into_command(),
+            StickerSet::new("foo".to_string(), "bar".to_string(), "baz".to_string()).command(),
             RawCommand::new("sticker")
                 .argument("set")
                 .argument("song")
@@ -1433,7 +1655,7 @@ mod tests {
     #[test]
     fn command_sticker_delete() {
         assert_eq!(
-            StickerDelete::new("foo".to_string(), "bar".to_string()).into_command(),
+            StickerDelete::new("foo".to_string(), "bar".to_string()).command(),
             RawCommand::new("sticker")
                 .argument("delete")
                 .argument("song")
@@ -1445,7 +1667,7 @@ mod tests {
     #[test]
     fn command_sticker_list() {
         assert_eq!(
-            StickerList::new("foo".to_string()).into_command(),
+            StickerList::new("foo".to_string()).command(),
             RawCommand::new("sticker")
                 .argument("list")
                 .argument("song")
@@ -1456,7 +1678,7 @@ mod tests {
     #[test]
     fn command_sticker_find() {
         assert_eq!(
-            StickerFind::new("foo".to_string(), "bar".to_string()).into_command(),
+            StickerFind::new("foo".to_string(), "bar".to_string()).command(),
             RawCommand::new("sticker")
                 .argument("find")
                 .argument("song")
@@ -1467,7 +1689,7 @@ mod tests {
         assert_eq!(
             StickerFind::new("foo".to_string(), "bar".to_string())
                 .where_eq("baz".to_string())
-                .into_command(),
+                .command(),
             RawCommand::new("sticker")
                 .argument("find")
                 .argument("song")

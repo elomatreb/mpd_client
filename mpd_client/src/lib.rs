@@ -34,7 +34,3 @@ pub mod raw {
         Command as RawCommand, CommandList as RawCommandList, MpdProtocolError,
     };
 }
-
-mod sealed {
-    pub trait Sealed {}
-}

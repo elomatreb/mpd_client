@@ -17,7 +17,7 @@ use std::fmt;
 use std::io;
 use std::sync::Arc;
 
-use crate::commands::{self as cmds, responses::Response, Command, CommandList};
+use crate::commands::{self as cmds, Command, CommandList};
 use crate::errors::CommandError;
 use crate::raw::{Frame, MpdProtocolError, RawCommand, RawCommandList};
 use crate::state_changes::StateChanges;
@@ -127,10 +127,10 @@ impl Client {
     where
         C: Command,
     {
-        let command = cmd.into_command();
+        let command = cmd.command();
         let frame = self.raw_command(command).await?;
-
-        Ok(Response::from_frame(frame)?)
+        let response = cmd.response(frame)?;
+        Ok(response)
     }
 
     /// Send the given command list, and return the (typed) responses.
@@ -143,12 +143,12 @@ impl Client {
     where
         L: CommandList,
     {
-        let frames = match list.into_raw_command_list() {
+        let frames = match list.command_list() {
             Some(cmds) => self.raw_command_list(cmds).await?,
             None => Vec::new(),
         };
 
-        <L as CommandList>::parse_responses(frames).map_err(Into::into)
+        list.responses(frames).map_err(Into::into)
     }
 
     /// Send the given command, and return the response to it.
@@ -221,13 +221,11 @@ impl Client {
     /// # Errors
     ///
     /// This returns errors in the same conditions as [`Client::command`].
+    #[tracing::instrument(skip(self))]
     pub async fn album_art(
         &self,
         uri: &str,
     ) -> Result<Option<(Vec<u8>, Option<String>)>, CommandError> {
-        let span = span!(Level::DEBUG, "album_art", ?uri);
-        let _enter = span.enter();
-
         debug!("loading album art");
 
         let mut out = Vec::new();

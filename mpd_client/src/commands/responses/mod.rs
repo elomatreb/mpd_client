@@ -1,8 +1,5 @@
 //! Typed responses to individual commands.
 
-#[macro_use]
-mod util_macros;
-
 mod list;
 mod playlist;
 mod song;
@@ -19,8 +16,6 @@ use std::time::Duration;
 
 use crate::commands::{SingleMode, SongId, SongPosition};
 use crate::raw::Frame;
-use crate::sealed;
-use crate::tag::Tag;
 
 pub use list::List;
 pub use playlist::Playlist;
@@ -29,27 +24,18 @@ pub use sticker::{StickerFind, StickerGet, StickerList};
 
 type KeyValuePair = (Arc<str>, String);
 
-/// "Marker" trait for responses to commands.
-///
-/// This is sealed, so it cannot be implemented.
-pub trait Response: Sized + sealed::Sealed {
-    /// Attempt to convert the raw [`Frame`] into the response type.
-    #[doc(hidden)]
-    fn from_frame(frame: Frame) -> Result<Self, TypedResponseError>;
-}
-
 /// Error returned when failing to convert a raw [`Frame`] into the proper typed response.
 ///
 /// [`Frame`]: crate::raw::Frame
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TypedResponseError {
-    field: &'static str,
-    kind: ErrorKind,
+    pub(crate) field: &'static str,
+    pub(crate) kind: ErrorKind,
 }
 
 /// Types of parse errors.
 #[derive(Clone, Debug, PartialEq, Eq)]
-enum ErrorKind {
+pub(crate) enum ErrorKind {
     /// A required field was missing entirely.
     Missing,
     /// We expected a certain field, but found another.
@@ -115,17 +101,6 @@ fn parse_duration(field: &'static str, value: &str) -> Result<Duration, TypedRes
     }
 }
 
-/// An empty response, which only indicates success.
-pub type Empty = ();
-
-impl sealed::Sealed for Empty {}
-impl Response for Empty {
-    fn from_frame(_: Frame) -> Result<Self, TypedResponseError> {
-        // silently ignore any actually existing fields
-        Ok(())
-    }
-}
-
 /// Possible playback states.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[allow(missing_docs)]
@@ -166,9 +141,8 @@ pub struct Status {
     pub partition: Option<String>,
 }
 
-impl sealed::Sealed for Status {}
-impl Response for Status {
-    fn from_frame(mut raw: Frame) -> Result<Self, TypedResponseError> {
+impl Status {
+    pub(crate) fn from_frame(mut raw: Frame) -> Result<Self, TypedResponseError> {
         let single = match raw.get("single") {
             None => SingleMode::Disabled,
             Some(val) => match val.as_str() {
@@ -246,9 +220,8 @@ pub struct Stats {
     pub db_last_update: u64,
 }
 
-impl sealed::Sealed for Stats {}
-impl Response for Stats {
-    fn from_frame(mut raw: Frame) -> Result<Self, TypedResponseError> {
+impl Stats {
+    pub(crate) fn from_frame(mut raw: Frame) -> Result<Self, TypedResponseError> {
         Ok(Self {
             artists: field!(raw, "artists" integer),
             albums: field!(raw, "albums" integer),
@@ -258,50 +231,6 @@ impl Response for Stats {
             db_playtime: field!(raw, "db_playtime" duration),
             db_last_update: field!(raw, "db_update" integer),
         })
-    }
-}
-
-impl sealed::Sealed for Option<SongInQueue> {}
-impl Response for Option<SongInQueue> {
-    fn from_frame(raw: Frame) -> Result<Self, TypedResponseError> {
-        let mut vec = SongInQueue::parse_frame(raw, Some(1))?;
-        Ok(vec.pop())
-    }
-}
-
-impl sealed::Sealed for Vec<SongInQueue> {}
-impl Response for Vec<SongInQueue> {
-    fn from_frame(raw: Frame) -> Result<Self, TypedResponseError> {
-        SongInQueue::parse_frame(raw, None)
-    }
-}
-
-impl sealed::Sealed for Vec<Song> {}
-impl Response for Vec<Song> {
-    fn from_frame(raw: Frame) -> Result<Self, TypedResponseError> {
-        Song::parse_frame(raw, None)
-    }
-}
-
-impl sealed::Sealed for SongId {}
-impl Response for SongId {
-    fn from_frame(mut raw: Frame) -> Result<Self, TypedResponseError> {
-        Ok(SongId(field!(raw, "Id" integer)))
-    }
-}
-
-impl sealed::Sealed for Vec<Playlist> {}
-impl Response for Vec<Playlist> {
-    fn from_frame(raw: Frame) -> Result<Self, TypedResponseError> {
-        let fields_count = raw.fields_len();
-        Playlist::parse_frame(raw, fields_count)
-    }
-}
-
-impl sealed::Sealed for List {}
-impl Response for List {
-    fn from_frame(frame: Frame) -> Result<Self, TypedResponseError> {
-        Ok(List::from_frame(frame))
     }
 }
 
@@ -322,11 +251,8 @@ impl AlbumArt {
     pub fn data(&self) -> &[u8] {
         &self.data
     }
-}
 
-impl sealed::Sealed for Option<AlbumArt> {}
-impl Response for Option<AlbumArt> {
-    fn from_frame(mut frame: Frame) -> Result<Self, TypedResponseError> {
+    pub(crate) fn from_frame(mut frame: Frame) -> Result<Option<Self>, TypedResponseError> {
         let data = match frame.get_binary() {
             Some(d) => d.freeze(),
             None => return Ok(None),
@@ -337,50 +263,5 @@ impl Response for Option<AlbumArt> {
             mime: frame.get("type"),
             data,
         }))
-    }
-}
-
-impl sealed::Sealed for StickerGet {}
-impl Response for StickerGet {
-    fn from_frame(frame: Frame) -> Result<Self, TypedResponseError> {
-        StickerGet::from_frame(frame)
-    }
-}
-
-impl sealed::Sealed for StickerList {}
-impl Response for StickerList {
-    fn from_frame(frame: Frame) -> Result<Self, TypedResponseError> {
-        StickerList::from_frame(frame)
-    }
-}
-
-impl sealed::Sealed for StickerFind {}
-impl Response for StickerFind {
-    fn from_frame(frame: Frame) -> Result<Self, TypedResponseError> {
-        StickerFind::from_frame(frame)
-    }
-}
-
-impl sealed::Sealed for Vec<Tag> {}
-impl Response for Vec<Tag> {
-    fn from_frame(frame: Frame) -> Result<Self, TypedResponseError> {
-        let mut out = Vec::with_capacity(frame.fields_len());
-        for (key, value) in frame {
-            if &*key != "tagtype" {
-                return Err(TypedResponseError {
-                    field: "tagtype",
-                    kind: ErrorKind::UnexpectedField(String::from(&*key)),
-                });
-            }
-
-            let tag = Tag::try_from(&*value).map_err(|_| TypedResponseError {
-                field: "tagtype",
-                kind: ErrorKind::InvalidValue(value),
-            })?;
-
-            out.push(tag);
-        }
-
-        Ok(out)
     }
 }

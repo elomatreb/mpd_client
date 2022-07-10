@@ -39,7 +39,7 @@ pub struct SongRange {
 }
 
 impl SongInQueue {
-    pub(super) fn parse_frame(
+    pub(crate) fn parse_frame(
         frame: impl IntoIterator<Item = KeyValuePair>,
         max_count: Option<usize>,
     ) -> Result<Vec<Self>, TypedResponseError> {
@@ -135,7 +135,7 @@ impl Song {
         (track, disc)
     }
 
-    pub(super) fn parse_frame(
+    pub(crate) fn parse_frame(
         frame: impl IntoIterator<Item = KeyValuePair>,
         max_count: Option<usize>,
     ) -> Result<Vec<Self>, TypedResponseError> {
