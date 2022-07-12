@@ -3,9 +3,9 @@
 pub mod frame;
 
 use bytes::{Buf, BytesMut};
-use hashbrown::HashSet;
 use tracing::trace;
 
+use std::collections::HashSet;
 use std::fmt;
 use std::iter::FusedIterator;
 use std::mem;
@@ -99,12 +99,12 @@ impl fmt::Debug for Response {
 
 /// A cache for field names used in responses.
 #[derive(Clone, Debug)]
-pub(crate) struct ResponseFieldCache(HashSet<Arc<str>>);
+pub(crate) struct ResponseFieldCache(HashSet<Arc<str>, ahash::RandomState>);
 
 impl ResponseFieldCache {
     /// Returns a new, empty cache.
     pub(crate) fn new() -> ResponseFieldCache {
-        ResponseFieldCache(HashSet::new())
+        ResponseFieldCache(HashSet::default())
     }
 
     /// Insert a field name into the cache or retrieve a reference to an already existing entry.

@@ -2,7 +2,7 @@
 
 use nom::{
     branch::alt,
-    bytes::streaming::{tag, take, take_while, take_while1},
+    bytes::streaming::{tag, take, take_until, take_while, take_while1},
     character::{
         is_alphabetic,
         streaming::{char, digit1, newline},
@@ -131,8 +131,13 @@ fn key_value_field(i: &[u8]) -> IResult<&[u8], (&str, &str)> {
             from_utf8,
         ),
         tag(": "),
-        map_res(terminated(take_while(|b| b != b'\n'), newline), from_utf8),
+        map_res(field_value, from_utf8),
     )(i)
+}
+
+fn field_value(i: &[u8]) -> IResult<&[u8], &[u8]> {
+    let (i, value) = take_until("\n")(i)?;
+    Ok((&i[1..], value))
 }
 
 /// Recognize the header of a binary section
