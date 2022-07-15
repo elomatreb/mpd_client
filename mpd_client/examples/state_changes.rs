@@ -1,7 +1,7 @@
 use std::error::Error;
 
 use futures_util::stream::StreamExt; // for .next()
-use mpd_client::{commands, Client, Subsystem};
+use mpd_client::{commands, state_changes::Subsystem, Client};
 use tokio::net::TcpStream;
 use tracing_subscriber::{EnvFilter, FmtSubscriber};
 
