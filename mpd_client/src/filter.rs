@@ -3,9 +3,7 @@
 //! [`find`]: crate::commands::definitions::Find
 //! [filter expressions]: https://www.musicpd.org/doc/html/protocol.html#filters
 
-use std::borrow::Cow;
-use std::fmt::Write;
-use std::ops::Not;
+use std::{borrow::Cow, fmt::Write, ops::Not};
 
 use bytes::{BufMut, BytesMut};
 use mpd_protocol::command::Argument;

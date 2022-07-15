@@ -1,16 +1,15 @@
+use std::{cmp, collections::HashMap, iter, num::ParseIntError, path::Path, time::Duration};
+
 use chrono::{DateTime, FixedOffset};
 
-use std::cmp;
-use std::collections::HashMap;
-use std::iter;
-use std::num::ParseIntError;
-use std::path::Path;
-use std::time::Duration;
-
-use super::{parse_duration, KeyValuePair};
-use crate::commands::{SongId, SongPosition};
-use crate::errors::{ErrorKind, TypedResponseError};
-use crate::tag::Tag;
+use crate::{
+    commands::{
+        responses::{parse_duration, KeyValuePair},
+        SongId, SongPosition,
+    },
+    errors::{ErrorKind, TypedResponseError},
+    tag::Tag,
+};
 
 /// A [`Song`] in the current queue, as returned by the [`playlistinfo`] command.
 ///
@@ -346,8 +345,9 @@ fn parse_field_error(field: &'static str, error: ParseIntError) -> TypedResponse
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::sync::Arc;
+
+    use super::*;
 
     fn key_value_pairs(
         raw: Vec<(&'static str, &'static str)>,

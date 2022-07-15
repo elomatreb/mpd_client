@@ -21,11 +21,13 @@ pub mod filter;
 pub mod state_changes;
 pub mod tag;
 
-pub use client::{Client, ConnectWithPasswordError, Connection};
-pub use errors::CommandError;
-pub use filter::Filter;
-pub use state_changes::Subsystem;
-pub use tag::Tag;
+pub use self::{
+    client::{Client, ConnectWithPasswordError, Connection},
+    errors::CommandError,
+    filter::Filter,
+    state_changes::Subsystem,
+    tag::Tag,
+};
 
 /// Protocol-level types.
 pub mod raw {

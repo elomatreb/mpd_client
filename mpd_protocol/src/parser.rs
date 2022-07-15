@@ -1,5 +1,10 @@
 //! Parser for MPD responses.
 
+use std::{
+    str::{self, from_utf8, FromStr},
+    sync::Arc,
+};
+
 use nom::{
     branch::alt,
     bytes::streaming::{tag, take, take_until, take_while, take_while1},
@@ -11,9 +16,6 @@ use nom::{
     sequence::{delimited, separated_pair, terminated, tuple},
     IResult,
 };
-
-use std::str::{self, from_utf8, FromStr};
-use std::sync::Arc;
 
 use crate::response::{Error, ResponseFieldCache};
 
@@ -154,8 +156,9 @@ fn binary_field(i: &[u8]) -> IResult<&[u8], &[u8]> {
 
 #[cfg(test)]
 mod test {
-    use super::*;
     use nom::{Err as NomErr, Needed};
+
+    use super::*;
 
     const EMPTY: &[u8] = &[];
 

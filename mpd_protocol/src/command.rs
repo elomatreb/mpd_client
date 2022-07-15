@@ -7,12 +7,14 @@
 //!
 //! [MPD documentation]: https://www.musicpd.org/doc/html/protocol.html#command-reference
 
-use bytes::{BufMut, BytesMut};
+use std::{
+    borrow::Cow,
+    error::Error,
+    fmt::{self, Debug},
+    time::Duration,
+};
 
-use std::borrow::Cow;
-use std::error::Error;
-use std::fmt::{self, Debug};
-use std::time::Duration;
+use bytes::{BufMut, BytesMut};
 
 /// Start a command list, separated with list terminators. Our parser can't separate messages when
 /// the form of command list without terminators is used.

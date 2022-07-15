@@ -25,17 +25,15 @@ pub mod response;
 mod connection;
 mod parser;
 
-pub use connection::Connection;
+use std::{error::Error, fmt, io};
 
 #[cfg(feature = "async")]
-pub use connection::AsyncConnection;
-
-use std::error::Error;
-use std::fmt;
-use std::io;
-
-pub use command::{Command, CommandList};
-pub use response::Response;
+pub use self::connection::AsyncConnection;
+pub use self::{
+    command::{Command, CommandList},
+    connection::Connection,
+    response::Response,
+};
 
 /// Unrecoverable errors.
 #[derive(Debug)]

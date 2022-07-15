@@ -1,3 +1,5 @@
+use std::{fmt, time::Duration};
+
 use mpd_protocol::{AsyncConnection, Response as RawResponse};
 use tokio::{
     io::{AsyncRead, AsyncWrite},
@@ -6,11 +8,8 @@ use tokio::{
 };
 use tracing::{error, span, trace, warn, Instrument, Level};
 
-use std::fmt;
-use std::time::Duration;
-
-use super::CommandResponder;
 use crate::{
+    client::CommandResponder,
     errors::StateChangeError,
     raw::{RawCommand, RawCommandList},
     state_changes::Subsystem,

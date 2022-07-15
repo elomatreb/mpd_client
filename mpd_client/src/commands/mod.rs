@@ -16,17 +16,13 @@ pub mod responses;
 
 mod command_list;
 
-use std::fmt::Write;
-use std::time::Duration;
+use std::{fmt::Write, time::Duration};
 
 use bytes::BytesMut;
 use mpd_protocol::{command::Argument, response::Frame};
 
-use crate::errors::TypedResponseError;
-use crate::raw::RawCommand;
-
-pub use command_list::CommandList;
-pub use definitions::*;
+pub use self::{command_list::CommandList, definitions::*};
+use crate::{errors::TypedResponseError, raw::RawCommand};
 
 /// Stable identifier of a song in the queue.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]

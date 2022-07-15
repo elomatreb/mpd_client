@@ -1,9 +1,11 @@
+use std::{
+    error::Error,
+    fmt,
+    num::{ParseFloatError, ParseIntError},
+};
+
 use chrono::ParseError;
 use tokio::sync::{mpsc::error::SendError, oneshot::error::RecvError};
-
-use std::error::Error;
-use std::fmt;
-use std::num::{ParseFloatError, ParseIntError};
 
 use crate::raw::{ErrorResponse, Frame, MpdProtocolError};
 

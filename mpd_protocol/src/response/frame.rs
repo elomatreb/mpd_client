@@ -1,12 +1,8 @@
 //! A successful response to a command.
 
-use bytes::BytesMut;
+use std::{fmt, iter::FusedIterator, slice, sync::Arc, vec};
 
-use std::fmt;
-use std::iter::FusedIterator;
-use std::slice;
-use std::sync::Arc;
-use std::vec;
+use bytes::BytesMut;
 
 /// A successful response to a command.
 ///

@@ -2,21 +2,13 @@
 
 pub mod frame;
 
+use std::{collections::HashSet, fmt, iter::FusedIterator, mem, slice, sync::Arc, vec};
+
 use bytes::{Buf, BytesMut};
 use tracing::trace;
 
-use std::collections::HashSet;
-use std::fmt;
-use std::iter::FusedIterator;
-use std::mem;
-use std::slice;
-use std::sync::Arc;
-use std::vec;
-
-pub use frame::Frame;
-
-use crate::parser::ParsedComponent;
-use crate::MpdProtocolError;
+pub use self::frame::Frame;
+use crate::{parser::ParsedComponent, MpdProtocolError};
 
 /// Response to a command, consisting of an arbitrary amount of [frames][Frame], which are
 /// responses to individual commands, and optionally a single [error][Error].
@@ -380,8 +372,9 @@ pub struct Error {
 
 #[cfg(test)]
 mod test {
-    use super::*;
     use assert_matches::assert_matches;
+
+    use super::*;
 
     fn frame<const N: usize>(fields: [(&str, &str); N], binary: Option<&[u8]>) -> Frame {
         let mut out = Frame::empty();

@@ -1,6 +1,8 @@
-use crate::commands::Command;
-use crate::errors::TypedResponseError;
-use crate::raw::{Frame, RawCommandList};
+use crate::{
+    commands::Command,
+    errors::TypedResponseError,
+    raw::{Frame, RawCommandList},
+};
 
 /// Types which can be used as a typed command list, using
 /// [`Client::command_list`][crate::Client::command_list].

@@ -1,10 +1,12 @@
 //! Tools for handling state-change events emitted by MPD.
 
+use std::{
+    pin::Pin,
+    task::{Context, Poll},
+};
+
 use futures_core::stream::Stream;
 use tokio::sync::mpsc::UnboundedReceiver;
-
-use std::pin::Pin;
-use std::task::{Context, Poll};
 
 pub use crate::errors::StateChangeError;
 

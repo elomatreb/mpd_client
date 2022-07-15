@@ -1,9 +1,11 @@
 //! Metadata tags.
 
-use std::borrow::Cow;
-use std::error::Error;
-use std::fmt;
-use std::hash::{Hash, Hasher};
+use std::{
+    borrow::Cow,
+    error::Error,
+    fmt,
+    hash::{Hash, Hasher},
+};
 
 use bytes::{BufMut, BytesMut};
 use mpd_protocol::command::Argument;

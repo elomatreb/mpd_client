@@ -2,6 +2,8 @@
 
 mod connection;
 
+use std::{error::Error, fmt, io, sync::Arc};
+
 use mpd_protocol::{AsyncConnection, Response as RawResponse};
 use tokio::{
     io::{AsyncRead, AsyncWrite},
@@ -12,15 +14,12 @@ use tokio::{
 };
 use tracing::{debug, error, span, trace, warn, Instrument, Level};
 
-use std::error::Error;
-use std::fmt;
-use std::io;
-use std::sync::Arc;
-
-use crate::commands::{self as cmds, Command, CommandList};
-use crate::errors::CommandError;
-use crate::raw::{Frame, MpdProtocolError, RawCommand, RawCommandList};
-use crate::state_changes::StateChanges;
+use crate::{
+    commands::{self as cmds, Command, CommandList},
+    errors::CommandError,
+    raw::{Frame, MpdProtocolError, RawCommand, RawCommandList},
+    state_changes::StateChanges,
+};
 
 type CommandResponder = oneshot::Sender<Result<RawResponse, CommandError>>;
 
@@ -414,10 +413,11 @@ impl From<MpdProtocolError> for ConnectWithPasswordError {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::state_changes::Subsystem;
     use futures_util::StreamExt;
     use tokio_test::{assert_ok, io::Builder as MockBuilder};
+
+    use super::*;
+    use crate::state_changes::Subsystem;
 
     static GREETING: &[u8] = b"OK MPD 0.21.11\n";
 

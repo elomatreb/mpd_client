@@ -1,10 +1,9 @@
-use bytes::{BufMut, BytesMut};
-use tracing::{debug, error, info, trace};
+use std::io::{self, Read, Write};
 
+use bytes::{BufMut, BytesMut};
 #[cfg(feature = "async")]
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
-
-use std::io::{self, Read, Write};
+use tracing::{debug, error, info, trace};
 
 use crate::{
     parser,
@@ -491,8 +490,9 @@ impl<IO> AsyncConnection<IO> {
 
 #[cfg(test)]
 mod tests_sync {
-    use super::*;
     use assert_matches::assert_matches;
+
+    use super::*;
 
     fn new_conn<IO>(io: IO) -> Connection<IO> {
         let mut recv_buf = BytesMut::new();

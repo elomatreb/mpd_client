@@ -1,20 +1,22 @@
 //! Definitions of commands.
 
+use std::{
+    cmp::min,
+    fmt::Write,
+    ops::{Bound, RangeBounds},
+    time::Duration,
+};
+
 use bytes::BytesMut;
 use mpd_protocol::command::Argument;
 
-use std::cmp::min;
-use std::fmt::Write;
-use std::ops::{Bound, RangeBounds};
-use std::time::Duration;
-
-use crate::commands::{
-    responses as res, Command, SeekMode, SingleMode, Song, SongId, SongPosition,
+use crate::{
+    commands::{responses as res, Command, SeekMode, SingleMode, Song, SongId, SongPosition},
+    errors::{ErrorKind, TypedResponseError},
+    raw::{Frame, RawCommand},
+    tag::Tag,
+    Filter,
 };
-use crate::errors::{ErrorKind, TypedResponseError};
-use crate::raw::{Frame, RawCommand};
-use crate::tag::Tag;
-use crate::Filter;
 
 macro_rules! argless_command {
     // Utility branch to generate struct with doc expression
