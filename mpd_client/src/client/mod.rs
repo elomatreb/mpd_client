@@ -4,7 +4,11 @@ mod connection;
 
 use std::{error::Error, fmt, io, sync::Arc};
 
-use mpd_protocol::{AsyncConnection, Response as RawResponse};
+use mpd_protocol::{
+    command::{Command as RawCommand, CommandList as RawCommandList},
+    response::{Frame, Response as RawResponse},
+    AsyncConnection, MpdProtocolError,
+};
 use tokio::{
     io::{AsyncRead, AsyncWrite},
     sync::{
@@ -17,7 +21,6 @@ use tracing::{debug, error, span, trace, warn, Instrument, Level};
 use crate::{
     commands::{self as cmds, Command, CommandList},
     errors::CommandError,
-    raw::{Frame, MpdProtocolError, RawCommand, RawCommandList},
     state_changes::StateChanges,
 };
 

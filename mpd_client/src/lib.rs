@@ -13,7 +13,7 @@
 //!
 //! The [`Client`] type is the primary API.
 
-mod client;
+pub mod client;
 mod errors;
 
 pub mod commands;
@@ -21,18 +21,6 @@ pub mod filter;
 pub mod state_changes;
 pub mod tag;
 
-pub use self::{
-    client::{Client, ConnectWithPasswordError, Connection},
-    errors::CommandError,
-    filter::Filter,
-    state_changes::Subsystem,
-    tag::Tag,
-};
+pub use mpd_protocol as protocol;
 
-/// Protocol-level types.
-pub mod raw {
-    pub use mpd_protocol::{
-        response::{Error as ErrorResponse, Frame},
-        Command as RawCommand, CommandList as RawCommandList, MpdProtocolError,
-    };
-}
+pub use self::client::{Client, Connection};

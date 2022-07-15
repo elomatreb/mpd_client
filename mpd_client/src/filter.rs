@@ -8,7 +8,7 @@ use std::{borrow::Cow, fmt::Write, ops::Not};
 use bytes::{BufMut, BytesMut};
 use mpd_protocol::command::Argument;
 
-use crate::Tag;
+use crate::tag::Tag;
 
 const TAG_IS_ABSENT: &str = "";
 

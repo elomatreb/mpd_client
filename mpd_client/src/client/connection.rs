@@ -1,6 +1,10 @@
 use std::{fmt, time::Duration};
 
-use mpd_protocol::{AsyncConnection, Response as RawResponse};
+use mpd_protocol::{
+    command::{Command as RawCommand, CommandList as RawCommandList},
+    response::Response as RawResponse,
+    AsyncConnection,
+};
 use tokio::{
     io::{AsyncRead, AsyncWrite},
     sync::mpsc::{Receiver, UnboundedSender},
@@ -8,12 +12,7 @@ use tokio::{
 };
 use tracing::{error, span, trace, warn, Instrument, Level};
 
-use crate::{
-    client::CommandResponder,
-    errors::StateChangeError,
-    raw::{RawCommand, RawCommandList},
-    state_changes::Subsystem,
-};
+use crate::{client::CommandResponder, errors::StateChangeError, state_changes::Subsystem};
 
 type StateChangesSender = UnboundedSender<Result<Subsystem, StateChangeError>>;
 

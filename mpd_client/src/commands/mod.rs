@@ -19,10 +19,13 @@ mod command_list;
 use std::{fmt::Write, time::Duration};
 
 use bytes::BytesMut;
-use mpd_protocol::{command::Argument, response::Frame};
+use mpd_protocol::{
+    command::{Argument, Command as RawCommand},
+    response::Frame,
+};
 
 pub use self::{command_list::CommandList, definitions::*};
-use crate::{errors::TypedResponseError, raw::RawCommand};
+use crate::errors::TypedResponseError;
 
 /// Stable identifier of a song in the queue.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]

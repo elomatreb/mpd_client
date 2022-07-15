@@ -32,7 +32,6 @@ pub use self::connection::AsyncConnection;
 pub use self::{
     command::{Command, CommandList},
     connection::Connection,
-    response::Response,
 };
 
 /// Unrecoverable errors.

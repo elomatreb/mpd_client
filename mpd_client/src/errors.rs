@@ -1,13 +1,14 @@
 use std::{
-    error::Error,
-    fmt,
+    error, fmt,
     num::{ParseFloatError, ParseIntError},
 };
 
 use chrono::ParseError;
+use mpd_protocol::{
+    response::{Error, Frame},
+    MpdProtocolError,
+};
 use tokio::sync::{mpsc::error::SendError, oneshot::error::RecvError};
-
-use crate::raw::{ErrorResponse, Frame, MpdProtocolError};
 
 /// Errors which can occur when issuing a command.
 #[derive(Debug)]
@@ -19,7 +20,7 @@ pub enum CommandError {
     /// Command returned an error
     ErrorResponse {
         /// The error
-        error: ErrorResponse,
+        error: Error,
         /// Possible successful frames in the same response, empty if not in a command list
         succesful_frames: Vec<Frame>,
     },
@@ -55,8 +56,8 @@ impl fmt::Display for CommandError {
     }
 }
 
-impl Error for CommandError {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
+impl error::Error for CommandError {
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self {
             CommandError::Protocol(e) => Some(e),
             CommandError::InvalidTypedResponse(e) => Some(e),
@@ -87,8 +88,8 @@ impl From<RecvError> for CommandError {
 }
 
 #[doc(hidden)]
-impl From<ErrorResponse> for CommandError {
-    fn from(error: ErrorResponse) -> Self {
+impl From<Error> for CommandError {
+    fn from(error: Error) -> Self {
         CommandError::ErrorResponse {
             error,
             succesful_frames: Vec::new(),
@@ -109,14 +110,14 @@ pub enum StateChangeError {
     /// An underlying protocol error occurred, including IO errors
     Protocol(MpdProtocolError),
     /// The state change message contained an error frame
-    ErrorMessage(ErrorResponse),
+    ErrorMessage(Error),
 }
 
 impl fmt::Display for StateChangeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             StateChangeError::Protocol(_) => write!(f, "protocol error"),
-            StateChangeError::ErrorMessage(ErrorResponse { code, message, .. }) => write!(
+            StateChangeError::ErrorMessage(Error { code, message, .. }) => write!(
                 f,
                 "message contained an error frame [code {}]: {}",
                 code, message
@@ -125,8 +126,8 @@ impl fmt::Display for StateChangeError {
     }
 }
 
-impl Error for StateChangeError {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
+impl error::Error for StateChangeError {
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self {
             StateChangeError::Protocol(e) => Some(e),
             _ => None,
@@ -135,8 +136,8 @@ impl Error for StateChangeError {
 }
 
 #[doc(hidden)]
-impl From<ErrorResponse> for StateChangeError {
-    fn from(r: ErrorResponse) -> Self {
+impl From<Error> for StateChangeError {
+    fn from(r: Error) -> Self {
         StateChangeError::ErrorMessage(r)
     }
 }
@@ -197,8 +198,8 @@ impl fmt::Display for TypedResponseError {
     }
 }
 
-impl Error for TypedResponseError {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
+impl error::Error for TypedResponseError {
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match &self.kind {
             ErrorKind::MalformedFloat(e) => Some(e),
             ErrorKind::MalformedInteger(e) => Some(e),

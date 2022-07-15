@@ -8,6 +8,7 @@ mod sticker;
 use std::{sync::Arc, time::Duration};
 
 use bytes::Bytes;
+use mpd_protocol::response::Frame;
 
 pub use self::{
     list::List,
@@ -18,7 +19,6 @@ pub use self::{
 use crate::{
     commands::{SingleMode, SongId, SongPosition},
     errors::{ErrorKind, TypedResponseError},
-    raw::Frame,
 };
 
 type KeyValuePair = (Arc<str>, String);

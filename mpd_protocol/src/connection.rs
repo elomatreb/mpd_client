@@ -6,9 +6,10 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tracing::{debug, error, info, trace};
 
 use crate::{
+    command::{Command, CommandList},
     parser,
-    response::{ResponseBuilder, ResponseFieldCache},
-    Command, CommandList, MpdProtocolError, Response,
+    response::{Response, ResponseBuilder, ResponseFieldCache},
+    MpdProtocolError,
 };
 
 /// Default receive buffer size

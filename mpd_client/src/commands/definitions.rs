@@ -8,14 +8,16 @@ use std::{
 };
 
 use bytes::BytesMut;
-use mpd_protocol::command::Argument;
+use mpd_protocol::{
+    command::{Argument, Command as RawCommand},
+    response::Frame,
+};
 
 use crate::{
     commands::{responses as res, Command, SeekMode, SingleMode, Song, SongId, SongPosition},
     errors::{ErrorKind, TypedResponseError},
-    raw::{Frame, RawCommand},
+    filter::Filter,
     tag::Tag,
-    Filter,
 };
 
 macro_rules! argless_command {
