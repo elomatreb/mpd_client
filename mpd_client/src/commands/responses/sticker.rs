@@ -1,9 +1,6 @@
 use std::collections::HashMap;
 
-use crate::{
-    commands::responses::KeyValuePair,
-    errors::{ErrorKind, TypedResponseError},
-};
+use crate::commands::{responses::KeyValuePair, ErrorKind, TypedResponseError};
 
 /// Response to the [`sticker get`] command.
 ///

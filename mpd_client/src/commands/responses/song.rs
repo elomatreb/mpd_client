@@ -5,9 +5,8 @@ use chrono::{DateTime, FixedOffset};
 use crate::{
     commands::{
         responses::{parse_duration, KeyValuePair},
-        SongId, SongPosition,
+        ErrorKind, SongId, SongPosition, TypedResponseError,
     },
-    errors::{ErrorKind, TypedResponseError},
     tag::Tag,
 };
 

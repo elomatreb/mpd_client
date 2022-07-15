@@ -1,9 +1,9 @@
 macro_rules! field {
     ($frame:ident, $field:literal $type:ident) => {
         field!($frame, $field $type optional)
-            .ok_or($crate::errors::TypedResponseError {
+            .ok_or($crate::commands::TypedResponseError {
                 field: $field,
-                kind: $crate::errors::ErrorKind::Missing,
+                kind: $crate::commands::ErrorKind::Missing,
             })?
     };
     ($frame:ident, $field:literal $type:ident optional) => {
@@ -21,9 +21,9 @@ macro_rules! parse {
     (integer, $value:ident, $field:literal) => {
         $value
             .parse()
-            .map_err(|e| $crate::errors::TypedResponseError {
+            .map_err(|e| $crate::commands::TypedResponseError {
                 field: $field,
-                kind: $crate::errors::ErrorKind::MalformedInteger(e),
+                kind: $crate::commands::ErrorKind::MalformedInteger(e),
             })?
     };
     (PlayState, $value:ident, $field:literal) => {
@@ -32,9 +32,9 @@ macro_rules! parse {
             "pause" => PlayState::Paused,
             "stop" => PlayState::Stopped,
             _ => {
-                return Err($crate::errors::TypedResponseError {
+                return Err($crate::commands::TypedResponseError {
                     field: $field,
-                    kind: $crate::errors::ErrorKind::InvalidValue($value),
+                    kind: $crate::commands::ErrorKind::InvalidValue($value),
                 })
             }
         }
@@ -44,9 +44,9 @@ macro_rules! parse {
             "1" => true,
             "0" => false,
             _ => {
-                return Err($crate::errors::TypedResponseError {
+                return Err($crate::commands::TypedResponseError {
                     field: $field,
-                    kind: $crate::errors::ErrorKind::InvalidValue($value),
+                    kind: $crate::commands::ErrorKind::InvalidValue($value),
                 })
             }
         }

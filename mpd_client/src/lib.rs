@@ -14,8 +14,6 @@
 //! The [`Client`] type is the primary API.
 
 pub mod client;
-mod errors;
-
 pub mod commands;
 pub mod filter;
 pub mod state_changes;
@@ -23,4 +21,4 @@ pub mod tag;
 
 pub use mpd_protocol as protocol;
 
-pub use self::client::{Client, Connection};
+pub use self::client::Client;

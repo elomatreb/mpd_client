@@ -12,7 +12,10 @@ use tokio::{
 };
 use tracing::{error, span, trace, warn, Instrument, Level};
 
-use crate::{client::CommandResponder, errors::StateChangeError, state_changes::Subsystem};
+use crate::{
+    client::CommandResponder,
+    state_changes::{StateChangeError, Subsystem},
+};
 
 type StateChangesSender = UnboundedSender<Result<Subsystem, StateChangeError>>;
 

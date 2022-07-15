@@ -16,10 +16,7 @@ pub use self::{
     song::{Song, SongInQueue, SongRange},
     sticker::{StickerFind, StickerGet, StickerList},
 };
-use crate::{
-    commands::{SingleMode, SongId, SongPosition},
-    errors::{ErrorKind, TypedResponseError},
-};
+use crate::commands::{ErrorKind, SingleMode, SongId, SongPosition, TypedResponseError};
 
 type KeyValuePair = (Arc<str>, String);
 

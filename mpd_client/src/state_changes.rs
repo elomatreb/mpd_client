@@ -8,8 +8,6 @@ use std::{
 use futures_core::stream::Stream;
 use tokio::sync::mpsc::UnboundedReceiver;
 
-pub use crate::errors::StateChangeError;
-
 /// Stream of state change events.
 ///
 /// This is emitted by MPD during the client idle loops. You can use this to keep local state such
@@ -101,5 +99,53 @@ impl Subsystem {
             Subsystem::Mount => "mount",
             Subsystem::Other(r) => r,
         }
+    }
+}
+use std::{error, fmt};
+
+use mpd_protocol::{response::Error, MpdProtocolError};
+
+/// Errors which may occur while listening for state change events.
+#[derive(Debug)]
+pub enum StateChangeError {
+    /// An underlying protocol error occurred, including IO errors
+    Protocol(MpdProtocolError),
+    /// The state change message contained an error frame
+    ErrorMessage(Error),
+}
+
+impl fmt::Display for StateChangeError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            StateChangeError::Protocol(_) => write!(f, "protocol error"),
+            StateChangeError::ErrorMessage(Error { code, message, .. }) => write!(
+                f,
+                "message contained an error frame [code {}]: {}",
+                code, message
+            ),
+        }
+    }
+}
+
+impl error::Error for StateChangeError {
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
+        match self {
+            StateChangeError::Protocol(e) => Some(e),
+            _ => None,
+        }
+    }
+}
+
+#[doc(hidden)]
+impl From<Error> for StateChangeError {
+    fn from(r: Error) -> Self {
+        StateChangeError::ErrorMessage(r)
+    }
+}
+
+#[doc(hidden)]
+impl From<MpdProtocolError> for StateChangeError {
+    fn from(e: MpdProtocolError) -> Self {
+        StateChangeError::Protocol(e)
     }
 }

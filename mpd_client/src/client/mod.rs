@@ -2,11 +2,11 @@
 
 mod connection;
 
-use std::{error::Error, fmt, io, sync::Arc};
+use std::{fmt, io, sync::Arc};
 
 use mpd_protocol::{
     command::{Command as RawCommand, CommandList as RawCommandList},
-    response::{Frame, Response as RawResponse},
+    response::{Error, Frame, Response as RawResponse},
     AsyncConnection, MpdProtocolError,
 };
 use tokio::{
@@ -19,8 +19,7 @@ use tokio::{
 use tracing::{debug, error, span, trace, warn, Instrument, Level};
 
 use crate::{
-    commands::{self as cmds, Command, CommandList},
-    errors::CommandError,
+    commands::{self as cmds, Command, CommandList, TypedResponseError},
     state_changes::StateChanges,
 };
 
@@ -163,7 +162,10 @@ impl Client {
         self.do_send(RawCommandList::new(command))
             .await?
             .into_single_frame()
-            .map_err(Into::into)
+            .map_err(|error| CommandError::ErrorResponse {
+                error,
+                succesful_frames: Vec::new(),
+            })
     }
 
     /// Send the given command list, and return the raw response frames to the contained commands.
@@ -176,7 +178,7 @@ impl Client {
     ///
     /// You may recover possible successful fields in a response from the [error].
     ///
-    /// [error]: crate::errors::CommandError::ErrorResponse
+    /// [error]: CommandError::ErrorResponse
     pub async fn raw_command_list(
         &self,
         commands: RawCommandList,
@@ -302,9 +304,12 @@ impl Client {
     async fn do_send(&self, commands: RawCommandList) -> Result<RawResponse, CommandError> {
         let (tx, rx) = oneshot::channel();
 
-        self.commands_sender.send((commands, tx)).await?;
+        self.commands_sender
+            .send((commands, tx))
+            .await
+            .map_err(|_| CommandError::ConnectionClosed)?;
 
-        rx.await?
+        rx.await.map_err(|_| CommandError::ConnectionClosed)?
     }
 }
 
@@ -380,6 +385,76 @@ async fn do_connect<IO: AsyncRead + AsyncWrite + Unpin + Send + 'static>(
     Ok((client, state_changes))
 }
 
+/// Errors which can occur when issuing a command.
+#[derive(Debug)]
+pub enum CommandError {
+    /// The connection to MPD was closed cleanly
+    ConnectionClosed,
+    /// An underlying protocol error occurred, including IO errors
+    Protocol(MpdProtocolError),
+    /// Command returned an error
+    ErrorResponse {
+        /// The error
+        error: Error,
+        /// Possible successful frames in the same response, empty if not in a command list
+        succesful_frames: Vec<Frame>,
+    },
+    /// A [typed command](crate::commands) failed to convert its response.
+    InvalidTypedResponse(TypedResponseError),
+}
+
+impl fmt::Display for CommandError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            CommandError::ConnectionClosed => write!(f, "the connection is closed"),
+            CommandError::Protocol(_) => write!(f, "protocol error"),
+            CommandError::InvalidTypedResponse(_) => {
+                write!(f, "response was invalid for typed command")
+            }
+            CommandError::ErrorResponse {
+                error,
+                succesful_frames,
+            } => {
+                write!(
+                    f,
+                    "command returned an error [code {}]: {}",
+                    error.code, error.message,
+                )?;
+
+                if !succesful_frames.is_empty() {
+                    write!(f, " (after {} succesful frames)", succesful_frames.len())?;
+                }
+
+                Ok(())
+            }
+        }
+    }
+}
+
+impl std::error::Error for CommandError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            CommandError::Protocol(e) => Some(e),
+            CommandError::InvalidTypedResponse(e) => Some(e),
+            _ => None,
+        }
+    }
+}
+
+#[doc(hidden)]
+impl From<MpdProtocolError> for CommandError {
+    fn from(e: MpdProtocolError) -> Self {
+        CommandError::Protocol(e)
+    }
+}
+
+#[doc(hidden)]
+impl From<TypedResponseError> for CommandError {
+    fn from(e: TypedResponseError) -> Self {
+        CommandError::InvalidTypedResponse(e)
+    }
+}
+
 /// Error returned when [connecting with a password][Client::connect_with_password] fails.
 #[derive(Debug)]
 pub enum ConnectWithPasswordError {
@@ -398,8 +473,8 @@ impl fmt::Display for ConnectWithPasswordError {
     }
 }
 
-impl Error for ConnectWithPasswordError {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
+impl std::error::Error for ConnectWithPasswordError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             ConnectWithPasswordError::ProtocolError(e) => Some(e),
             ConnectWithPasswordError::IncorrectPassword => None,
