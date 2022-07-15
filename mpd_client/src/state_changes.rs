@@ -1,11 +1,13 @@
 //! Tools for handling state-change events emitted by MPD.
 
 use std::{
+    error, fmt,
     pin::Pin,
     task::{Context, Poll},
 };
 
 use futures_core::stream::Stream;
+use mpd_protocol::{response::Error, MpdProtocolError};
 use tokio::sync::mpsc::UnboundedReceiver;
 
 /// Stream of state change events.
@@ -101,9 +103,6 @@ impl Subsystem {
         }
     }
 }
-use std::{error, fmt};
-
-use mpd_protocol::{response::Error, MpdProtocolError};
 
 /// Errors which may occur while listening for state change events.
 #[derive(Debug)]

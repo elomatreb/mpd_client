@@ -2,8 +2,8 @@ use std::{fmt, time::Duration};
 
 use mpd_protocol::{
     command::{Command as RawCommand, CommandList as RawCommandList},
-    response::Response as RawResponse,
-    AsyncConnection,
+    response::Response,
+    AsyncConnection, MpdProtocolError,
 };
 use tokio::{
     io::{AsyncRead, AsyncWrite},
@@ -75,8 +75,8 @@ pub(super) async fn run_loop<C>(
         let span = span!(Level::TRACE, "iteration", state = ?state.loop_state);
 
         match run_loop_iteration(state).instrument(span).await {
-            Some(new_state) => state = new_state,
-            None => break,
+            Ok(new_state) => state = new_state,
+            Err(()) => break,
         }
     }
 
@@ -86,7 +86,7 @@ pub(super) async fn run_loop<C>(
 /// Time to wait for another command to send before starting the idle loop.
 const NEXT_COMMAND_IDLE_TIMEOUT: Duration = Duration::from_millis(100);
 
-async fn run_loop_iteration<C>(mut state: State<C>) -> Option<State<C>>
+async fn run_loop_iteration<C>(mut state: State<C>) -> Result<State<C>, ()>
 where
     C: AsyncRead + AsyncWrite + Unpin,
 {
@@ -98,76 +98,17 @@ where
             // state change notification.
             tokio::select! {
                 response = state.connection.receive() => {
-                    match response {
-                        Ok(Some(res)) => {
-                            if let Some(state_change) = response_to_subsystem(res).transpose() {
-                                trace!(?state_change);
-                                let _ = state.state_changes.send(state_change);
-                            }
-
-                            if let Err(e) = state.connection.send(idle()).await {
-                                error!(error = ?e, "failed to start idling after state change");
-                                let _ = state.state_changes.send(Err(e.into()));
-                                return None;
-                            }
-                        }
-                        Ok(None) => return None, // The connection was closed
-                        Err(e) => {
-                            error!(error = ?e, "state change error");
-                            let _ = state.state_changes.send(Err(e.into()));
-                            return None;
-                        }
-                    }
+                    handle_idle_response(&mut state, response).await?;
                 }
                 command = state.commands.recv() => {
-                    // A command was received or the commands channel was dropped. The latter
-                    // is an indicator for us to close the connection.
-
-                    let (command, responder) = command?;
-                    trace!(?command, "command received");
-
-                    // Cancel currently ongoing idle
-                    if let Err(e) = state.connection.send(cancel_idle()).await {
-                        error!(error = ?e, "failed to cancel idle prior to sending command");
-                        let _ = responder.send(Err(e.into()));
-                        return None;
-                    }
-
-                    // Response to CANCEL_IDLE above
-                    match state.connection.receive().await {
-                        Ok(None) => return None,
-                        Ok(Some(res)) => {
-                            if let Some(state_change) = response_to_subsystem(res).transpose() {
-                                trace!(?state_change);
-                                let _ = state.state_changes.send(state_change);
-                            }
-                        }
-                        Err(e) => {
-                            error!(error = ?e, "state change error prior to sending command");
-                            let _ = responder.send(Err(e.into()));
-                            return None;
-                        }
-                    }
-
-                    // Actually send the command. This sets the state for the next loop
-                    // iteration.
-                    match state.connection.send_list(command).await {
-                        Ok(_) => state.loop_state = LoopState::WaitingForCommandReply(responder),
-                        Err(e) => {
-                            error!(error = ?e, "failed to send command");
-                            let _ = responder.send(Err(e.into()));
-                            return None;
-                        }
-                    }
-
-                    trace!("command sent successfully");
+                    handle_command(&mut state, command).await?;
                 }
             }
         }
         LoopState::WaitingForCommandReply(responder) => {
             // We're waiting for the response to the command associated with `responder`.
 
-            let response = state.connection.receive().await.transpose()?;
+            let response = state.connection.receive().await.transpose().ok_or(())?;
             trace!("response to command received");
 
             let _ = responder.send(response.map_err(Into::into));
@@ -183,11 +124,11 @@ where
                         Err(e) => {
                             error!(error = ?e, "failed to send command");
                             let _ = responder.send(Err(e.into()));
-                            return None;
+                            return Err(());
                         }
                     }
                 }
-                Ok(None) => return None,
+                Ok(None) => return Err(()),
                 Err(_) => {
                     trace!("reached next command timeout, idling");
 
@@ -196,17 +137,98 @@ where
                     if let Err(e) = state.connection.send(idle()).await {
                         error!(error = ?e, "failed to start idling after receiving command response");
                         let _ = state.state_changes.send(Err(e.into()));
-                        return None;
+                        return Err(());
                     }
                 }
             }
         }
     }
 
-    Some(state)
+    Ok(state)
 }
 
-fn response_to_subsystem(res: RawResponse) -> Result<Option<Subsystem>, StateChangeError> {
+async fn handle_command<C>(
+    state: &mut State<C>,
+    command: Option<(RawCommandList, CommandResponder)>,
+) -> Result<(), ()>
+where
+    C: AsyncRead + AsyncWrite + Unpin,
+{
+    let (command, responder) = command.ok_or(())?;
+    trace!(?command, "command received");
+
+    // Cancel currently ongoing idle
+    if let Err(e) = state.connection.send(cancel_idle()).await {
+        error!(error = ?e, "failed to cancel idle prior to sending command");
+        let _ = responder.send(Err(e.into()));
+        return Err(());
+    }
+
+    // Receive the response to the cancellation
+    match state.connection.receive().await {
+        Ok(None) => return Err(()),
+        Ok(Some(res)) => {
+            if let Some(state_change) = response_to_subsystem(res).transpose() {
+                trace!(?state_change);
+                let _ = state.state_changes.send(state_change);
+            }
+        }
+        Err(e) => {
+            error!(error = ?e, "state change error prior to sending command");
+            let _ = responder.send(Err(e.into()));
+            return Err(());
+        }
+    }
+
+    // Actually send the command. This sets the state for the next loop
+    // iteration.
+    match state.connection.send_list(command).await {
+        Ok(_) => state.loop_state = LoopState::WaitingForCommandReply(responder),
+        Err(e) => {
+            error!(error = ?e, "failed to send command");
+            let _ = responder.send(Err(e.into()));
+            return Err(());
+        }
+    }
+
+    trace!("command sent successfully");
+    Ok(())
+}
+
+async fn handle_idle_response<C>(
+    state: &mut State<C>,
+    response: Result<Option<Response>, MpdProtocolError>,
+) -> Result<(), ()>
+where
+    C: AsyncRead + AsyncWrite + Unpin,
+{
+    trace!("handling idle response");
+
+    match response {
+        Ok(Some(res)) => {
+            if let Some(state_change) = response_to_subsystem(res).transpose() {
+                trace!(?state_change);
+                let _ = state.state_changes.send(state_change);
+            }
+
+            if let Err(e) = state.connection.send(idle()).await {
+                error!(error = ?e, "failed to start idling after state change");
+                let _ = state.state_changes.send(Err(e.into()));
+                return Err(());
+            }
+        }
+        Ok(None) => return Err(()), // The connection was closed
+        Err(e) => {
+            error!(error = ?e, "state change error");
+            let _ = state.state_changes.send(Err(e.into()));
+            return Err(());
+        }
+    }
+
+    Ok(())
+}
+
+fn response_to_subsystem(res: Response) -> Result<Option<Subsystem>, StateChangeError> {
     let mut frame = res.into_single_frame()?;
 
     Ok(match frame.get("changed") {
