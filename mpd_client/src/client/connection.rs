@@ -206,7 +206,7 @@ where
 }
 
 fn response_to_subsystem(res: RawResponse) -> Result<Option<Subsystem>, StateChangeError> {
-    let mut frame = res.single_frame()?;
+    let mut frame = res.into_single_frame()?;
 
     Ok(match frame.get("changed") {
         Some(raw) => Some(Subsystem::from_raw_string(raw)),

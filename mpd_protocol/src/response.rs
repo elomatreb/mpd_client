@@ -71,10 +71,10 @@ impl Response {
         }
     }
 
-    /// Treat the response as consisting of a single frame or error.
+    /// Extract the first frame or error from the response.
     ///
-    /// Frames or errors beyond the first, if they exist, are silently discarded.
-    pub fn single_frame(self) -> Result<Frame, Error> {
+    /// Any additional frames are discarded. This is useful for responses to single commands.
+    pub fn into_single_frame(self) -> Result<Frame, Error> {
         // There is always at least one frame
         self.into_iter().next().unwrap()
     }

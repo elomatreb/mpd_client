@@ -160,7 +160,7 @@ impl Client {
     pub async fn raw_command(&self, command: RawCommand) -> Result<Frame, CommandError> {
         self.do_send(RawCommandList::new(command))
             .await?
-            .single_frame()
+            .into_single_frame()
             .map_err(Into::into)
     }
 
