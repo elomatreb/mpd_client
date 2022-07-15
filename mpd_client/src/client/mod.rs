@@ -39,7 +39,7 @@ pub type Connection = (Client, StateChanges);
 /// # Connection management
 ///
 /// Dropping the last clone of a particular `Client` will close the connection automatically.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct Client {
     commands_sender: Sender<(RawCommandList, CommandResponder)>,
     protocol_version: Arc<str>,
@@ -310,6 +310,14 @@ impl Client {
             .map_err(|_| CommandError::ConnectionClosed)?;
 
         rx.await.map_err(|_| CommandError::ConnectionClosed)?
+    }
+}
+
+impl fmt::Debug for Client {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Client")
+            .field("protocol_version", &self.protocol_version)
+            .finish_non_exhaustive()
     }
 }
 
