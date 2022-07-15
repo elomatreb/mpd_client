@@ -40,7 +40,7 @@ impl Frame {
 
     /// Returns `true` if the frame contains a binary blob.
     ///
-    /// If the binary blob has been removed using [`Frame::get_binary`], this will return `false`.
+    /// If the binary blob has been removed using [`Frame::take_binary`], this will return `false`.
     pub fn has_binary(&self) -> bool {
         self.binary.is_some()
     }
@@ -66,7 +66,7 @@ impl Frame {
 
     /// Returns a reference to the binary blob in this frame, if there is one.
     ///
-    /// If the binary blob has been removed using [`Frame::get_binary`], this will return `None`.
+    /// If the binary blob has been removed using [`Frame::take_binary`], this will return `None`.
     pub fn binary(&self) -> Option<&[u8]> {
         self.binary.as_deref()
     }
@@ -95,7 +95,7 @@ impl Frame {
     /// Get the binary blob contained in this frame, if present.
     ///
     /// This will remove it from the frame, future calls to this method will return `None`.
-    pub fn get_binary(&mut self) -> Option<BytesMut> {
+    pub fn take_binary(&mut self) -> Option<BytesMut> {
         self.binary.take()
     }
 }
@@ -179,7 +179,7 @@ impl IntoIter {
     /// Get the binary blob contained in this frame, if present.
     ///
     /// This will remove it from the frame, future calls to this method will return `None`.
-    pub fn get_binary(&mut self) -> Option<BytesMut> {
+    pub fn take_binary(&mut self) -> Option<BytesMut> {
         self.binary.take()
     }
 }
@@ -249,8 +249,8 @@ mod tests {
 
         assert!(frame.has_binary());
         assert!(!frame.is_empty());
-        assert_eq!(frame.get_binary(), Some(BytesMut::from("hello world")));
-        assert_eq!(frame.get_binary(), None);
+        assert_eq!(frame.take_binary(), Some(BytesMut::from("hello world")));
+        assert_eq!(frame.take_binary(), None);
         assert!(!frame.has_binary());
     }
 

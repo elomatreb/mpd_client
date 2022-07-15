@@ -190,7 +190,7 @@ impl AlbumArt {
     }
 
     pub(crate) fn from_frame(mut frame: Frame) -> Result<Option<Self>, TypedResponseError> {
-        let data = match frame.get_binary() {
+        let data = match frame.take_binary() {
             Some(d) => d.freeze(),
             None => return Ok(None),
         };
