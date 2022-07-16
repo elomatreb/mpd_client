@@ -10,20 +10,15 @@ use tokio::{
     sync::mpsc::{Receiver, UnboundedSender},
     time::timeout,
 };
-use tracing::{error, span, trace, warn, Instrument, Level};
+use tracing::{debug, error, span, trace, Instrument, Level};
 
-use crate::{
-    client::CommandResponder,
-    state_changes::{StateChangeError, Subsystem},
-};
-
-type StateChangesSender = UnboundedSender<Result<Subsystem, StateChangeError>>;
+use crate::client::{CommandResponder, ConnectionError, ConnectionEvent, Subsystem};
 
 struct State<C> {
     loop_state: LoopState,
     connection: AsyncConnection<C>,
     commands: Receiver<(RawCommandList, CommandResponder)>,
-    state_changes: StateChangesSender,
+    events: UnboundedSender<ConnectionEvent>,
 }
 
 enum LoopState {
@@ -52,21 +47,22 @@ fn cancel_idle() -> RawCommand {
 pub(super) async fn run_loop<C>(
     mut connection: AsyncConnection<C>,
     commands: Receiver<(RawCommandList, CommandResponder)>,
-    state_changes: StateChangesSender,
+    events: UnboundedSender<ConnectionEvent>,
 ) where
     C: AsyncRead + AsyncWrite + Unpin,
 {
     trace!("sending initial idle command");
     if let Err(e) = connection.send(idle()).await {
         error!(error = ?e, "failed to send initial idle command");
-        let _ = state_changes.send(Err(e.into()));
+        let _ = events.send(ConnectionEvent::ConnectionClosed(e.into()));
+        return;
     }
 
     let mut state = State {
         loop_state: LoopState::Idling,
         connection,
         commands,
-        state_changes,
+        events,
     };
 
     trace!("entering run loop");
@@ -136,7 +132,9 @@ where
                     state.loop_state = LoopState::Idling;
                     if let Err(e) = state.connection.send(idle()).await {
                         error!(error = ?e, "failed to start idling after receiving command response");
-                        let _ = state.state_changes.send(Err(e.into()));
+                        let _ = state
+                            .events
+                            .send(ConnectionEvent::ConnectionClosed(e.into()));
                         return Err(());
                     }
                 }
@@ -167,12 +165,27 @@ where
     // Receive the response to the cancellation
     match state.connection.receive().await {
         Ok(None) => return Err(()),
-        Ok(Some(res)) => {
-            if let Some(state_change) = response_to_subsystem(res).transpose() {
-                trace!(?state_change);
-                let _ = state.state_changes.send(state_change);
+        Ok(Some(res)) => match res.into_single_frame() {
+            Ok(f) => {
+                if let Some(subsystem) = Subsystem::from_frame(f) {
+                    debug!(?subsystem, "state change");
+                    let _ = state
+                        .events
+                        .send(ConnectionEvent::SubsystemChange(subsystem));
+                }
             }
-        }
+            Err(e) => {
+                error!(
+                    code = e.code,
+                    message = e.message,
+                    "idle cancel returned an error"
+                );
+                let _ = state.events.send(ConnectionEvent::ConnectionClosed(
+                    ConnectionError::InvalidResponse,
+                ));
+                return Err(());
+            }
+        },
         Err(e) => {
             error!(error = ?e, "state change error prior to sending command");
             let _ = responder.send(Err(e.into()));
@@ -206,21 +219,38 @@ where
 
     match response {
         Ok(Some(res)) => {
-            if let Some(state_change) = response_to_subsystem(res).transpose() {
-                trace!(?state_change);
-                let _ = state.state_changes.send(state_change);
+            match res.into_single_frame() {
+                Ok(f) => {
+                    if let Some(subsystem) = Subsystem::from_frame(f) {
+                        debug!(?subsystem, "state change");
+                        let _ = state
+                            .events
+                            .send(ConnectionEvent::SubsystemChange(subsystem));
+                    }
+                }
+                Err(e) => {
+                    error!(code = e.code, message = e.message, "idle returned an error");
+                    let _ = state.events.send(ConnectionEvent::ConnectionClosed(
+                        ConnectionError::InvalidResponse,
+                    ));
+                    return Err(());
+                }
             }
 
             if let Err(e) = state.connection.send(idle()).await {
                 error!(error = ?e, "failed to start idling after state change");
-                let _ = state.state_changes.send(Err(e.into()));
+                let _ = state
+                    .events
+                    .send(ConnectionEvent::ConnectionClosed(e.into()));
                 return Err(());
             }
         }
         Ok(None) => return Err(()), // The connection was closed
         Err(e) => {
             error!(error = ?e, "state change error");
-            let _ = state.state_changes.send(Err(e.into()));
+            let _ = state
+                .events
+                .send(ConnectionEvent::ConnectionClosed(e.into()));
             return Err(());
         }
     }
@@ -228,8 +258,12 @@ where
     Ok(())
 }
 
-fn response_to_subsystem(res: Response) -> Result<Option<Subsystem>, StateChangeError> {
-    let mut frame = res.into_single_frame()?;
+/*
+fn response_to_subsystem(res: Response) -> Result<Option<Subsystem>, ConnectionError> {
+    let mut frame = match res.into_single_frame() {
+        Ok(f) => f,
+        Err(_) => return Err(ConnectionError::InvalidResponse),
+    };
 
     Ok(match frame.get("changed") {
         Some(raw) => Some(Subsystem::from_raw_string(raw)),
@@ -242,3 +276,4 @@ fn response_to_subsystem(res: Response) -> Result<Option<Subsystem>, StateChange
         }
     })
 }
+*/

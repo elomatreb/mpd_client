@@ -12,24 +12,21 @@ use mpd_protocol::{
 use tokio::{
     io::{AsyncRead, AsyncWrite},
     sync::{
-        mpsc::{self, Sender},
+        mpsc::{self, Sender, UnboundedReceiver},
         oneshot,
     },
 };
 use tracing::{debug, error, span, trace, warn, Instrument, Level};
 
-use crate::{
-    commands::{self as cmds, Command, CommandList, TypedResponseError},
-    state_changes::StateChanges,
-};
+use crate::commands::{self as cmds, Command, CommandList, TypedResponseError};
 
 type CommandResponder = oneshot::Sender<Result<RawResponse, CommandError>>;
 
 /// Components of a connection.
 ///
-/// This contains a [`Client`] which you can use to issue commands, and a [`StateChanges`] value,
-/// which is a stream that receives notifications from the server.
-pub type Connection = (Client, StateChanges);
+/// This contains a [`Client`], which you can use to issue commands, and a [`ConnectionEvents`] value,
+/// which is a stream that receives connection events.
+pub type Connection = (Client, ConnectionEvents);
 
 /// A client connected to an MPD instance.
 ///
@@ -384,7 +381,7 @@ async fn do_connect<IO: AsyncRead + AsyncWrite + Unpin + Send + 'static>(
             .instrument(span!(parent: &span, Level::TRACE, "run loop")),
     );
 
-    let state_changes = StateChanges { rx: state_changes };
+    let state_changes = ConnectionEvents(state_changes);
     let client = Client {
         commands_sender,
         protocol_version,
@@ -497,13 +494,142 @@ impl From<MpdProtocolError> for ConnectWithPasswordError {
     }
 }
 
+/// Receiver for [connection events][ConnectionEvent].
+///
+/// This includes notifications about state changes as well as the connection being closed,
+/// possibly due to an error. If you don't care about these, you can just drop this receiver.
+#[derive(Debug)]
+pub struct ConnectionEvents(pub(crate) UnboundedReceiver<ConnectionEvent>);
+
+impl ConnectionEvents {
+    /// Wait for the next connection event.
+    ///
+    /// If this returns `None`, the connection was closed cleanly.
+    pub async fn next(&mut self) -> Option<ConnectionEvent> {
+        self.0.recv().await
+    }
+}
+
+/// Events that occur during connection life cycle.
+#[derive(Debug)]
+pub enum ConnectionEvent {
+    /// A change event in one of the subsystems of the server occurred.
+    SubsystemChange(Subsystem),
+    /// The connection was closed because of an error.
+    ConnectionClosed(ConnectionError),
+}
+
+/// Subsystems of MPD which can receive state change notifications.
+///
+/// Derived from [the documentation](https://www.musicpd.org/doc/html/protocol.html#command-idle),
+/// but also includes a catch-all to remain forward-compatible.
+#[allow(missing_docs)]
+#[non_exhaustive]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum Subsystem {
+    Database,
+    Message,
+    Mixer,
+    Options,
+    Output,
+    Partition,
+    Player,
+    /// Called `playlist` in the protocol.
+    Queue,
+    Sticker,
+    StoredPlaylist,
+    Subscription,
+    Update,
+    Neighbor,
+    Mount,
+
+    /// Catch-all variant used when the above variants do not match. Includes the raw subsystem
+    /// from the MPD response.
+    Other(Box<str>),
+}
+
+impl Subsystem {
+    fn from_frame(mut r: Frame) -> Option<Subsystem> {
+        r.get("changed").map(|raw| match &*raw {
+            "database" => Subsystem::Database,
+            "message" => Subsystem::Message,
+            "mixer" => Subsystem::Mixer,
+            "options" => Subsystem::Options,
+            "output" => Subsystem::Output,
+            "partition" => Subsystem::Partition,
+            "player" => Subsystem::Player,
+            "playlist" => Subsystem::Queue,
+            "sticker" => Subsystem::Sticker,
+            "stored_playlist" => Subsystem::StoredPlaylist,
+            "subscription" => Subsystem::Subscription,
+            "update" => Subsystem::Update,
+            "neighbor" => Subsystem::Neighbor,
+            "mount" => Subsystem::Mount,
+            _ => Subsystem::Other(raw.into()),
+        })
+    }
+
+    /// Returns the raw protocol name used for this subsystem.
+    pub fn as_str(&self) -> &str {
+        match self {
+            Subsystem::Database => "database",
+            Subsystem::Message => "message",
+            Subsystem::Mixer => "mixer",
+            Subsystem::Options => "options",
+            Subsystem::Output => "output",
+            Subsystem::Partition => "partition",
+            Subsystem::Player => "player",
+            Subsystem::Queue => "playlist",
+            Subsystem::Sticker => "sticker",
+            Subsystem::StoredPlaylist => "stored_playlist",
+            Subsystem::Subscription => "subscription",
+            Subsystem::Update => "update",
+            Subsystem::Neighbor => "neighbor",
+            Subsystem::Mount => "mount",
+            Subsystem::Other(r) => r,
+        }
+    }
+}
+
+/// Errors which result in the connection being closed.
+#[derive(Debug)]
+pub enum ConnectionError {
+    /// An underlying protocol error occurred, including IO errors.
+    Protocol(MpdProtocolError),
+    /// An invalid response was received (such as in response to the `idle` commands).
+    InvalidResponse,
+}
+
+impl fmt::Display for ConnectionError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ConnectionError::Protocol(_) => write!(f, "protocol error"),
+            ConnectionError::InvalidResponse => write!(f, "invalid response"),
+        }
+    }
+}
+
+impl std::error::Error for ConnectionError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            ConnectionError::Protocol(e) => Some(e),
+            ConnectionError::InvalidResponse => None,
+        }
+    }
+}
+
+impl From<MpdProtocolError> for ConnectionError {
+    fn from(e: MpdProtocolError) -> Self {
+        ConnectionError::Protocol(e)
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use futures_util::StreamExt;
-    use tokio_test::{assert_ok, io::Builder as MockBuilder};
+    use assert_matches::assert_matches;
+    use tokio_test::io::Builder as MockBuilder;
 
     use super::*;
-    use crate::state_changes::Subsystem;
 
     static GREETING: &[u8] = b"OK MPD 0.21.11\n";
 
@@ -518,9 +644,9 @@ mod tests {
 
         let (_client, mut state_changes) = Client::connect(io).await.expect("connect failed");
 
-        assert_eq!(
-            assert_ok!(state_changes.next().await.expect("no state change")),
-            Subsystem::Player
+        assert_matches!(
+            state_changes.next().await,
+            Some(ConnectionEvent::SubsystemChange(Subsystem::Player))
         );
     }
 
@@ -544,9 +670,9 @@ mod tests {
             .expect("command failed");
 
         assert_eq!(response.find("foo"), Some("bar"));
-        assert_eq!(
-            assert_ok!(state_changes.next().await.expect("no state change")),
-            Subsystem::Queue
+        assert_matches!(
+            state_changes.next().await,
+            Some(ConnectionEvent::SubsystemChange(Subsystem::Queue))
         );
         assert!(state_changes.next().await.is_none());
     }

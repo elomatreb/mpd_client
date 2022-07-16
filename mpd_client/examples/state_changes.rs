@@ -1,7 +1,9 @@
 use std::error::Error;
 
-use futures_util::stream::StreamExt; // for .next()
-use mpd_client::{commands, state_changes::Subsystem, Client};
+use mpd_client::{
+    client::{ConnectionEvent, Subsystem},
+    commands, Client,
+};
 use tokio::net::TcpStream;
 use tracing_subscriber::{EnvFilter, FmtSubscriber};
 
@@ -35,10 +37,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
         loop {
             // wait for a state change notification in the player subsystem, which indicates a song
             // change among other things
-            match state_changes.next().await.transpose()? {
-                None => break 'outer,             // connection was closed by the server
-                Some(Subsystem::Player) => break, // something relevant changed
-                Some(_) => continue,              // something changed but we don't care
+            match state_changes.next().await {
+                Some(ConnectionEvent::SubsystemChange(Subsystem::Player)) => break, // something relevant changed
+                Some(ConnectionEvent::SubsystemChange(_)) => continue, // something changed but we don't care
+                _ => break 'outer, // connection was closed by the server
             }
         }
     }
