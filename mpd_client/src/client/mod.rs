@@ -298,6 +298,12 @@ impl Client {
         self.protocol_version.as_ref()
     }
 
+    /// Returns `true` if the connection to the server has been closed (by the server or due to an
+    /// error).
+    pub fn is_connection_closed(&self) -> bool {
+        self.commands_sender.is_closed()
+    }
+
     async fn do_send(&self, commands: RawCommandList) -> Result<RawResponse, CommandError> {
         let (tx, rx) = oneshot::channel();
 
