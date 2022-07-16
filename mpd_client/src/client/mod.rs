@@ -2,7 +2,12 @@
 
 mod connection;
 
-use std::{fmt, io, sync::Arc};
+use std::{
+    fmt,
+    hash::{Hash, Hasher},
+    io,
+    sync::Arc,
+};
 
 use mpd_protocol::{
     command::{Command as RawCommand, CommandList as RawCommandList},
@@ -531,7 +536,7 @@ pub enum ConnectionEvent {
 /// but also includes a catch-all to remain forward-compatible.
 #[allow(missing_docs)]
 #[non_exhaustive]
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug)]
 pub enum Subsystem {
     Database,
     Message,
@@ -597,6 +602,20 @@ impl Subsystem {
     }
 }
 
+impl PartialEq for Subsystem {
+    fn eq(&self, other: &Self) -> bool {
+        self.as_str() == other.as_str()
+    }
+}
+
+impl Eq for Subsystem {}
+
+impl Hash for Subsystem {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.as_str().hash(state)
+    }
+}
+
 /// Errors which result in the connection being closed.
 #[derive(Debug)]
 pub enum ConnectionError {
@@ -632,6 +651,8 @@ impl From<MpdProtocolError> for ConnectionError {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::hash_map::DefaultHasher;
+
     use assert_matches::assert_matches;
     use tokio_test::io::Builder as MockBuilder;
 
@@ -850,5 +871,18 @@ mod tests {
         let (client, _state_changes) = Client::connect(io).await.expect("connect failed");
 
         assert_eq!(client.protocol_version(), "0.21.11");
+    }
+
+    #[test]
+    fn subsystem_equality() {
+        assert_eq!(Subsystem::Player, Subsystem::Other("player".into()));
+
+        let mut a = DefaultHasher::new();
+        Subsystem::Player.hash(&mut a);
+
+        let mut b = DefaultHasher::new();
+        Subsystem::Other("player".into()).hash(&mut b);
+
+        assert_eq!(a.finish(), b.finish());
     }
 }
