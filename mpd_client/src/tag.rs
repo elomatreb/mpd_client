@@ -12,8 +12,8 @@ use mpd_protocol::command::Argument;
 
 /// Tags which can be set on a [`Song`].
 ///
-/// MusicBrainz tags are named differently from how they appear in the protocol to better reflect
-/// their actual purpose.
+/// [MusicBrainz] tags are named differently from how they appear in the protocol to better
+/// reflect their actual purpose.
 ///
 /// # Tag validity
 ///
@@ -30,6 +30,7 @@ use mpd_protocol::command::Argument;
 /// forward-compatible with new variants being added.
 ///
 /// [`Song`]: crate::commands::responses::Song
+/// [MusicBrainz]: https://musicbrainz.org
 #[derive(Clone, Debug)]
 #[allow(missing_docs)]
 #[non_exhaustive]
