@@ -15,8 +15,8 @@ use mpd_protocol::{
 
 use crate::{
     commands::{
-        responses as res, Command, ErrorKind, SeekMode, SingleMode, Song, SongId, SongPosition,
-        TypedResponseError,
+        responses::{self as res, value},
+        Command, ErrorKind, SeekMode, SingleMode, Song, SongId, SongPosition, TypedResponseError,
     },
     filter::Filter,
     tag::Tag,
@@ -444,7 +444,7 @@ impl Command for Add {
     }
 
     fn response(self, mut frame: Frame) -> Result<Self::Response, TypedResponseError> {
-        Ok(SongId(field!(frame, "Id" integer)))
+        value(&mut frame, "Id").map(SongId)
     }
 }
 

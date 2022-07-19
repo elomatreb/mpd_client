@@ -8,9 +8,6 @@
 //!
 //! [mpd-docs]: https://www.musicpd.org/doc/html/protocol.html#command-reference
 
-#[macro_use]
-mod util_macros;
-
 pub mod definitions;
 pub mod responses;
 

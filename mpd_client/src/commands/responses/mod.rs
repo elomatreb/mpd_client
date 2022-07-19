@@ -5,7 +5,7 @@ mod playlist;
 mod song;
 mod sticker;
 
-use std::{sync::Arc, time::Duration};
+use std::{num::ParseIntError, str::FromStr, sync::Arc, time::Duration};
 
 use bytes::Bytes;
 use mpd_protocol::response::Frame;
@@ -19,6 +19,135 @@ pub use self::{
 use crate::commands::{ErrorKind, SingleMode, SongId, SongPosition, TypedResponseError};
 
 type KeyValuePair = (Arc<str>, String);
+
+/// Types which can be converted from a field value.
+pub(crate) trait FromFieldValue: Sized {
+    /// Convert the value.
+    fn from_value(v: String, field: &'static str) -> Result<Self, TypedResponseError>;
+}
+
+impl FromFieldValue for bool {
+    fn from_value(v: String, field: &'static str) -> Result<Self, TypedResponseError> {
+        match &*v {
+            "0" => Ok(false),
+            "1" => Ok(true),
+            _ => Err(TypedResponseError {
+                field,
+                kind: ErrorKind::InvalidValue(v),
+            }),
+        }
+    }
+}
+
+impl FromFieldValue for Duration {
+    fn from_value(v: String, field: &'static str) -> Result<Self, TypedResponseError> {
+        let value = v.parse::<f64>().map_err(|e| TypedResponseError {
+            field,
+            kind: ErrorKind::MalformedFloat(e),
+        })?;
+
+        // Check if the parsed value is a reasonable duration, to avoid a panic from `from_secs_f64`
+        if value >= 0.0 && value <= Duration::MAX.as_secs_f64() && value.is_finite() {
+            Ok(Duration::from_secs_f64(value))
+        } else {
+            Err(TypedResponseError {
+                field,
+                kind: ErrorKind::InvalidValue(v),
+            })
+        }
+    }
+}
+
+impl FromFieldValue for PlayState {
+    fn from_value(v: String, field: &'static str) -> Result<Self, TypedResponseError> {
+        match &*v {
+            "play" => Ok(PlayState::Playing),
+            "pause" => Ok(PlayState::Paused),
+            "stop" => Ok(PlayState::Stopped),
+            _ => Err(TypedResponseError {
+                field,
+                kind: ErrorKind::InvalidValue(v),
+            }),
+        }
+    }
+}
+
+fn parse_integer<I: FromStr<Err = ParseIntError>>(
+    v: String,
+    field: &'static str,
+) -> Result<I, TypedResponseError> {
+    v.parse::<I>().map_err(|e| TypedResponseError {
+        field,
+        kind: ErrorKind::MalformedInteger(e),
+    })
+}
+
+impl FromFieldValue for u8 {
+    fn from_value(v: String, field: &'static str) -> Result<Self, TypedResponseError> {
+        parse_integer(v, field)
+    }
+}
+
+impl FromFieldValue for u32 {
+    fn from_value(v: String, field: &'static str) -> Result<Self, TypedResponseError> {
+        parse_integer(v, field)
+    }
+}
+
+impl FromFieldValue for u64 {
+    fn from_value(v: String, field: &'static str) -> Result<Self, TypedResponseError> {
+        parse_integer(v, field)
+    }
+}
+
+impl FromFieldValue for usize {
+    fn from_value(v: String, field: &'static str) -> Result<Self, TypedResponseError> {
+        parse_integer(v, field)
+    }
+}
+
+/// Get a *required* value for the given field, as the given type.
+pub(crate) fn value<V: FromFieldValue>(
+    frame: &mut Frame,
+    field: &'static str,
+) -> Result<V, TypedResponseError> {
+    let value = frame.get(field).ok_or(TypedResponseError {
+        field,
+        kind: ErrorKind::Missing,
+    })?;
+    V::from_value(value, field)
+}
+
+/// Get an *optional* value for the given field, as the given type.
+fn optional_value<V: FromFieldValue>(
+    frame: &mut Frame,
+    field: &'static str,
+) -> Result<Option<V>, TypedResponseError> {
+    match frame.get(field) {
+        None => Ok(None),
+        Some(v) => {
+            let v = V::from_value(v, field)?;
+            Ok(Some(v))
+        }
+    }
+}
+
+fn song_identifier(
+    frame: &mut Frame,
+    position_field: &'static str,
+    id_field: &'static str,
+) -> Result<Option<(SongPosition, SongId)>, TypedResponseError> {
+    // The position field may or may not exist
+    let position = match optional_value(frame, position_field)? {
+        Some(p) => SongPosition(p),
+        None => return Ok(None),
+    };
+
+    // ... but if the position field existed, the ID field must exist too
+    let id = value(frame, id_field).map(SongId)?;
+
+    Ok(Some((position, id)))
+}
 
 fn parse_duration(field: &'static str, value: &str) -> Result<Duration, TypedResponseError> {
     let value = value.parse::<f64>().map_err(|e| TypedResponseError {
@@ -93,11 +222,11 @@ impl Status {
         };
 
         let duration = if let Some(val) = raw.get("duration") {
-            Some(parse!(duration, val, "duration"))
+            Some(Duration::from_value(val, "duration")?)
         } else if let Some(time) = raw.get("time") {
             // Backwards compatibility with protocol versions <0.20
             if let Some((_, duration)) = time.split_once(':') {
-                Some(parse!(duration, duration, "time"))
+                Some(Duration::from_value(duration.to_owned(), "time")?)
             } else {
                 // No separator
                 return Err(TypedResponseError {
@@ -109,26 +238,26 @@ impl Status {
             None
         };
 
-        let partition = raw.get("partition");
+        let f = &mut raw;
 
         Ok(Self {
-            volume: field!(raw, "volume" integer default 0),
-            state: field!(raw, "state" PlayState),
-            repeat: field!(raw, "repeat" boolean),
-            random: field!(raw, "random" boolean),
-            consume: field!(raw, "consume" boolean),
+            volume: optional_value(f, "volume")?.unwrap_or(0),
+            state: value(f, "state")?,
+            repeat: value(f, "repeat")?,
+            random: value(f, "random")?,
+            consume: value(f, "consume")?,
             single,
-            playlist_length: field!(raw, "playlistlength" integer default 0),
-            playlist_version: field!(raw, "playlist" integer default 0),
-            current_song: song_identifier!(raw, "song", "songid"),
-            next_song: song_identifier!(raw, "nextsong", "nextsongid"),
-            elapsed: field!(raw, "elapsed" duration optional),
+            playlist_length: optional_value(f, "playlistlength")?.unwrap_or(0),
+            playlist_version: optional_value(f, "playlist")?.unwrap_or(0),
+            current_song: song_identifier(f, "song", "songid")?,
+            next_song: song_identifier(f, "nextsong", "nextsongid")?,
+            elapsed: optional_value(f, "elapsed")?,
             duration,
-            bitrate: field!(raw, "bitrate" integer optional),
-            crossfade: field!(raw, "xfade" duration default Duration::from_secs(0)),
-            update_job: field!(raw, "update_job" integer optional),
-            error: raw.get("error"),
-            partition,
+            bitrate: optional_value(f, "bitrate")?,
+            crossfade: optional_value(f, "xfade")?.unwrap_or(Duration::ZERO),
+            update_job: optional_value(f, "update_job")?,
+            error: f.get("error"),
+            partition: f.get("partition"),
         })
     }
 }
@@ -151,15 +280,16 @@ pub struct Stats {
 }
 
 impl Stats {
-    pub(crate) fn from_frame(mut raw: Frame) -> Result<Self, TypedResponseError> {
+    pub(crate) fn from_frame(mut f: Frame) -> Result<Self, TypedResponseError> {
+        let f = &mut f;
         Ok(Self {
-            artists: field!(raw, "artists" integer),
-            albums: field!(raw, "albums" integer),
-            songs: field!(raw, "songs" integer),
-            uptime: field!(raw, "uptime" duration),
-            playtime: field!(raw, "playtime" duration),
-            db_playtime: field!(raw, "db_playtime" duration),
-            db_last_update: field!(raw, "db_update" integer),
+            artists: value(f, "artists")?,
+            albums: value(f, "albums")?,
+            songs: value(f, "songs")?,
+            uptime: value(f, "uptime")?,
+            playtime: value(f, "playtime")?,
+            db_playtime: value(f, "db_playtime")?,
+            db_last_update: value(f, "db_update")?,
         })
     }
 }
@@ -189,7 +319,7 @@ impl AlbumArt {
         };
 
         Ok(Some(AlbumArt {
-            size: field!(frame, "size" integer),
+            size: value(&mut frame, "size")?,
             mime: frame.get("type"),
             data,
         }))
