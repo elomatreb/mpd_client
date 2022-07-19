@@ -72,8 +72,6 @@ pub struct Status {
     pub crossfade: Duration,
     pub update_job: Option<u64>,
     pub error: Option<String>,
-    /// Name of the non-default partition this client is active on. Will be `None` if the default
-    /// partition is active or if the server doesn't send the field at all.
     pub partition: Option<String>,
 }
 
@@ -111,11 +109,7 @@ impl Status {
             None
         };
 
-        let mut partition = raw.get("partition");
-
-        if partition.as_deref() == Some("default") {
-            partition = None;
-        }
+        let partition = raw.get("partition");
 
         Ok(Self {
             volume: field!(raw, "volume" integer default 0),
