@@ -16,7 +16,7 @@ pub use self::{
     song::{Song, SongInQueue, SongRange},
     sticker::{StickerFind, StickerGet, StickerList},
 };
-use crate::commands::{ErrorKind, SingleMode, SongId, SongPosition, TypedResponseError};
+use crate::commands::{SingleMode, SongId, SongPosition, TypedResponseError};
 
 type KeyValuePair = (Arc<str>, String);
 
@@ -31,10 +31,7 @@ impl FromFieldValue for bool {
         match &*v {
             "0" => Ok(false),
             "1" => Ok(true),
-            _ => Err(TypedResponseError {
-                field,
-                kind: ErrorKind::InvalidValue(v),
-            }),
+            _ => Err(TypedResponseError::invalid_value(field.into(), v)),
         }
     }
 }
@@ -51,10 +48,7 @@ impl FromFieldValue for PlayState {
             "play" => Ok(PlayState::Playing),
             "pause" => Ok(PlayState::Paused),
             "stop" => Ok(PlayState::Stopped),
-            _ => Err(TypedResponseError {
-                field,
-                kind: ErrorKind::InvalidValue(v),
-            }),
+            _ => Err(TypedResponseError::invalid_value(field.into(), v)),
         }
     }
 }
@@ -63,10 +57,8 @@ fn parse_integer<I: FromStr<Err = ParseIntError>>(
     v: String,
     field: &'static str,
 ) -> Result<I, TypedResponseError> {
-    v.parse::<I>().map_err(|e| TypedResponseError {
-        field,
-        kind: ErrorKind::MalformedInteger(e),
-    })
+    v.parse::<I>()
+        .map_err(|e| TypedResponseError::invalid_value(field.into(), v).source(e))
 }
 
 impl FromFieldValue for u8 {
@@ -98,10 +90,9 @@ pub(crate) fn value<V: FromFieldValue>(
     frame: &mut Frame,
     field: &'static str,
 ) -> Result<V, TypedResponseError> {
-    let value = frame.get(field).ok_or(TypedResponseError {
-        field,
-        kind: ErrorKind::Missing,
-    })?;
+    let value = frame
+        .get(field)
+        .ok_or_else(|| TypedResponseError::missing(field.into()))?;
     V::from_value(value, field)
 }
 
@@ -140,22 +131,21 @@ fn parse_duration<V: AsRef<str> + Into<String>>(
     field: &'static str,
     value: V,
 ) -> Result<Duration, TypedResponseError> {
-    let v = value
-        .as_ref()
-        .parse::<f64>()
-        .map_err(|e| TypedResponseError {
-            field,
-            kind: ErrorKind::MalformedFloat(e),
-        })?;
+    let v = match value.as_ref().parse::<f64>() {
+        Ok(v) => v,
+        Err(e) => {
+            return Err(TypedResponseError::invalid_value(field.into(), value.into()).source(e))
+        }
+    };
 
     // Check if the parsed value is a reasonable duration, to avoid a panic from `from_secs_f64`
     if v >= 0.0 && v <= Duration::MAX.as_secs_f64() && v.is_finite() {
         Ok(Duration::from_secs_f64(v))
     } else {
-        Err(TypedResponseError {
-            field,
-            kind: ErrorKind::InvalidValue(value.into()),
-        })
+        Err(TypedResponseError::invalid_value(
+            field.into(),
+            value.into(),
+        ))
     }
 }
 
@@ -205,27 +195,22 @@ impl Status {
                 "0" => SingleMode::Disabled,
                 "1" => SingleMode::Enabled,
                 "oneshot" => SingleMode::Oneshot,
-                _ => {
-                    return Err(TypedResponseError {
-                        field: "single",
-                        kind: ErrorKind::InvalidValue(val),
-                    })
-                }
+                _ => return Err(TypedResponseError::invalid_value("single".into(), val)),
             },
         };
 
         let duration = if let Some(val) = raw.get("duration") {
             Some(Duration::from_value(val, "duration")?)
-        } else if let Some(time) = raw.get("time") {
+        } else if let Some(time) = raw.get("Time") {
             // Backwards compatibility with protocol versions <0.20
             if let Some((_, duration)) = time.split_once(':') {
-                Some(Duration::from_value(duration.to_owned(), "time")?)
+                Some(Duration::from_value(duration.to_owned(), "Time")?)
             } else {
                 // No separator
-                return Err(TypedResponseError {
-                    field: "time",
-                    kind: ErrorKind::InvalidValue(time),
-                });
+                return Err(TypedResponseError::invalid_value(
+                    String::from("Time"),
+                    time,
+                ));
             }
         } else {
             None
@@ -334,6 +319,7 @@ mod tests {
         assert_eq!(parse_duration("Time", "3").unwrap(), Duration::from_secs(3));
 
         // Error cases
+        assert_matches!(parse_duration("duration", "asdf"), Err(_));
         assert_matches!(parse_duration("duration", "-1"), Err(_));
         assert_matches!(parse_duration("duration", "NaN"), Err(_));
         assert_matches!(parse_duration("duration", "-1"), Err(_));

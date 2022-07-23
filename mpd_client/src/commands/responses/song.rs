@@ -6,7 +6,7 @@ use mpd_protocol::response::Frame;
 use crate::{
     commands::{
         responses::{parse_duration, FromFieldValue},
-        ErrorKind, SongId, SongPosition, TypedResponseError,
+        SongId, SongPosition, TypedResponseError,
     },
     tag::Tag,
 };
@@ -171,12 +171,7 @@ impl FromFieldValue for SongRange {
         // The range follows the form "<start>-<end?>"
         let (from, to) = match v.split_once('-') {
             Some((from, to)) => (from, to),
-            None => {
-                return Err(TypedResponseError {
-                    field,
-                    kind: ErrorKind::InvalidValue(v),
-                })
-            }
+            None => return Err(TypedResponseError::invalid_value(field.into(), v)),
         };
 
         let from = parse_duration(field, from)?;
@@ -193,10 +188,8 @@ impl FromFieldValue for SongRange {
 
 impl FromFieldValue for DateTime<FixedOffset> {
     fn from_value(v: String, field: &'static str) -> Result<Self, TypedResponseError> {
-        DateTime::parse_from_rfc3339(&v).map_err(|e| TypedResponseError {
-            field,
-            kind: ErrorKind::MalformedTimestamp(e),
-        })
+        DateTime::parse_from_rfc3339(&v)
+            .map_err(|e| TypedResponseError::invalid_value(field.into(), v).source(e))
     }
 }
 
@@ -245,11 +238,11 @@ impl SongBuilder {
             // `listallinfo`, as well as the last modified date associated with these entries
             "directory" | "playlist" | "Last-Modified" => (),
             // Any other fields are invalid
-            _ => {
-                return Err(TypedResponseError {
-                    field: "file",
-                    kind: ErrorKind::UnexpectedField(key.as_ref().into()),
-                })
+            other => {
+                return Err(TypedResponseError::unexpected_field(
+                    String::from("file"),
+                    other.into(),
+                ))
             }
         }
 
@@ -294,17 +287,11 @@ impl SongBuilder {
             "Pos" => self.position = usize::from_value(value, "Pos")?,
             "Id" => self.id = u64::from_value(value, "Id")?,
             tag => {
-                // This is probably a tag.
-
-                match Tag::try_from(tag) {
-                    Ok(t) => self.tags.entry(t).or_default().push(value),
-                    Err(_) => {
-                        return Err(TypedResponseError {
-                            field: "<any valid tag>",
-                            kind: ErrorKind::UnexpectedField(tag.into()),
-                        })
-                    }
-                }
+                // Anything else is a tag.
+                // It's fine to unwrap here because the protocol implementation already validated
+                // the field name
+                let tag = Tag::try_from(tag).unwrap();
+                self.tags.entry(tag).or_default().push(value);
             }
         }
 
@@ -507,35 +494,26 @@ mod tests {
     #[test]
     fn parse_range() {
         assert_eq!(
-            SongRange::from_value(String::from("1.500-5.642"), "Range"),
-            Ok(SongRange {
+            SongRange::from_value(String::from("1.500-5.642"), "Range").unwrap(),
+            SongRange {
                 from: Duration::from_secs_f64(1.5),
                 to: Some(Duration::from_secs_f64(5.642)),
-            })
+            }
         );
 
         assert_eq!(
-            SongRange::from_value(String::from("1.500-"), "Range"),
-            Ok(SongRange {
+            SongRange::from_value(String::from("1.500-"), "Range").unwrap(),
+            SongRange {
                 from: Duration::from_secs_f64(1.5),
                 to: None,
-            })
+            }
         );
 
-        assert_matches!(
-            SongRange::from_value(String::from("foo"), "Range"),
-            Err(TypedResponseError {
-                field: "Range",
-                kind: ErrorKind::InvalidValue(_),
-            })
-        );
+        assert_matches!(SongRange::from_value(String::from("foo"), "Range"), Err(_));
 
         assert_matches!(
             SongRange::from_value(String::from("1.000--5.000"), "Range"),
-            Err(TypedResponseError {
-                field: "Range",
-                kind: ErrorKind::InvalidValue(_),
-            })
+            Err(_)
         );
     }
 }

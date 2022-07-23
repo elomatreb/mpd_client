@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::commands::{responses::KeyValuePair, ErrorKind, TypedResponseError};
+use crate::commands::{responses::KeyValuePair, TypedResponseError};
 
 /// Response to the [`sticker get`] command.
 ///
@@ -86,11 +86,11 @@ impl StickerFind {
                     let (_, value) = parse_tag(tag)?;
                     map.insert(file.clone(), value.to_string());
                 }
-                _ => {
-                    return Err(TypedResponseError {
-                        field: "sticker",
-                        kind: ErrorKind::UnexpectedField(key.to_string()),
-                    })
+                other => {
+                    return Err(TypedResponseError::unexpected_field(
+                        String::from("sticker"),
+                        other.into(),
+                    ))
                 }
             }
         }
@@ -103,9 +103,9 @@ impl StickerFind {
 fn parse_tag(tag: String) -> Result<(String, String), TypedResponseError> {
     match tag.split_once('=') {
         Some((key, value)) => Ok((key.to_string(), value.to_string())),
-        None => Err(TypedResponseError {
-            field: "sticker",
-            kind: ErrorKind::InvalidValue(tag),
-        }),
+        None => Err(TypedResponseError::invalid_value(
+            String::from("sticker"),
+            tag,
+        )),
     }
 }

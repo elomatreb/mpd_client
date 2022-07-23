@@ -16,7 +16,7 @@ use mpd_protocol::{
 use crate::{
     commands::{
         responses::{self as res, value},
-        Command, ErrorKind, SeekMode, SingleMode, Song, SongId, SongPosition, TypedResponseError,
+        Command, SeekMode, SingleMode, Song, SongId, SongPosition, TypedResponseError,
     },
     filter::Filter,
     tag::Tag,
@@ -190,15 +190,14 @@ impl Command for GetEnabledTagTypes {
         let mut out = Vec::with_capacity(frame.fields_len());
         for (key, value) in frame {
             if &*key != "tagtype" {
-                return Err(TypedResponseError {
-                    field: "tagtype",
-                    kind: ErrorKind::UnexpectedField(String::from(&*key)),
-                });
+                return Err(TypedResponseError::unexpected_field(
+                    String::from("tagtype"),
+                    key.as_ref().into(),
+                ));
             }
 
-            let tag = Tag::try_from(&*value).map_err(|_| TypedResponseError {
-                field: "tagtype",
-                kind: ErrorKind::InvalidValue(value),
+            let tag = Tag::try_from(&*value).map_err(|e| {
+                TypedResponseError::invalid_value(String::from("tagtype"), value).source(e)
             })?;
 
             out.push(tag);

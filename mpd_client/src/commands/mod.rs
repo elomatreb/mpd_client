@@ -16,12 +16,10 @@ mod command_list;
 use std::{
     error::Error,
     fmt::{self, Write},
-    num::{ParseFloatError, ParseIntError},
     time::Duration,
 };
 
 use bytes::BytesMut;
-use chrono::ParseError;
 use mpd_protocol::{
     command::{Argument, Command as RawCommand},
     response::Frame,
@@ -117,45 +115,65 @@ pub trait Command {
 }
 
 /// Error returned when failing to convert a raw [`Frame`] into the proper typed response.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Debug)]
 pub struct TypedResponseError {
-    pub(crate) field: &'static str,
-    pub(crate) kind: ErrorKind,
+    kind: ErrorKind,
+    source: Option<Box<dyn Error + Send + Sync>>,
 }
 
-/// Types of parse errors.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) enum ErrorKind {
-    /// A required field was missing entirely.
-    Missing,
-    /// We expected a certain field, but found another.
-    UnexpectedField(String),
-    /// A field had a unexpected value.
-    InvalidValue(String),
-    /// A field containing an integer failed to parse.
-    MalformedInteger(ParseIntError),
-    /// A field containing a float (duration) failed to parse.
-    MalformedFloat(ParseFloatError),
-    /// A field containing a timestamp failed to parse.
-    MalformedTimestamp(ParseError),
+impl TypedResponseError {
+    /// Construct a "Missing field" error.
+    fn missing(field: String) -> TypedResponseError {
+        TypedResponseError {
+            kind: ErrorKind::Missing { field },
+            source: None,
+        }
+    }
+
+    /// Construct an "Unexpected field" error.
+    fn unexpected_field(expected: String, found: String) -> TypedResponseError {
+        TypedResponseError {
+            kind: ErrorKind::UnexpectedField { expected, found },
+            source: None,
+        }
+    }
+
+    /// Construct an "Invalid value" error.
+    fn invalid_value(field: String, value: String) -> TypedResponseError {
+        TypedResponseError {
+            kind: ErrorKind::InvalidValue { field, value },
+            source: None,
+        }
+    }
+
+    /// Set a source error.
+    ///
+    /// This is most useful with [invalid value][`TypedResponseError::invalid_value`] errors.
+    fn source<E>(self, source: E) -> TypedResponseError
+    where
+        E: Error + Send + Sync + 'static,
+    {
+        let source = Some(Box::from(source));
+        TypedResponseError { source, ..self }
+    }
+}
+
+#[derive(Debug)]
+enum ErrorKind {
+    Missing { field: String },
+    UnexpectedField { expected: String, found: String },
+    InvalidValue { field: String, value: String },
 }
 
 impl fmt::Display for TypedResponseError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.kind {
-            ErrorKind::Missing => write!(f, "field {:?} is required but missing", self.field),
-            ErrorKind::InvalidValue(val) => {
-                write!(f, "value {:?} is invalid for field {:?}", val, self.field)
+            ErrorKind::Missing { field } => write!(f, "field {:?} is required but missing", field),
+            ErrorKind::UnexpectedField { expected, found } => {
+                write!(f, "expected field {:?} but found {:?}", expected, found)
             }
-            ErrorKind::UnexpectedField(found) => {
-                write!(f, "expected field {:?} but found {:?}", self.field, found)
-            }
-            ErrorKind::MalformedInteger(_) => write!(f, "field {:?} is not an integer", self.field),
-            ErrorKind::MalformedFloat(_) => {
-                write!(f, "field {:?} is not a valid duration", self.field)
-            }
-            ErrorKind::MalformedTimestamp(_) => {
-                write!(f, "field {:?} is not a valid timestamp", self.field)
+            ErrorKind::InvalidValue { field, value } => {
+                write!(f, "invalid value {:?} for field {:?}", value, field)
             }
         }
     }
@@ -163,11 +181,6 @@ impl fmt::Display for TypedResponseError {
 
 impl Error for TypedResponseError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
-        match &self.kind {
-            ErrorKind::MalformedFloat(e) => Some(e),
-            ErrorKind::MalformedInteger(e) => Some(e),
-            ErrorKind::MalformedTimestamp(e) => Some(e),
-            _ => None,
-        }
+        self.source.as_deref().map(|e| e as _)
     }
 }
