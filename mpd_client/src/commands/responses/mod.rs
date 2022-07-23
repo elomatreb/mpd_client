@@ -41,20 +41,7 @@ impl FromFieldValue for bool {
 
 impl FromFieldValue for Duration {
     fn from_value(v: String, field: &'static str) -> Result<Self, TypedResponseError> {
-        let value = v.parse::<f64>().map_err(|e| TypedResponseError {
-            field,
-            kind: ErrorKind::MalformedFloat(e),
-        })?;
-
-        // Check if the parsed value is a reasonable duration, to avoid a panic from `from_secs_f64`
-        if value >= 0.0 && value <= Duration::MAX.as_secs_f64() && value.is_finite() {
-            Ok(Duration::from_secs_f64(value))
-        } else {
-            Err(TypedResponseError {
-                field,
-                kind: ErrorKind::InvalidValue(v),
-            })
-        }
+        parse_duration(field, v)
     }
 }
 
@@ -149,19 +136,25 @@ fn song_identifier(
     Ok(Some((position, id)))
 }
 
-fn parse_duration(field: &'static str, value: &str) -> Result<Duration, TypedResponseError> {
-    let value = value.parse::<f64>().map_err(|e| TypedResponseError {
-        field,
-        kind: ErrorKind::MalformedFloat(e),
-    })?;
+fn parse_duration<V: AsRef<str> + Into<String>>(
+    field: &'static str,
+    value: V,
+) -> Result<Duration, TypedResponseError> {
+    let v = value
+        .as_ref()
+        .parse::<f64>()
+        .map_err(|e| TypedResponseError {
+            field,
+            kind: ErrorKind::MalformedFloat(e),
+        })?;
 
     // Check if the parsed value is a reasonable duration, to avoid a panic from `from_secs_f64`
-    if value >= 0.0 && value <= Duration::MAX.as_secs_f64() && value.is_finite() {
-        Ok(Duration::from_secs_f64(value))
+    if v >= 0.0 && v <= Duration::MAX.as_secs_f64() && v.is_finite() {
+        Ok(Duration::from_secs_f64(v))
     } else {
         Err(TypedResponseError {
             field,
-            kind: ErrorKind::InvalidTimestamp,
+            kind: ErrorKind::InvalidValue(value.into()),
         })
     }
 }
@@ -323,5 +316,26 @@ impl AlbumArt {
             mime: frame.get("type"),
             data,
         }))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use assert_matches::assert_matches;
+
+    use super::*;
+
+    #[test]
+    fn duration_parsing() {
+        assert_eq!(
+            parse_duration("duration", "1.500").unwrap(),
+            Duration::from_secs_f64(1.5)
+        );
+        assert_eq!(parse_duration("Time", "3").unwrap(), Duration::from_secs(3));
+
+        // Error cases
+        assert_matches!(parse_duration("duration", "-1"), Err(_));
+        assert_matches!(parse_duration("duration", "NaN"), Err(_));
+        assert_matches!(parse_duration("duration", "-1"), Err(_));
     }
 }

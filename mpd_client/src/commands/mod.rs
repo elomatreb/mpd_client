@@ -136,8 +136,6 @@ pub(crate) enum ErrorKind {
     MalformedInteger(ParseIntError),
     /// A field containing a float (duration) failed to parse.
     MalformedFloat(ParseFloatError),
-    /// A field containing a duration contained an impossible value (e.g. negative or NaN).
-    InvalidTimestamp,
     /// A field containing a timestamp failed to parse.
     MalformedTimestamp(ParseError),
 }
@@ -153,7 +151,7 @@ impl fmt::Display for TypedResponseError {
                 write!(f, "expected field {:?} but found {:?}", self.field, found)
             }
             ErrorKind::MalformedInteger(_) => write!(f, "field {:?} is not an integer", self.field),
-            ErrorKind::MalformedFloat(_) | ErrorKind::InvalidTimestamp => {
+            ErrorKind::MalformedFloat(_) => {
                 write!(f, "field {:?} is not a valid duration", self.field)
             }
             ErrorKind::MalformedTimestamp(_) => {

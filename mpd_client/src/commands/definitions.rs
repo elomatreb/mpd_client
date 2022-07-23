@@ -138,7 +138,7 @@ impl Command for Queue {
     }
 
     fn response(self, frame: Frame) -> Result<Self::Response, TypedResponseError> {
-        res::SongInQueue::parse_frame(frame, None)
+        res::SongInQueue::from_frame_multi(frame)
     }
 }
 
@@ -154,8 +154,7 @@ impl Command for CurrentSong {
     }
 
     fn response(self, frame: Frame) -> Result<Self::Response, TypedResponseError> {
-        let mut s = res::SongInQueue::parse_frame(frame, Some(1))?;
-        Ok(s.pop())
+        res::SongInQueue::from_frame_single(frame)
     }
 }
 
@@ -221,7 +220,7 @@ impl Command for GetPlaylist {
     }
 
     fn response(self, frame: Frame) -> Result<Self::Response, TypedResponseError> {
-        res::Song::parse_frame(frame, None)
+        res::Song::from_frame_multi(frame)
     }
 }
 
@@ -700,7 +699,7 @@ impl Command for Find {
     }
 
     fn response(self, frame: Frame) -> Result<Self::Response, TypedResponseError> {
-        res::Song::parse_frame(frame, None)
+        res::Song::from_frame_multi(frame)
     }
 }
 
@@ -991,7 +990,7 @@ impl Command for ListAllIn {
     }
 
     fn response(self, frame: Frame) -> Result<Self::Response, TypedResponseError> {
-        res::Song::parse_frame(frame, None)
+        res::Song::from_frame_multi(frame)
     }
 }
 
