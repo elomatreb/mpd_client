@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 
+use mpd_protocol::response::Frame;
+
 use crate::commands::{responses::KeyValuePair, TypedResponseError};
 
 /// Response to the [`sticker get`] command.
@@ -13,16 +15,24 @@ pub struct StickerGet {
 }
 
 impl StickerGet {
-    pub(crate) fn from_frame(
-        raw: impl IntoIterator<Item = KeyValuePair>,
-    ) -> Result<Self, TypedResponseError> {
-        let pair: String = raw.into_iter().map(|(_, value)| value).next().unwrap();
+    pub(crate) fn from_frame(frame: Frame) -> Result<Self, TypedResponseError> {
+        let (key, field_value) = match frame.into_iter().next() {
+            Some(v) => v,
+            None => return Err(TypedResponseError::missing("sticker".into())),
+        };
 
-        // server returns the key/value
-        // we know the key so just get the value
-        let (_, value) = parse_tag(pair)?;
+        if &*key != "sticker" {
+            return Err(TypedResponseError::unexpected_field(
+                "sticker".into(),
+                key.as_ref().into(),
+            ));
+        }
 
-        Ok(Self { value })
+        let (_, sticker_value) = parse_sticker_value(field_value)?;
+
+        Ok(StickerGet {
+            value: sticker_value,
+        })
     }
 }
 
@@ -48,10 +58,10 @@ impl StickerList {
     ) -> Result<Self, TypedResponseError> {
         let value = raw
             .into_iter()
-            .map(|(_, tag): KeyValuePair| parse_tag(tag))
-            .collect::<Result<_, _>>();
+            .map(|(_, value)| parse_sticker_value(value))
+            .collect::<Result<_, _>>()?;
 
-        Ok(Self { value: value? })
+        Ok(Self { value })
     }
 }
 
@@ -75,7 +85,7 @@ impl StickerFind {
     pub(crate) fn from_frame(
         raw: impl IntoIterator<Item = KeyValuePair>,
     ) -> Result<Self, TypedResponseError> {
-        let mut map = HashMap::new();
+        let mut value = HashMap::new();
 
         let mut file = String::new();
 
@@ -83,8 +93,8 @@ impl StickerFind {
             match &*key {
                 "file" => file = tag,
                 "sticker" => {
-                    let (_, value) = parse_tag(tag)?;
-                    map.insert(file.clone(), value.to_string());
+                    let (_, sticker_value) = parse_sticker_value(tag)?;
+                    value.insert(file.clone(), sticker_value);
                 }
                 other => {
                     return Err(TypedResponseError::unexpected_field(
@@ -95,14 +105,18 @@ impl StickerFind {
             }
         }
 
-        Ok(Self { value: map })
+        Ok(Self { value })
     }
 }
 
 /// Parses a `key=value` tag into its key and value strings
-fn parse_tag(tag: String) -> Result<(String, String), TypedResponseError> {
+fn parse_sticker_value(mut tag: String) -> Result<(String, String), TypedResponseError> {
     match tag.split_once('=') {
-        Some((key, value)) => Ok((key.to_string(), value.to_string())),
+        Some((key, value)) => {
+            let value = String::from(value);
+            tag.truncate(key.len());
+            Ok((tag, value))
+        }
         None => Err(TypedResponseError::invalid_value(
             String::from("sticker"),
             tag,

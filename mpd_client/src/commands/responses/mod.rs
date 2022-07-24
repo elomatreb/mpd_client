@@ -23,11 +23,11 @@ type KeyValuePair = (Arc<str>, String);
 /// Types which can be converted from a field value.
 pub(crate) trait FromFieldValue: Sized {
     /// Convert the value.
-    fn from_value(v: String, field: &'static str) -> Result<Self, TypedResponseError>;
+    fn from_value(v: String, field: &str) -> Result<Self, TypedResponseError>;
 }
 
 impl FromFieldValue for bool {
-    fn from_value(v: String, field: &'static str) -> Result<Self, TypedResponseError> {
+    fn from_value(v: String, field: &str) -> Result<Self, TypedResponseError> {
         match &*v {
             "0" => Ok(false),
             "1" => Ok(true),
@@ -37,13 +37,13 @@ impl FromFieldValue for bool {
 }
 
 impl FromFieldValue for Duration {
-    fn from_value(v: String, field: &'static str) -> Result<Self, TypedResponseError> {
+    fn from_value(v: String, field: &str) -> Result<Self, TypedResponseError> {
         parse_duration(field, v)
     }
 }
 
 impl FromFieldValue for PlayState {
-    fn from_value(v: String, field: &'static str) -> Result<Self, TypedResponseError> {
+    fn from_value(v: String, field: &str) -> Result<Self, TypedResponseError> {
         match &*v {
             "play" => Ok(PlayState::Playing),
             "pause" => Ok(PlayState::Paused),
@@ -55,32 +55,32 @@ impl FromFieldValue for PlayState {
 
 fn parse_integer<I: FromStr<Err = ParseIntError>>(
     v: String,
-    field: &'static str,
+    field: &str,
 ) -> Result<I, TypedResponseError> {
     v.parse::<I>()
         .map_err(|e| TypedResponseError::invalid_value(field.into(), v).source(e))
 }
 
 impl FromFieldValue for u8 {
-    fn from_value(v: String, field: &'static str) -> Result<Self, TypedResponseError> {
+    fn from_value(v: String, field: &str) -> Result<Self, TypedResponseError> {
         parse_integer(v, field)
     }
 }
 
 impl FromFieldValue for u32 {
-    fn from_value(v: String, field: &'static str) -> Result<Self, TypedResponseError> {
+    fn from_value(v: String, field: &str) -> Result<Self, TypedResponseError> {
         parse_integer(v, field)
     }
 }
 
 impl FromFieldValue for u64 {
-    fn from_value(v: String, field: &'static str) -> Result<Self, TypedResponseError> {
+    fn from_value(v: String, field: &str) -> Result<Self, TypedResponseError> {
         parse_integer(v, field)
     }
 }
 
 impl FromFieldValue for usize {
-    fn from_value(v: String, field: &'static str) -> Result<Self, TypedResponseError> {
+    fn from_value(v: String, field: &str) -> Result<Self, TypedResponseError> {
         parse_integer(v, field)
     }
 }
@@ -128,7 +128,7 @@ fn song_identifier(
 }
 
 fn parse_duration<V: AsRef<str> + Into<String>>(
-    field: &'static str,
+    field: &str,
     value: V,
 ) -> Result<Duration, TypedResponseError> {
     let v = match value.as_ref().parse::<f64>() {

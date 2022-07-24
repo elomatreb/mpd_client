@@ -167,7 +167,7 @@ pub struct SongRange {
 }
 
 impl FromFieldValue for SongRange {
-    fn from_value(v: String, field: &'static str) -> Result<Self, TypedResponseError> {
+    fn from_value(v: String, field: &str) -> Result<Self, TypedResponseError> {
         // The range follows the form "<start>-<end?>"
         let (from, to) = match v.split_once('-') {
             Some((from, to)) => (from, to),
@@ -187,7 +187,7 @@ impl FromFieldValue for SongRange {
 }
 
 impl FromFieldValue for DateTime<FixedOffset> {
-    fn from_value(v: String, field: &'static str) -> Result<Self, TypedResponseError> {
+    fn from_value(v: String, field: &str) -> Result<Self, TypedResponseError> {
         DateTime::parse_from_rfc3339(&v)
             .map_err(|e| TypedResponseError::invalid_value(field.into(), v).source(e))
     }
