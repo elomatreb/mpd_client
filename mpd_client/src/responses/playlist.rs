@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use chrono::{DateTime, FixedOffset};
 
-use crate::commands::TypedResponseError;
+use crate::responses::TypedResponseError;
 
 /// A stored playlist, as returned by [`listplaylists`].
 ///

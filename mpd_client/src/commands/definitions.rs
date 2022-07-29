@@ -14,11 +14,9 @@ use mpd_protocol::{
 };
 
 use crate::{
-    commands::{
-        responses::{self as res, value},
-        Command, SeekMode, SingleMode, Song, SongId, SongPosition, TypedResponseError,
-    },
+    commands::{Command, SeekMode, SingleMode, Song, SongId, SongPosition},
     filter::Filter,
+    responses::{self as res, value, TypedResponseError},
     tag::Tag,
 };
 

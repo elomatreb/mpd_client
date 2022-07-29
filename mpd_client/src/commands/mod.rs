@@ -9,15 +9,10 @@
 //! [mpd-docs]: https://www.musicpd.org/doc/html/protocol.html#command-reference
 
 pub mod definitions;
-pub mod responses;
 
 mod command_list;
 
-use std::{
-    error::Error,
-    fmt::{self, Write},
-    time::Duration,
-};
+use std::{fmt::Write, time::Duration};
 
 use bytes::BytesMut;
 use mpd_protocol::{
@@ -26,6 +21,7 @@ use mpd_protocol::{
 };
 
 pub use self::{command_list::CommandList, definitions::*};
+use crate::responses::TypedResponseError;
 
 /// Stable identifier of a song in the queue.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -112,75 +108,4 @@ pub trait Command {
 
     /// Create the response type from the raw response.
     fn response(self, frame: Frame) -> Result<Self::Response, TypedResponseError>;
-}
-
-/// Error returned when failing to convert a raw [`Frame`] into the proper typed response.
-#[derive(Debug)]
-pub struct TypedResponseError {
-    kind: ErrorKind,
-    source: Option<Box<dyn Error + Send + Sync>>,
-}
-
-impl TypedResponseError {
-    /// Construct a "Missing field" error.
-    fn missing(field: String) -> TypedResponseError {
-        TypedResponseError {
-            kind: ErrorKind::Missing { field },
-            source: None,
-        }
-    }
-
-    /// Construct an "Unexpected field" error.
-    fn unexpected_field(expected: String, found: String) -> TypedResponseError {
-        TypedResponseError {
-            kind: ErrorKind::UnexpectedField { expected, found },
-            source: None,
-        }
-    }
-
-    /// Construct an "Invalid value" error.
-    fn invalid_value(field: String, value: String) -> TypedResponseError {
-        TypedResponseError {
-            kind: ErrorKind::InvalidValue { field, value },
-            source: None,
-        }
-    }
-
-    /// Set a source error.
-    ///
-    /// This is most useful with [invalid value][`TypedResponseError::invalid_value`] errors.
-    fn source<E>(self, source: E) -> TypedResponseError
-    where
-        E: Error + Send + Sync + 'static,
-    {
-        let source = Some(Box::from(source));
-        TypedResponseError { source, ..self }
-    }
-}
-
-#[derive(Debug)]
-enum ErrorKind {
-    Missing { field: String },
-    UnexpectedField { expected: String, found: String },
-    InvalidValue { field: String, value: String },
-}
-
-impl fmt::Display for TypedResponseError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match &self.kind {
-            ErrorKind::Missing { field } => write!(f, "field {:?} is required but missing", field),
-            ErrorKind::UnexpectedField { expected, found } => {
-                write!(f, "expected field {:?} but found {:?}", expected, found)
-            }
-            ErrorKind::InvalidValue { field, value } => {
-                write!(f, "invalid value {:?} for field {:?}", value, field)
-            }
-        }
-    }
-}
-
-impl Error for TypedResponseError {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        self.source.as_deref().map(|e| e as _)
-    }
 }

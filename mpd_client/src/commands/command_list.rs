@@ -1,6 +1,6 @@
 use mpd_protocol::{command::CommandList as RawCommandList, response::Frame};
 
-use crate::commands::{Command, TypedResponseError};
+use crate::{commands::Command, responses::TypedResponseError};
 
 /// Types which can be used as a typed command list, using
 /// [`Client::command_list`][crate::Client::command_list].

@@ -23,7 +23,10 @@ use tokio::{
 };
 use tracing::{debug, error, span, trace, warn, Instrument, Level};
 
-use crate::commands::{self as cmds, Command, CommandList, TypedResponseError};
+use crate::{
+    commands::{self as cmds, Command, CommandList},
+    responses::TypedResponseError,
+};
 
 type CommandResponder = oneshot::Sender<Result<RawResponse, CommandError>>;
 

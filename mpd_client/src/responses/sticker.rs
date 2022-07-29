@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use mpd_protocol::response::Frame;
 
-use crate::commands::{responses::KeyValuePair, TypedResponseError};
+use crate::responses::{KeyValuePair, TypedResponseError};
 
 /// Response to the [`sticker get`] command.
 ///

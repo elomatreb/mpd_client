@@ -4,10 +4,8 @@ use chrono::{DateTime, FixedOffset};
 use mpd_protocol::response::Frame;
 
 use crate::{
-    commands::{
-        responses::{parse_duration, FromFieldValue},
-        SongId, SongPosition, TypedResponseError,
-    },
+    commands::{SongId, SongPosition},
+    responses::{parse_duration, FromFieldValue, TypedResponseError},
     tag::Tag,
 };
 

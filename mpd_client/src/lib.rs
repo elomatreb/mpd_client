@@ -16,6 +16,7 @@
 pub mod client;
 pub mod commands;
 pub mod filter;
+pub mod responses;
 pub mod tag;
 
 pub use mpd_protocol as protocol;

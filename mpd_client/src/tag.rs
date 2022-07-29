@@ -29,7 +29,7 @@ use mpd_protocol::command::Argument;
 /// The equality is checked using the string representation, so `Other` variants are
 /// forward-compatible with new variants being added.
 ///
-/// [`Song`]: crate::commands::responses::Song
+/// [`Song`]: crate::responses::Song
 /// [MusicBrainz]: https://musicbrainz.org
 #[derive(Clone, Debug)]
 #[allow(missing_docs)]

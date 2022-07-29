@@ -1,4 +1,4 @@
-use crate::{commands::responses::KeyValuePair, tag::Tag};
+use crate::{responses::KeyValuePair, tag::Tag};
 
 /// Response to the [`list`] command.
 ///

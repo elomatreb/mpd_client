@@ -5,7 +5,7 @@ mod playlist;
 mod song;
 mod sticker;
 
-use std::{num::ParseIntError, str::FromStr, sync::Arc, time::Duration};
+use std::{error::Error, fmt, num::ParseIntError, str::FromStr, sync::Arc, time::Duration};
 
 use bytes::Bytes;
 use mpd_protocol::response::Frame;
@@ -16,9 +16,80 @@ pub use self::{
     song::{Song, SongInQueue, SongRange},
     sticker::{StickerFind, StickerGet, StickerList},
 };
-use crate::commands::{SingleMode, SongId, SongPosition, TypedResponseError};
+use crate::commands::{SingleMode, SongId, SongPosition};
 
 type KeyValuePair = (Arc<str>, String);
+
+/// Error returned when failing to convert a raw [`Frame`] into the proper typed response.
+#[derive(Debug)]
+pub struct TypedResponseError {
+    kind: ErrorKind,
+    source: Option<Box<dyn Error + Send + Sync>>,
+}
+
+impl TypedResponseError {
+    /// Construct a "Missing field" error.
+    fn missing(field: String) -> TypedResponseError {
+        TypedResponseError {
+            kind: ErrorKind::Missing { field },
+            source: None,
+        }
+    }
+
+    /// Construct an "Unexpected field" error.
+    pub(crate) fn unexpected_field(expected: String, found: String) -> TypedResponseError {
+        TypedResponseError {
+            kind: ErrorKind::UnexpectedField { expected, found },
+            source: None,
+        }
+    }
+
+    /// Construct an "Invalid value" error.
+    pub(crate) fn invalid_value(field: String, value: String) -> TypedResponseError {
+        TypedResponseError {
+            kind: ErrorKind::InvalidValue { field, value },
+            source: None,
+        }
+    }
+
+    /// Set a source error.
+    ///
+    /// This is most useful with [invalid value][`TypedResponseError::invalid_value`] errors.
+    pub(crate) fn source<E>(self, source: E) -> TypedResponseError
+    where
+        E: Error + Send + Sync + 'static,
+    {
+        let source = Some(Box::from(source));
+        TypedResponseError { source, ..self }
+    }
+}
+
+#[derive(Debug)]
+enum ErrorKind {
+    Missing { field: String },
+    UnexpectedField { expected: String, found: String },
+    InvalidValue { field: String, value: String },
+}
+
+impl fmt::Display for TypedResponseError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match &self.kind {
+            ErrorKind::Missing { field } => write!(f, "field {:?} is required but missing", field),
+            ErrorKind::UnexpectedField { expected, found } => {
+                write!(f, "expected field {:?} but found {:?}", expected, found)
+            }
+            ErrorKind::InvalidValue { field, value } => {
+                write!(f, "invalid value {:?} for field {:?}", value, field)
+            }
+        }
+    }
+}
+
+impl Error for TypedResponseError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        self.source.as_deref().map(|e| e as _)
+    }
+}
 
 /// Types which can be converted from a field value.
 pub(crate) trait FromFieldValue: Sized {
