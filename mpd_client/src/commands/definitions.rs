@@ -702,37 +702,46 @@ impl Command for Find {
 
 /// `list` command.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct List {
+pub struct List<const N: usize = 0> {
     tag: Tag,
     filter: Option<Filter>,
-    group_by: Option<Tag>,
+    group_by: [Tag; N],
 }
 
-impl List {
+impl List<0> {
     /// List distinct values of `tag`.
-    pub fn new(tag: Tag) -> Self {
+    pub fn new(tag: Tag) -> List<0> {
         List {
             tag,
             filter: None,
-            group_by: None,
+            group_by: [],
         }
     }
+}
 
+impl<const N: usize> List<N> {
     /// Filter the songs being considered using the given `filter`.
+    ///
+    /// This will overwrite the filter if called multiple times.
     pub fn filter(mut self, filter: Filter) -> Self {
         self.filter = Some(filter);
         self
     }
 
     /// Group results by the given tag.
-    pub fn group_by(mut self, group_by: Tag) -> Self {
-        self.group_by = Some(group_by);
-        self
+    ///
+    /// This will overwrite the grouping if called multiple times.
+    pub fn group_by<const M: usize>(self, group_by: [Tag; M]) -> List<M> {
+        List {
+            tag: self.tag,
+            filter: self.filter,
+            group_by,
+        }
     }
 }
 
-impl Command for List {
-    type Response = res::List;
+impl<const N: usize> Command for List<N> {
+    type Response = res::List<N>;
 
     fn command(&self) -> RawCommand {
         let mut command = RawCommand::new("list").argument(&self.tag);
@@ -741,7 +750,7 @@ impl Command for List {
             command.add_argument(filter).unwrap();
         }
 
-        if let Some(group_by) = self.group_by.as_ref() {
+        for group_by in &self.group_by {
             command.add_argument("group").unwrap();
             command.add_argument(group_by).unwrap();
         }
@@ -750,7 +759,7 @@ impl Command for List {
     }
 
     fn response(self, frame: Frame) -> Result<Self::Response, TypedResponseError> {
-        Ok(res::List::from_frame(frame))
+        res::List::from_frame(self.tag, self.group_by, frame)
     }
 }
 
@@ -1576,15 +1585,17 @@ mod tests {
 
         let filter = Filter::tag(Tag::Artist, "Foo");
         assert_eq!(
-            List::new(Tag::Album)
+            List::new(Tag::Title)
                 .filter(filter.clone())
-                .group_by(Tag::AlbumArtist)
+                .group_by([Tag::AlbumArtist, Tag::Album])
                 .command(),
             RawCommand::new("list")
-                .argument("Album")
+                .argument("Title")
                 .argument(filter)
                 .argument("group")
                 .argument("AlbumArtist")
+                .argument("group")
+                .argument("Album")
         );
     }
 

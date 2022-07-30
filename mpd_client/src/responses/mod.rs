@@ -12,7 +12,7 @@ use bytes::Bytes;
 use mpd_protocol::response::Frame;
 
 pub use self::{
-    list::List,
+    list::{GroupedListValuesIter, List, ListValuesIntoIter, ListValuesIter},
     playlist::Playlist,
     song::{Song, SongInQueue, SongRange},
     sticker::{StickerFind, StickerGet, StickerList},
