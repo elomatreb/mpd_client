@@ -18,6 +18,8 @@
 //! | Feature  | Description                       |
 //! |----------|-----------------------------------|
 //! | `chrono` | Support for parsing [`Timestamp`] |
+//!
+//! [`Timestamp`]: responses::Timestamp
 
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
 
