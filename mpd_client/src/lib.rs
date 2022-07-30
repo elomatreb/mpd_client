@@ -12,6 +12,14 @@
 //! Asynchronous client for [MPD](https://musicpd.org).
 //!
 //! The [`Client`] type is the primary API.
+//!
+//! # Crate Features
+//!
+//! | Feature  | Description                       |
+//! |----------|-----------------------------------|
+//! | `chrono` | Support for parsing [`Timestamp`] |
+
+#![cfg_attr(docsrs, feature(doc_auto_cfg))]
 
 pub mod client;
 pub mod commands;

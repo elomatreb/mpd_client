@@ -1,8 +1,6 @@
 use std::sync::Arc;
 
-use chrono::{DateTime, FixedOffset};
-
-use crate::responses::TypedResponseError;
+use crate::responses::{FromFieldValue, Timestamp, TypedResponseError};
 
 /// A stored playlist, as returned by [`listplaylists`].
 ///
@@ -13,7 +11,7 @@ pub struct Playlist {
     /// Name of the playlist.
     pub name: String,
     /// Server timestamp of last modification.
-    pub last_modified: DateTime<FixedOffset>,
+    pub last_modified: Timestamp,
 }
 
 impl Playlist {
@@ -29,9 +27,7 @@ impl Playlist {
         for (key, value) in fields {
             if let Some(name) = current_name.take() {
                 if key.as_ref() == "Last-Modified" {
-                    let last_modified = DateTime::parse_from_rfc3339(&value).map_err(|e| {
-                        TypedResponseError::invalid_value("Last-Modified".into(), value).source(e)
-                    })?;
+                    let last_modified = Timestamp::from_value(value, "Last-Modified")?;
 
                     out.push(Playlist {
                         name,

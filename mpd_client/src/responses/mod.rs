@@ -4,6 +4,7 @@ mod list;
 mod playlist;
 mod song;
 mod sticker;
+mod timestamp;
 
 use std::{error::Error, fmt, num::ParseIntError, str::FromStr, sync::Arc, time::Duration};
 
@@ -15,6 +16,7 @@ pub use self::{
     playlist::Playlist,
     song::{Song, SongInQueue, SongRange},
     sticker::{StickerFind, StickerGet, StickerList},
+    timestamp::Timestamp,
 };
 use crate::commands::{SingleMode, SongId, SongPosition};
 

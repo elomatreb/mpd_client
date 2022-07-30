@@ -1,11 +1,10 @@
 use std::{collections::HashMap, mem, path::Path, sync::Arc, time::Duration};
 
-use chrono::{DateTime, FixedOffset};
 use mpd_protocol::response::Frame;
 
 use crate::{
     commands::{SongId, SongPosition},
-    responses::{parse_duration, FromFieldValue, TypedResponseError},
+    responses::{parse_duration, FromFieldValue, Timestamp, TypedResponseError},
     tag::Tag,
 };
 
@@ -79,7 +78,7 @@ pub struct Song {
     /// The `format` as returned by MPD.
     pub format: Option<String>,
     /// Last modification date of the underlying file.
-    pub last_modified: Option<DateTime<FixedOffset>>,
+    pub last_modified: Option<Timestamp>,
 }
 
 impl Song {
@@ -184,13 +183,6 @@ impl FromFieldValue for SongRange {
     }
 }
 
-impl FromFieldValue for DateTime<FixedOffset> {
-    fn from_value(v: String, field: &str) -> Result<Self, TypedResponseError> {
-        DateTime::parse_from_rfc3339(&v)
-            .map_err(|e| TypedResponseError::invalid_value(field.into(), v).source(e))
-    }
-}
-
 #[derive(Debug, Default)]
 struct SongBuilder {
     url: String,
@@ -201,7 +193,7 @@ struct SongBuilder {
     duration: Option<Duration>,
     tags: HashMap<Tag, Vec<String>>,
     format: Option<String>,
-    last_modified: Option<DateTime<FixedOffset>>,
+    last_modified: Option<Timestamp>,
 }
 
 impl SongBuilder {
@@ -278,7 +270,7 @@ impl SongBuilder {
             "Range" => self.range = Some(SongRange::from_value(value, "Range")?),
             "Format" => self.format = Some(value),
             "Last-Modified" => {
-                let lm = DateTime::<FixedOffset>::from_value(value, "Last-Modified")?;
+                let lm = Timestamp::from_value(value, "Last-Modified")?;
                 self.last_modified = Some(lm);
             }
             "Prio" => self.priority = u8::from_value(value, "Prio")?,
@@ -376,7 +368,7 @@ mod tests {
                     url: String::from("test.flac"),
                     duration: Some(Duration::from_secs_f64(123.456)),
                     format: None,
-                    last_modified: Some(DateTime::parse_from_rfc3339(TEST_TIMESTAMP).unwrap()),
+                    last_modified: Some(Timestamp::from_value(TEST_TIMESTAMP.into(), "").unwrap()),
                     tags: [(Tag::Title, vec![String::from("Foo")])].into(),
                 }
             }
