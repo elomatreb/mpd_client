@@ -169,16 +169,16 @@ impl<IO> Connection<IO> {
                 read_to_buffer(&mut self.io, &mut self.recv_buf, &mut self.total_received)?;
 
             if amount_read == 0 {
-                if response_builder.is_frame_in_progress() || self.total_received != 0 {
+                break if response_builder.is_frame_in_progress() || self.total_received != 0 {
                     error!("EOF while receiving response");
-                    break Err(MpdProtocolError::Io(io::Error::new(
+                    Err(MpdProtocolError::Io(io::Error::new(
                         io::ErrorKind::UnexpectedEof,
                         "unexpected end of file while receiving response",
-                    )));
+                    )))
                 } else {
                     debug!("clean EOF while receiving response");
-                    break Ok(None);
-                }
+                    Ok(None)
+                };
             }
         }
     }
@@ -401,16 +401,16 @@ impl<IO> AsyncConnection<IO> {
             trace!(read);
 
             if read == 0 {
-                if response_builder.is_frame_in_progress() || !self.0.recv_buf.is_empty() {
+                break if response_builder.is_frame_in_progress() || !self.0.recv_buf.is_empty() {
                     error!("EOF while receiving response");
-                    break Err(MpdProtocolError::Io(io::Error::new(
+                    Err(MpdProtocolError::Io(io::Error::new(
                         io::ErrorKind::UnexpectedEof,
                         "unexpected end of file while receiving response",
-                    )));
+                    )))
                 } else {
                     debug!("clean EOF while receiving");
-                    break Ok(None);
-                }
+                    Ok(None)
+                };
             }
         }
     }

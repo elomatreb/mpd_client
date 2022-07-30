@@ -615,7 +615,7 @@ impl Eq for Subsystem {}
 
 impl Hash for Subsystem {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        self.as_str().hash(state)
+        self.as_str().hash(state);
     }
 }
 

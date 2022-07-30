@@ -100,12 +100,16 @@ impl From<SongPosition> for Song {
 
 /// Types which can be used as pre-built properly typed commands.
 pub trait Command {
-    /// The response this command expects.
+    /// The response this command will return.
     type Response;
 
-    /// Create the "raw" command representation for transmission.
+    /// Create the raw command representation for transmission.
     fn command(&self) -> RawCommand;
 
-    /// Create the response type from the raw response.
+    /// Convert the raw response frame to the proper response type.
+    ///
+    /// # Errors
+    ///
+    /// This should return an error if the response was invalid.
     fn response(self, frame: Frame) -> Result<Self::Response, TypedResponseError>;
 }

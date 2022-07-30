@@ -168,8 +168,7 @@ impl Command for GetPlaylists {
     }
 
     fn response(self, frame: Frame) -> Result<Self::Response, TypedResponseError> {
-        let field_count = frame.fields_len();
-        res::Playlist::parse_frame(frame, field_count)
+        res::Playlist::parse_frame(frame)
     }
 }
 
@@ -562,8 +561,9 @@ impl Move {
 
     /// Move the given range of song positions.
     ///
-    /// **NOTE**: The given range must have an end. If a range with an open end is passed, this
-    /// function will panic.
+    /// # Panics
+    ///
+    /// The given range must have an end. If a range with an open end is passed, this will panic.
     pub fn range<R>(range: R) -> MoveBuilder
     where
         R: RangeBounds<SongPosition>,

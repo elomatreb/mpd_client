@@ -1,4 +1,4 @@
-use std::{collections::HashMap, mem, path::Path, sync::Arc, time::Duration};
+use std::{collections::HashMap, mem, path::Path, time::Duration};
 
 use mpd_protocol::response::Frame;
 
@@ -34,7 +34,7 @@ impl SongInQueue {
         let mut builder = SongBuilder::default();
 
         for (key, value) in frame {
-            builder.field(key, value)?;
+            builder.field(&key, value)?;
         }
 
         Ok(builder.finish())
@@ -46,7 +46,7 @@ impl SongInQueue {
         let mut builder = SongBuilder::default();
 
         for (key, value) in frame {
-            if let Some(song) = builder.field(key, value)? {
+            if let Some(song) = builder.field(&key, value)? {
                 out.push(song);
             }
         }
@@ -127,7 +127,7 @@ impl Song {
         let mut builder = SongBuilder::default();
 
         for (key, value) in frame {
-            if let Some(SongInQueue { song, .. }) = builder.field(key, value)? {
+            if let Some(SongInQueue { song, .. }) = builder.field(&key, value)? {
                 out.push(song);
             }
         }
@@ -202,7 +202,7 @@ impl SongBuilder {
     /// If this returns `Ok(Some(_))`, a song was completed and another one started.
     fn field(
         &mut self,
-        key: Arc<str>,
+        key: &str,
         value: String,
     ) -> Result<Option<SongInQueue>, TypedResponseError> {
         if self.url.is_empty() {
@@ -216,12 +216,8 @@ impl SongBuilder {
     }
 
     /// Handle a field that is expected to start a new song.
-    fn handle_start_field(
-        &mut self,
-        key: Arc<str>,
-        value: String,
-    ) -> Result<(), TypedResponseError> {
-        match &*key {
+    fn handle_start_field(&mut self, key: &str, value: String) -> Result<(), TypedResponseError> {
+        match key {
             // A `file` field starts a new song
             "file" => self.url = value,
             // Skip directory or playlist entries, encountered when using commands like
@@ -242,11 +238,11 @@ impl SongBuilder {
     /// Handle a field that may be part of a song or may start a new one.
     fn handle_song_field(
         &mut self,
-        key: Arc<str>,
+        key: &str,
         value: String,
     ) -> Result<Option<SongInQueue>, TypedResponseError> {
         // If this field starts a new song, the current one is done
-        if is_start_field(&key) {
+        if is_start_field(key) {
             // Reset the song builder and convert the existing data into a song
             let song = mem::take(self).into_song();
 
@@ -258,7 +254,7 @@ impl SongBuilder {
         }
 
         // The field is a component of a song
-        match &*key {
+        match key {
             "duration" => self.duration = Some(Duration::from_value(value, "duration")?),
             "Time" => {
                 // Just a worse `duration` field, but retained for backwards compatibility with
@@ -333,27 +329,18 @@ mod tests {
     fn song_builder() {
         let mut builder = SongBuilder::default();
 
+        assert_matches!(builder.field("file", String::from("test.flac")), Ok(None));
+        assert_matches!(builder.field("duration", String::from("123.456")), Ok(None));
         assert_matches!(
-            builder.field(Arc::from("file"), String::from("test.flac")),
+            builder.field("Last-Modified", String::from(TEST_TIMESTAMP)),
             Ok(None)
         );
-        assert_matches!(
-            builder.field(Arc::from("duration"), String::from("123.456")),
-            Ok(None)
-        );
-        assert_matches!(
-            builder.field(Arc::from("Last-Modified"), String::from(TEST_TIMESTAMP)),
-            Ok(None)
-        );
-        assert_matches!(
-            builder.field(Arc::from("Title"), String::from("Foo")),
-            Ok(None)
-        );
-        assert_matches!(builder.field(Arc::from("Id"), String::from("12")), Ok(None));
-        assert_matches!(builder.field(Arc::from("Pos"), String::from("5")), Ok(None));
+        assert_matches!(builder.field("Title", String::from("Foo")), Ok(None));
+        assert_matches!(builder.field("Id", String::from("12")), Ok(None));
+        assert_matches!(builder.field("Pos", String::from("5")), Ok(None));
 
         let song = builder
-            .field(Arc::from("file"), String::from("foo.flac"))
+            .field("file", String::from("foo.flac"))
             .unwrap()
             .unwrap();
 
@@ -398,25 +385,16 @@ mod tests {
     fn song_builder_unrelated_entries() {
         let mut builder = SongBuilder::default();
 
+        assert_matches!(builder.field("playlist", String::from("foo.m3u")), Ok(None));
+        assert_matches!(builder.field("directory", String::from("foo")), Ok(None));
         assert_matches!(
-            builder.field(Arc::from("playlist"), String::from("foo.m3u")),
+            builder.field("Last-Modified", String::from(TEST_TIMESTAMP)),
             Ok(None)
         );
-        assert_matches!(
-            builder.field(Arc::from("directory"), String::from("foo")),
-            Ok(None)
-        );
-        assert_matches!(
-            builder.field(Arc::from("Last-Modified"), String::from(TEST_TIMESTAMP)),
-            Ok(None)
-        );
-        assert_matches!(
-            builder.field(Arc::from("file"), String::from("foo.flac")),
-            Ok(None)
-        );
+        assert_matches!(builder.field("file", String::from("foo.flac")), Ok(None));
 
         let song = builder
-            .field(Arc::from("directory"), String::from("mep"))
+            .field("directory", String::from("mep"))
             .unwrap()
             .unwrap();
 
@@ -444,27 +422,15 @@ mod tests {
     fn song_builder_deprecated_time_field() {
         let mut builder = SongBuilder::default();
 
-        assert_matches!(
-            builder.field(Arc::from("file"), String::from("foo.flac")),
-            Ok(None)
-        );
+        assert_matches!(builder.field("file", String::from("foo.flac")), Ok(None));
 
-        assert_matches!(
-            builder.field(Arc::from("Time"), String::from("123")),
-            Ok(None)
-        );
+        assert_matches!(builder.field("Time", String::from("123")), Ok(None));
         assert_eq!(builder.duration, Some(Duration::from_secs(123)));
 
-        assert_matches!(
-            builder.field(Arc::from("duration"), String::from("456.700")),
-            Ok(None)
-        );
+        assert_matches!(builder.field("duration", String::from("456.700")), Ok(None));
         assert_eq!(builder.duration, Some(Duration::from_secs_f64(456.7)));
 
-        assert_matches!(
-            builder.field(Arc::from("Time"), String::from("123")),
-            Ok(None)
-        );
+        assert_matches!(builder.field("Time", String::from("123")), Ok(None));
         assert_eq!(builder.duration, Some(Duration::from_secs_f64(456.7)));
 
         let song = builder.finish().unwrap().song;

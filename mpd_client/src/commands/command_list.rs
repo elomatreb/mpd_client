@@ -15,7 +15,11 @@ pub trait CommandList {
     /// The command list that will be sent, or `None` if no commands.
     fn command_list(&self) -> Option<RawCommandList>;
 
-    /// Parse the raw response frames into the proper types.
+    /// Convert the raw response frames into the proper response types(s).
+    ///
+    /// # Errors
+    ///
+    /// This should return an error if any of the responses were invalid.
     fn responses(self, frames: Vec<Frame>) -> Result<Self::Response, TypedResponseError>;
 }
 
@@ -27,7 +31,7 @@ where
     type Response = Vec<C::Response>;
 
     fn command_list(&self) -> Option<RawCommandList> {
-        let mut commands = self.iter().map(|c| c.command());
+        let mut commands = self.iter().map(Command::command);
         let mut raw_commands = RawCommandList::new(commands.next()?);
         raw_commands.extend(commands);
 

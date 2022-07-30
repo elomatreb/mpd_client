@@ -209,7 +209,7 @@ pub enum Operator {
 }
 
 impl Operator {
-    fn as_str(&self) -> &'static str {
+    fn as_str(self) -> &'static str {
         match self {
             Operator::Equal => "==",
             Operator::NotEqual => "!=",

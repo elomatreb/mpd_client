@@ -72,7 +72,7 @@ impl Response {
     }
 
     pub(crate) fn field_count(&self) -> usize {
-        self.frames.iter().map(|f| f.fields_len()).sum()
+        self.frames.iter().map(Frame::fields_len).sum()
     }
 }
 

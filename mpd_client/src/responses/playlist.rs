@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use mpd_protocol::response::Frame;
 
 use crate::responses::{FromFieldValue, Timestamp, TypedResponseError};
 
@@ -15,16 +15,12 @@ pub struct Playlist {
 }
 
 impl Playlist {
-    pub(crate) fn parse_frame(
-        frame: impl IntoIterator<Item = (Arc<str>, String)>,
-        field_count: usize,
-    ) -> Result<Vec<Self>, TypedResponseError> {
-        let fields = frame.into_iter();
-        let mut out = Vec::with_capacity(field_count / 2);
+    pub(crate) fn parse_frame(frame: Frame) -> Result<Vec<Self>, TypedResponseError> {
+        let mut out = Vec::with_capacity(frame.fields_len() / 2);
 
         let mut current_name: Option<String> = None;
 
-        for (key, value) in fields {
+        for (key, value) in frame {
             if let Some(name) = current_name.take() {
                 if key.as_ref() == "Last-Modified" {
                     let last_modified = Timestamp::from_value(value, "Last-Modified")?;

@@ -63,7 +63,7 @@ impl Error for MpdProtocolError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
             MpdProtocolError::Io(e) => Some(e),
-            _ => None,
+            MpdProtocolError::InvalidMessage => None,
         }
     }
 }
