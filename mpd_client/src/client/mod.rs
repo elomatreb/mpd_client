@@ -9,6 +9,7 @@ use std::{
     sync::Arc,
 };
 
+use bytes::BytesMut;
 use mpd_protocol::{
     command::{Command as RawCommand, CommandList as RawCommandList},
     response::{Error, Frame, Response as RawResponse},
@@ -291,10 +292,10 @@ impl Client {
     pub async fn album_art(
         &self,
         uri: &str,
-    ) -> Result<Option<(Vec<u8>, Option<String>)>, CommandError> {
+    ) -> Result<Option<(BytesMut, Option<String>)>, CommandError> {
         debug!("loading album art");
 
-        let mut out = Vec::new();
+        let mut out = BytesMut::new();
         let mut expected_size = 0;
         let mut embedded = false;
         let mut mime = None;
@@ -304,9 +305,9 @@ impl Client {
             .await
         {
             Ok(Some(resp)) => {
+                out = resp.data;
                 expected_size = resp.size;
                 out.reserve(expected_size);
-                out.extend_from_slice(resp.data());
                 embedded = true;
                 mime = resp.mime;
                 debug!(length = resp.size, ?mime, "found embedded album art");
@@ -324,9 +325,9 @@ impl Client {
 
         if !embedded {
             if let Some(resp) = self.command(cmds::AlbumArt::new(uri.to_owned())).await? {
+                out = resp.data;
                 expected_size = resp.size;
                 out.reserve(expected_size);
-                out.extend_from_slice(resp.data());
                 debug!(length = expected_size, "found separate file album art");
             } else {
                 debug!("no embedded or separate album art found");
@@ -344,9 +345,8 @@ impl Client {
             };
 
             if let Some(resp) = resp {
-                let data = resp.data();
-                trace!(received = data.len(), progress = out.len());
-                out.extend_from_slice(data);
+                trace!(received = resp.data.len(), progress = out.len());
+                out.extend_from_slice(&resp.data);
             } else {
                 warn!(progress = out.len(), "incomplete cover art response");
                 return Ok(None);
@@ -846,7 +846,7 @@ mod tests {
 
         assert_eq!(
             x,
-            Some((Vec::from("FOOBAR"), Some(String::from("image/jpeg"))))
+            Some((BytesMut::from("FOOBAR"), Some(String::from("image/jpeg"))))
         );
     }
 
@@ -872,7 +872,7 @@ mod tests {
             .await
             .expect("command failed");
 
-        assert_eq!(x, Some((Vec::from("FOOBAR"), None)));
+        assert_eq!(x, Some((BytesMut::from("FOOBAR"), None)));
     }
 
     #[tokio::test]
@@ -897,7 +897,7 @@ mod tests {
             .await
             .expect("command failed");
 
-        assert_eq!(x, Some((Vec::from("FOOBAR"), None)));
+        assert_eq!(x, Some((BytesMut::from("FOOBAR"), None)));
     }
 
     #[tokio::test]

@@ -9,7 +9,7 @@ mod timestamp;
 
 use std::{error::Error, fmt, num::ParseIntError, str::FromStr, sync::Arc, time::Duration};
 
-use bytes::Bytes;
+use bytes::BytesMut;
 use mpd_protocol::response::Frame;
 
 pub use self::{
@@ -350,24 +350,20 @@ impl Stats {
 /// Response to the [`albumart`][crate::commands::AlbumArt] and
 /// [`readpicture`][crate::commands::AlbumArtEmbedded] commands.
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct AlbumArt {
     /// The total size in bytes of the file.
     pub size: usize,
     /// The mime type, if known.
     pub mime: Option<String>,
     /// The raw data.
-    data: Bytes,
+    pub data: BytesMut,
 }
 
 impl AlbumArt {
-    /// Get the data in the response.
-    pub fn data(&self) -> &[u8] {
-        &self.data
-    }
-
     pub(crate) fn from_frame(mut frame: Frame) -> Result<Option<Self>, TypedResponseError> {
         let data = match frame.take_binary() {
-            Some(d) => d.freeze(),
+            Some(d) => d,
             None => return Ok(None),
         };
 
