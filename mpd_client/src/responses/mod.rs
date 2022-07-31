@@ -1,5 +1,6 @@
 //! Typed responses to individual commands.
 
+mod count;
 mod list;
 mod playlist;
 mod song;
@@ -12,6 +13,7 @@ use bytes::Bytes;
 use mpd_protocol::response::Frame;
 
 pub use self::{
+    count::Count,
     list::{GroupedListValuesIter, List, ListValuesIntoIter, ListValuesIter},
     playlist::Playlist,
     song::{Song, SongInQueue, SongRange},

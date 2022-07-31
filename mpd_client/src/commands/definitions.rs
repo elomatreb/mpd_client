@@ -763,6 +763,82 @@ impl<const N: usize> Command for List<N> {
     }
 }
 
+/// `count` command without grouping.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Count {
+    filter: Filter,
+}
+
+impl Count {
+    /// Count the number and total playtime of all songs matching the given filter.
+    pub fn new(filter: Filter) -> Count {
+        Count { filter }
+    }
+
+    /// Group the results by the given tag.
+    pub fn group_by(self, group_by: Tag) -> CountGrouped {
+        CountGrouped {
+            filter: Some(self.filter),
+            group_by,
+        }
+    }
+}
+
+impl Command for Count {
+    type Response = res::Count;
+
+    fn command(&self) -> RawCommand {
+        RawCommand::new("count").argument(&self.filter)
+    }
+
+    fn response(self, frame: Frame) -> Result<Self::Response, TypedResponseError> {
+        res::Count::from_frame(frame)
+    }
+}
+
+/// `count` command with grouping.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CountGrouped {
+    group_by: Tag,
+    filter: Option<Filter>,
+}
+
+impl CountGrouped {
+    /// Count the number and total playtime of songs grouped by the given tag.
+    pub fn new(group_by: Tag) -> CountGrouped {
+        CountGrouped {
+            group_by,
+            filter: None,
+        }
+    }
+
+    /// Only consider songs matching the given filter.
+    ///
+    /// If called multiple times, this will overwrite the filter.
+    pub fn filter(mut self, filter: Filter) -> CountGrouped {
+        self.filter = Some(filter);
+        self
+    }
+}
+
+impl Command for CountGrouped {
+    type Response = Vec<(String, res::Count)>;
+
+    fn command(&self) -> RawCommand {
+        let mut cmd = RawCommand::new("count");
+
+        if let Some(filter) = &self.filter {
+            cmd.add_argument(filter).unwrap();
+        }
+
+        cmd.argument("group").argument(&self.group_by)
+    }
+
+    fn response(self, frame: Frame) -> Result<Self::Response, TypedResponseError> {
+        res::Count::from_frame_grouped(frame, &self.group_by)
+    }
+}
+
 /// `rename` command.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RenamePlaylist {
