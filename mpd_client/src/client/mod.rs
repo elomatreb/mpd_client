@@ -36,14 +36,71 @@ type CommandResponder = oneshot::Sender<Result<RawResponse, CommandError>>;
 /// which is a stream that receives connection events.
 pub type Connection = (Client, ConnectionEvents);
 
-/// A client connected to an MPD instance.
+/// A client connected to an MPD server.
 ///
-/// You can use this to send commands to the MPD server, and wait for the response. Cloning the
+/// You can use this to send commands to the MPD server. Cloning the
 /// `Client` will reuse the connection, similar to how a channel sender works.
 ///
-/// # Connection management
+/// # Sending Commands
 ///
-/// Dropping the last clone of a particular `Client` will close the connection automatically.
+/// The main way to send commands is through the [`Client::command`] method. This method allows you
+/// to use one of the predefined commands from the [`commands`][crate::commands] module to
+/// automatically send the proper command and get a strongly typed parsed response back.
+///
+/// ##  Example
+///
+/// ```no_run
+/// use mpd_client::{commands::Status, Client};
+/// use tokio::net::TcpStream;
+///
+/// async fn print_play_state() {
+///     let connection = TcpStream::connect("localhost:6600").await.unwrap();
+///     let (client, _) = Client::connect(connection).await.unwrap();
+///
+///     let status = client.command(Status).await.unwrap();
+///
+///     println!("The play state is: {:?}", status.state);
+/// }
+/// ```
+///
+/// # Sending Commands Lists
+///
+/// Command lists are used similarly through the [`Client::command_list`] method. You can issue
+/// multiple separate commands by constructing a tuple of commands, or a dynamically sized list of
+/// the same type of command with a [`Vec`] of commands.
+///
+/// ##  Example
+///
+/// ```no_run
+/// use mpd_client::{
+///     commands::{Stats, Status},
+///     Client,
+/// };
+/// use tokio::net::TcpStream;
+///
+/// async fn print_play_state_and_stats() {
+///     let connection = TcpStream::connect("localhost:6600").await.unwrap();
+///     let (client, _) = Client::connect(connection).await.unwrap();
+///
+///     let (status, stats) = client.command_list((Status, Stats)).await.unwrap();
+///
+///     println!(
+///         "The play state is: {:?} and we have {} songs in the library",
+///         status.state, stats.songs
+///     );
+/// }
+/// ```
+///
+/// # Sending Raw Commands
+///
+/// Alteratively to the typed command interface described in the previous sections, you can use the
+/// [`Client::raw_command`] and [`Client::raw_command_list`] methods to send [raw
+/// commands][mpd_protocol::command::Command].
+///
+/// # Connection Management
+///
+/// Cloning the `Client` is cheap and reuses the same connection it was initially given. Dropping
+/// the last clone of a particular `Client` will close the connection automatically.
 #[derive(Clone)]
 pub struct Client {
     commands_sender: UnboundedSender<(RawCommandList, CommandResponder)>,

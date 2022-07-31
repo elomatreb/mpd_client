@@ -38,8 +38,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
             // wait for a state change notification in the player subsystem, which indicates a song
             // change among other things
             match state_changes.next().await {
-                Some(ConnectionEvent::SubsystemChange(Subsystem::Player)) => break, // something relevant changed
-                Some(ConnectionEvent::SubsystemChange(_)) => continue, // something changed but we don't care
+                Some(ConnectionEvent::SubsystemChange(Subsystem::Player)) => break, /* something relevant changed */
+                Some(ConnectionEvent::SubsystemChange(_)) => continue, /* something changed but we don't care */
                 _ => break 'outer, // connection was closed by the server
             }
         }
