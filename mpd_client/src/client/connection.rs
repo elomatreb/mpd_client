@@ -7,7 +7,7 @@ use mpd_protocol::{
 };
 use tokio::{
     io::{AsyncRead, AsyncWrite},
-    sync::mpsc::{Receiver, UnboundedSender},
+    sync::mpsc::{UnboundedReceiver, UnboundedSender},
     time::timeout,
 };
 use tracing::{debug, error, span, trace, Instrument, Level};
@@ -17,7 +17,7 @@ use crate::client::{CommandResponder, ConnectionError, ConnectionEvent, Subsyste
 struct State<C> {
     loop_state: LoopState,
     connection: AsyncConnection<C>,
-    commands: Receiver<(RawCommandList, CommandResponder)>,
+    commands: UnboundedReceiver<(RawCommandList, CommandResponder)>,
     events: UnboundedSender<ConnectionEvent>,
 }
 
@@ -46,7 +46,7 @@ fn cancel_idle() -> RawCommand {
 
 pub(super) async fn run_loop<C>(
     mut connection: AsyncConnection<C>,
-    commands: Receiver<(RawCommandList, CommandResponder)>,
+    commands: UnboundedReceiver<(RawCommandList, CommandResponder)>,
     events: UnboundedSender<ConnectionEvent>,
 ) where
     C: AsyncRead + AsyncWrite + Unpin,

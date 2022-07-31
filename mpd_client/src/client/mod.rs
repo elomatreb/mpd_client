@@ -17,7 +17,7 @@ use mpd_protocol::{
 use tokio::{
     io::{AsyncRead, AsyncWrite},
     sync::{
-        mpsc::{self, Sender, UnboundedReceiver},
+        mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
         oneshot,
     },
 };
@@ -46,7 +46,7 @@ pub type Connection = (Client, ConnectionEvents);
 /// Dropping the last clone of a particular `Client` will close the connection automatically.
 #[derive(Clone)]
 pub struct Client {
-    commands_sender: Sender<(RawCommandList, CommandResponder)>,
+    commands_sender: UnboundedSender<(RawCommandList, CommandResponder)>,
     protocol_version: Arc<str>,
 }
 
@@ -317,7 +317,6 @@ impl Client {
 
         self.commands_sender
             .send((commands, tx))
-            .await
             .map_err(|_| CommandError::ConnectionClosed)?;
 
         rx.await.map_err(|_| CommandError::ConnectionClosed)?
@@ -339,8 +338,8 @@ async fn do_connect<IO: AsyncRead + AsyncWrite + Unpin + Send + 'static>(
 ) -> Result<Connection, ConnectWithPasswordError> {
     let span = span!(Level::DEBUG, "client connection");
 
-    let (state_changes_sender, state_changes) = mpsc::unbounded_channel();
-    let (commands_sender, commands_receiver) = mpsc::channel(1);
+    let (state_changes_sender, state_changes) = unbounded_channel();
+    let (commands_sender, commands_receiver) = unbounded_channel();
 
     let mut connection = match AsyncConnection::connect(io).instrument(span.clone()).await {
         Ok(c) => c,
