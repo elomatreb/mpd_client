@@ -1,5 +1,4 @@
 #![warn(
-    rustdoc::broken_intra_doc_links,
     missing_debug_implementations,
     missing_docs,
     rust_2018_idioms,
@@ -7,6 +6,7 @@
     unused_import_braces,
     unused_qualifications
 )]
+#![deny(rustdoc::broken_intra_doc_links)]
 #![forbid(unsafe_code)]
 
 //! Asynchronous client for [MPD](https://musicpd.org).
