@@ -64,7 +64,7 @@ impl FromFieldValue for Timestamp {
         #[cfg(feature = "chrono")]
         let chrono = match DateTime::parse_from_rfc3339(&v) {
             Ok(v) => v,
-            Err(e) => return Err(TypedResponseError::invalid_value(field.into(), v).source(e)),
+            Err(e) => return Err(TypedResponseError::invalid_value(field, v).source(e)),
         };
 
         Ok(Self {

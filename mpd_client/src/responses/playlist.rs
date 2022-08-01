@@ -31,16 +31,16 @@ impl Playlist {
                     });
                 } else {
                     return Err(TypedResponseError::unexpected_field(
-                        String::from("Last-Modified"),
-                        key.as_ref().into(),
+                        "Last-Modified",
+                        key.as_ref(),
                     ));
                 }
             } else if key.as_ref() == "playlist" {
                 current_name = Some(value);
             } else {
                 return Err(TypedResponseError::unexpected_field(
-                    String::from("playlist"),
-                    key.as_ref().into(),
+                    "playlist",
+                    key.as_ref(),
                 ));
             }
         }

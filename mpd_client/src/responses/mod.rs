@@ -33,33 +33,60 @@ pub struct TypedResponseError {
 
 impl TypedResponseError {
     /// Construct a "Missing field" error.
-    fn missing(field: String) -> TypedResponseError {
+    pub fn missing<F>(field: F) -> TypedResponseError
+    where
+        F: Into<String>,
+    {
         TypedResponseError {
-            kind: ErrorKind::Missing { field },
+            kind: ErrorKind::Missing {
+                field: field.into(),
+            },
             source: None,
         }
     }
 
     /// Construct an "Unexpected field" error.
-    pub(crate) fn unexpected_field(expected: String, found: String) -> TypedResponseError {
+    pub fn unexpected_field<E, F>(expected: E, found: F) -> TypedResponseError
+    where
+        E: Into<String>,
+        F: Into<String>,
+    {
         TypedResponseError {
-            kind: ErrorKind::UnexpectedField { expected, found },
+            kind: ErrorKind::UnexpectedField {
+                expected: expected.into(),
+                found: found.into(),
+            },
             source: None,
         }
     }
 
     /// Construct an "Invalid value" error.
-    pub(crate) fn invalid_value(field: String, value: String) -> TypedResponseError {
+    pub fn invalid_value<F>(field: F, value: String) -> TypedResponseError
+    where
+        F: Into<String>,
+    {
         TypedResponseError {
-            kind: ErrorKind::InvalidValue { field, value },
+            kind: ErrorKind::InvalidValue {
+                field: field.into(),
+                value,
+            },
+            source: None,
+        }
+    }
+
+    /// Construct a nonspecific error.
+    pub fn other() -> TypedResponseError {
+        TypedResponseError {
+            kind: ErrorKind::Other,
             source: None,
         }
     }
 
     /// Set a source error.
     ///
-    /// This is most useful with [invalid value][`TypedResponseError::invalid_value`] errors.
-    pub(crate) fn source<E>(self, source: E) -> TypedResponseError
+    /// This is most useful with [invalid value][TypedResponseError::invalid_value] and
+    /// [unspecified][TypedResponseError::other] errors.
+    pub fn source<E>(self, source: E) -> TypedResponseError
     where
         E: Error + Send + Sync + 'static,
     {
@@ -73,6 +100,7 @@ enum ErrorKind {
     Missing { field: String },
     UnexpectedField { expected: String, found: String },
     InvalidValue { field: String, value: String },
+    Other,
 }
 
 impl fmt::Display for TypedResponseError {
@@ -85,6 +113,7 @@ impl fmt::Display for TypedResponseError {
             ErrorKind::InvalidValue { field, value } => {
                 write!(f, "invalid value {:?} for field {:?}", value, field)
             }
+            ErrorKind::Other => write!(f, "invalid response"),
         }
     }
 }
@@ -106,7 +135,7 @@ impl FromFieldValue for bool {
         match &*v {
             "0" => Ok(false),
             "1" => Ok(true),
-            _ => Err(TypedResponseError::invalid_value(field.into(), v)),
+            _ => Err(TypedResponseError::invalid_value(field, v)),
         }
     }
 }
@@ -123,7 +152,7 @@ impl FromFieldValue for PlayState {
             "play" => Ok(PlayState::Playing),
             "pause" => Ok(PlayState::Paused),
             "stop" => Ok(PlayState::Stopped),
-            _ => Err(TypedResponseError::invalid_value(field.into(), v)),
+            _ => Err(TypedResponseError::invalid_value(field, v)),
         }
     }
 }
@@ -133,7 +162,7 @@ fn parse_integer<I: FromStr<Err = ParseIntError>>(
     field: &str,
 ) -> Result<I, TypedResponseError> {
     v.parse::<I>()
-        .map_err(|e| TypedResponseError::invalid_value(field.into(), v).source(e))
+        .map_err(|e| TypedResponseError::invalid_value(field, v).source(e))
 }
 
 impl FromFieldValue for u8 {
@@ -167,7 +196,7 @@ pub(crate) fn value<V: FromFieldValue>(
 ) -> Result<V, TypedResponseError> {
     let value = frame
         .get(field)
-        .ok_or_else(|| TypedResponseError::missing(field.into()))?;
+        .ok_or_else(|| TypedResponseError::missing(field))?;
     V::from_value(value, field)
 }
 
@@ -208,19 +237,14 @@ fn parse_duration<V: AsRef<str> + Into<String>>(
 ) -> Result<Duration, TypedResponseError> {
     let v = match value.as_ref().parse::<f64>() {
         Ok(v) => v,
-        Err(e) => {
-            return Err(TypedResponseError::invalid_value(field.into(), value.into()).source(e))
-        }
+        Err(e) => return Err(TypedResponseError::invalid_value(field, value.into()).source(e)),
     };
 
     // Check if the parsed value is a reasonable duration, to avoid a panic from `from_secs_f64`
     if v >= 0.0 && v <= Duration::MAX.as_secs_f64() && v.is_finite() {
         Ok(Duration::from_secs_f64(v))
     } else {
-        Err(TypedResponseError::invalid_value(
-            field.into(),
-            value.into(),
-        ))
+        Err(TypedResponseError::invalid_value(field, value.into()))
     }
 }
 
@@ -270,7 +294,7 @@ impl Status {
                 "0" => SingleMode::Disabled,
                 "1" => SingleMode::Enabled,
                 "oneshot" => SingleMode::Oneshot,
-                _ => return Err(TypedResponseError::invalid_value("single".into(), val)),
+                _ => return Err(TypedResponseError::invalid_value("single", val)),
             },
         };
 
@@ -282,10 +306,7 @@ impl Status {
                 Some(Duration::from_value(duration.to_owned(), "Time")?)
             } else {
                 // No separator
-                return Err(TypedResponseError::invalid_value(
-                    String::from("Time"),
-                    time,
-                ));
+                return Err(TypedResponseError::invalid_value("Time", time));
             }
         } else {
             None

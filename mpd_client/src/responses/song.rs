@@ -168,7 +168,7 @@ impl FromFieldValue for SongRange {
         // The range follows the form "<start>-<end?>"
         let (from, to) = match v.split_once('-') {
             Some((from, to)) => (from, to),
-            None => return Err(TypedResponseError::invalid_value(field.into(), v)),
+            None => return Err(TypedResponseError::invalid_value(field, v)),
         };
 
         let from = parse_duration(field, from)?;
@@ -224,12 +224,7 @@ impl SongBuilder {
             // `listallinfo`, as well as the last modified date associated with these entries
             "directory" | "playlist" | "Last-Modified" => (),
             // Any other fields are invalid
-            other => {
-                return Err(TypedResponseError::unexpected_field(
-                    String::from("file"),
-                    other.into(),
-                ))
-            }
+            other => return Err(TypedResponseError::unexpected_field("file", other)),
         }
 
         Ok(())

@@ -18,13 +18,13 @@ impl StickerGet {
     pub(crate) fn from_frame(frame: Frame) -> Result<Self, TypedResponseError> {
         let (key, field_value) = match frame.into_iter().next() {
             Some(v) => v,
-            None => return Err(TypedResponseError::missing("sticker".into())),
+            None => return Err(TypedResponseError::missing("sticker")),
         };
 
         if &*key != "sticker" {
             return Err(TypedResponseError::unexpected_field(
-                "sticker".into(),
-                key.as_ref().into(),
+                "sticker",
+                key.as_ref(),
             ));
         }
 
@@ -96,12 +96,7 @@ impl StickerFind {
                     let (_, sticker_value) = parse_sticker_value(tag)?;
                     value.insert(file.clone(), sticker_value);
                 }
-                other => {
-                    return Err(TypedResponseError::unexpected_field(
-                        String::from("sticker"),
-                        other.into(),
-                    ))
-                }
+                other => return Err(TypedResponseError::unexpected_field("sticker", other)),
             }
         }
 
@@ -117,9 +112,6 @@ fn parse_sticker_value(mut tag: String) -> Result<(String, String), TypedRespons
             tag.truncate(key.len());
             Ok((tag, value))
         }
-        None => Err(TypedResponseError::invalid_value(
-            String::from("sticker"),
-            tag,
-        )),
+        None => Err(TypedResponseError::invalid_value("sticker", tag)),
     }
 }

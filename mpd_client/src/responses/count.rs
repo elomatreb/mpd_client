@@ -51,8 +51,8 @@ where
 
         if key.as_ref() != grouping_tag.as_str() {
             return Err(TypedResponseError::unexpected_field(
-                grouping_tag.as_str().into(),
-                key.as_ref().into(),
+                grouping_tag.as_str(),
+                key.as_ref(),
             ));
         }
 
@@ -63,33 +63,29 @@ where
                         if songs.is_none() {
                             songs = Some(u64::from_value(value, "songs")?);
                         } else {
-                            return Err(TypedResponseError::unexpected_field(
-                                String::from("playtime"),
-                                String::from("songs"),
-                            ));
+                            return Err(TypedResponseError::unexpected_field("playtime", "songs"));
                         }
                     }
                     "playtime" => {
                         if playtime.is_none() {
                             playtime = Some(Duration::from_value(value, "playtime")?);
                         } else {
-                            return Err(TypedResponseError::unexpected_field(
-                                String::from("songs"),
-                                String::from("playtime"),
-                            ));
+                            return Err(TypedResponseError::unexpected_field("songs", "playtime"));
                         }
                     }
                     other => {
-                        let expected = if songs.is_some() { "playtime" } else { "songs" };
                         return Err(TypedResponseError::unexpected_field(
-                            expected.into(),
-                            other.into(),
+                            if songs.is_some() { "playtime" } else { "songs" },
+                            other,
                         ));
                     }
                 }
             } else {
-                let field = if songs.is_some() { "playtime" } else { "songs" };
-                return Err(TypedResponseError::missing(field.into()));
+                return Err(TypedResponseError::missing(if songs.is_some() {
+                    "playtime"
+                } else {
+                    "songs"
+                }));
             }
         }
 

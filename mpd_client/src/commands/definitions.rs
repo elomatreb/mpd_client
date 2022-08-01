@@ -188,14 +188,13 @@ impl Command for GetEnabledTagTypes {
         for (key, value) in frame {
             if &*key != "tagtype" {
                 return Err(TypedResponseError::unexpected_field(
-                    String::from("tagtype"),
-                    key.as_ref().into(),
+                    "tagtype",
+                    key.as_ref(),
                 ));
             }
 
-            let tag = Tag::try_from(&*value).map_err(|e| {
-                TypedResponseError::invalid_value(String::from("tagtype"), value).source(e)
-            })?;
+            let tag = Tag::try_from(&*value)
+                .map_err(|e| TypedResponseError::invalid_value("tagtype", value).source(e))?;
 
             out.push(tag);
         }
