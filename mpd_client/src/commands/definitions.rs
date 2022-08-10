@@ -211,7 +211,7 @@ impl Command for GetPlaylist {
     type Response = Vec<res::Song>;
 
     fn command(&self) -> RawCommand {
-        RawCommand::new("listplaylistinfo")
+        RawCommand::new("listplaylistinfo").argument(&self.0)
     }
 
     fn response(self, frame: Frame) -> Result<Self::Response, TypedResponseError> {
@@ -1475,6 +1475,14 @@ mod tests {
         assert_eq!(
             Crossfade(Duration::from_secs_f64(2.345)).command(),
             RawCommand::new("crossfade").argument("2")
+        );
+    }
+
+    #[test]
+    fn command_getplaylist() {
+        assert_eq!(
+            GetPlaylist(String::from("foo")).command(),
+            RawCommand::new("listplaylistinfo").argument("foo")
         );
     }
 
