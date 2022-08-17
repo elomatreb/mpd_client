@@ -300,10 +300,8 @@ impl Client {
         let mut embedded = false;
         let mut mime = None;
 
-        match self
-            .command(cmds::AlbumArtEmbedded::new(uri.to_owned()))
-            .await
-        {
+        // Try loadding embedded album art first
+        match self.command(cmds::AlbumArtEmbedded::new(uri)).await {
             Ok(Some(resp)) => {
                 out = resp.data;
                 expected_size = resp.size;
@@ -324,7 +322,7 @@ impl Client {
         }
 
         if !embedded {
-            if let Some(resp) = self.command(cmds::AlbumArt::new(uri.to_owned())).await? {
+            if let Some(resp) = self.command(cmds::AlbumArt::new(uri)).await? {
                 out = resp.data;
                 expected_size = resp.size;
                 out.reserve(expected_size);
@@ -337,10 +335,10 @@ impl Client {
 
         while out.len() < expected_size {
             let resp = if embedded {
-                self.command(cmds::AlbumArtEmbedded::new(uri.to_owned()).offset(out.len()))
+                self.command(cmds::AlbumArtEmbedded::new(uri).offset(out.len()))
                     .await?
             } else {
-                self.command(cmds::AlbumArt::new(uri.to_owned()).offset(out.len()))
+                self.command(cmds::AlbumArt::new(uri).offset(out.len()))
                     .await?
             };
 

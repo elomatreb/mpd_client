@@ -57,13 +57,13 @@ macro_rules! single_arg_command {
         #[allow(missing_copy_implementations)]
         $item
     };
-    ($name:ident, $argtype:ty, $command:literal) => {
+    ($name:ident $(<$lt:lifetime>)?, $argtype:ty, $command:literal) => {
         single_arg_command!(
             #[doc = concat!("`", $command, "` command.")],
-            pub struct $name(pub $argtype);
+            pub struct $name $(<$lt>)? (pub $argtype);
         );
 
-        impl Command for $name {
+        impl $(<$lt>)? Command for $name $(<$lt>)? {
             type Response = ();
 
             fn command(&self) -> RawCommand {
@@ -84,9 +84,9 @@ argless_command!(Ping, "ping");
 argless_command!(Previous, "previous");
 argless_command!(Stop, "stop");
 
-single_arg_command!(ClearPlaylist, String, "playlistclear");
-single_arg_command!(DeletePlaylist, String, "rm");
-single_arg_command!(SaveQueueAsPlaylist, String, "save");
+single_arg_command!(ClearPlaylist<'a>, &'a str, "playlistclear");
+single_arg_command!(DeletePlaylist<'a>, &'a str, "rm");
+single_arg_command!(SaveQueueAsPlaylist<'a>, &'a str, "save");
 single_arg_command!(SetConsume, bool, "consume");
 single_arg_command!(SetPause, bool, "pause");
 single_arg_command!(SetRandom, bool, "random");
@@ -205,13 +205,13 @@ impl Command for GetEnabledTagTypes {
 
 /// `listplaylistinfo` command.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct GetPlaylist(pub String);
+pub struct GetPlaylist<'a>(pub &'a str);
 
-impl Command for GetPlaylist {
+impl<'a> Command for GetPlaylist<'a> {
     type Response = Vec<res::Song>;
 
     fn command(&self) -> RawCommand {
-        RawCommand::new("listplaylistinfo").argument(&self.0)
+        RawCommand::new("listplaylistinfo").argument(self.0)
     }
 
     fn response(self, frame: Frame) -> Result<Self::Response, TypedResponseError> {
@@ -381,16 +381,16 @@ impl Argument for PositionOrRelative {
 /// Add a song to the queue, returning its ID. If neither of [`Add::at`], [`Add::before_current`],
 /// or [`Add::after_current`] is used, the song will be appended to the queue.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Add {
-    uri: String,
+pub struct Add<'a> {
+    uri: &'a str,
     position: Option<PositionOrRelative>,
 }
 
-impl Add {
+impl<'a> Add<'a> {
     /// Add the song with the given URI.
     ///
     /// Only individual files are supported.
-    pub fn uri(uri: String) -> Self {
+    pub fn uri(uri: &'a str) -> Self {
         Self {
             uri,
             position: None,
@@ -424,11 +424,11 @@ impl Add {
     }
 }
 
-impl Command for Add {
+impl<'a> Command for Add<'a> {
     type Response = SongId;
 
     fn command(&self) -> RawCommand {
-        let mut command = RawCommand::new("addid").argument(&self.uri);
+        let mut command = RawCommand::new("addid").argument(self.uri);
 
         if let Some(pos) = self.position {
             command.add_argument(pos).unwrap();
@@ -840,25 +840,25 @@ impl Command for CountGrouped {
 
 /// `rename` command.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RenamePlaylist {
-    from: String,
-    to: String,
+pub struct RenamePlaylist<'a> {
+    from: &'a str,
+    to: &'a str,
 }
 
-impl RenamePlaylist {
+impl<'a> RenamePlaylist<'a> {
     /// Rename the playlist named `from` to `to`.
-    pub fn new(from: String, to: String) -> Self {
+    pub fn new(from: &'a str, to: &'a str) -> Self {
         Self { from, to }
     }
 }
 
-impl Command for RenamePlaylist {
+impl<'a> Command for RenamePlaylist<'a> {
     type Response = ();
 
     fn command(&self) -> RawCommand {
         RawCommand::new("rename")
-            .argument(&self.from)
-            .argument(&self.to)
+            .argument(self.from)
+            .argument(self.to)
     }
 
     fn response(self, _: Frame) -> Result<Self::Response, TypedResponseError> {
@@ -868,14 +868,14 @@ impl Command for RenamePlaylist {
 
 /// `load` command.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct LoadPlaylist {
-    name: String,
+pub struct LoadPlaylist<'a> {
+    name: &'a str,
     range: Option<SongRange>,
 }
 
-impl LoadPlaylist {
+impl<'a> LoadPlaylist<'a> {
     /// Load the playlist with the given name into the queue.
-    pub fn name(name: String) -> Self {
+    pub fn name(name: &'a str) -> Self {
         Self { name, range: None }
     }
 
@@ -889,11 +889,11 @@ impl LoadPlaylist {
     }
 }
 
-impl Command for LoadPlaylist {
+impl<'a> Command for LoadPlaylist<'a> {
     type Response = ();
 
     fn command(&self) -> RawCommand {
-        let mut command = RawCommand::new("load").argument(&self.name);
+        let mut command = RawCommand::new("load").argument(self.name);
 
         if let Some(range) = self.range {
             command.add_argument(range).unwrap();
@@ -911,15 +911,15 @@ impl Command for LoadPlaylist {
 ///
 /// If [`AddToPlaylist::at`] is not used, the song will be appended to the playlist.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct AddToPlaylist {
-    playlist: String,
-    song_url: String,
+pub struct AddToPlaylist<'a> {
+    playlist: &'a str,
+    song_url: &'a str,
     position: Option<SongPosition>,
 }
 
-impl AddToPlaylist {
+impl<'a> AddToPlaylist<'a> {
     /// Add `song_url` to `playlist`.
-    pub fn new(playlist: String, song_url: String) -> Self {
+    pub fn new(playlist: &'a str, song_url: &'a str) -> Self {
         Self {
             playlist,
             song_url,
@@ -936,13 +936,13 @@ impl AddToPlaylist {
     }
 }
 
-impl Command for AddToPlaylist {
+impl<'a> Command for AddToPlaylist<'a> {
     type Response = ();
 
     fn command(&self) -> RawCommand {
         let mut command = RawCommand::new("playlistadd")
-            .argument(&self.playlist)
-            .argument(&self.song_url);
+            .argument(self.playlist)
+            .argument(self.song_url);
 
         if let Some(pos) = self.position {
             command.add_argument(pos).unwrap();
@@ -958,8 +958,8 @@ impl Command for AddToPlaylist {
 
 /// `playlistdelete` command.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RemoveFromPlaylist {
-    playlist: String,
+pub struct RemoveFromPlaylist<'a> {
+    playlist: &'a str,
     target: PositionOrRange,
 }
 
@@ -969,9 +969,9 @@ enum PositionOrRange {
     Range(SongRange),
 }
 
-impl RemoveFromPlaylist {
+impl<'a> RemoveFromPlaylist<'a> {
     /// Delete the song at `position` from `playlist`.
-    pub fn position(playlist: String, position: usize) -> Self {
+    pub fn position(playlist: &'a str, position: usize) -> Self {
         RemoveFromPlaylist {
             playlist,
             target: PositionOrRange::Position(position),
@@ -979,7 +979,7 @@ impl RemoveFromPlaylist {
     }
 
     /// Delete the specified range of songs from `playlist`.
-    pub fn range<R>(playlist: String, range: R) -> Self
+    pub fn range<R>(playlist: &'a str, range: R) -> Self
     where
         R: RangeBounds<SongPosition>,
     {
@@ -990,11 +990,11 @@ impl RemoveFromPlaylist {
     }
 }
 
-impl Command for RemoveFromPlaylist {
+impl<'a> Command for RemoveFromPlaylist<'a> {
     type Response = ();
 
     fn command(&self) -> RawCommand {
-        let command = RawCommand::new("playlistdelete").argument(&self.playlist);
+        let command = RawCommand::new("playlistdelete").argument(self.playlist);
 
         match self.target {
             PositionOrRange::Position(p) => command.argument(p.to_string()),
@@ -1009,25 +1009,25 @@ impl Command for RemoveFromPlaylist {
 
 /// `playlistmove` command.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct MoveInPlaylist {
-    playlist: String,
+pub struct MoveInPlaylist<'a> {
+    playlist: &'a str,
     from: usize,
     to: usize,
 }
 
-impl MoveInPlaylist {
+impl<'a> MoveInPlaylist<'a> {
     /// Move the song at `from` to `to` in the playlist named `playlist`.
-    pub fn new(playlist: String, from: usize, to: usize) -> Self {
+    pub fn new(playlist: &'a str, from: usize, to: usize) -> Self {
         Self { playlist, from, to }
     }
 }
 
-impl Command for MoveInPlaylist {
+impl<'a> Command for MoveInPlaylist<'a> {
     type Response = ();
 
     fn command(&self) -> RawCommand {
         RawCommand::new("playlistmove")
-            .argument(&self.playlist)
+            .argument(self.playlist)
             .argument(self.from.to_string())
             .argument(self.to.to_string())
     }
@@ -1039,32 +1039,30 @@ impl Command for MoveInPlaylist {
 
 /// `listallinfo` command.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ListAllIn {
-    directory: String,
+pub struct ListAllIn<'a> {
+    directory: &'a str,
 }
 
-impl ListAllIn {
+impl<'a> ListAllIn<'a> {
     /// List all songs in the library.
-    pub fn root() -> Self {
-        Self {
-            directory: String::new(),
-        }
+    pub fn root() -> ListAllIn<'static> {
+        ListAllIn { directory: "" }
     }
 
     /// List all songs beneath the given directory.
-    pub fn directory(directory: String) -> Self {
+    pub fn directory(directory: &'a str) -> Self {
         Self { directory }
     }
 }
 
-impl Command for ListAllIn {
+impl<'a> Command for ListAllIn<'a> {
     type Response = Vec<res::Song>;
 
     fn command(&self) -> RawCommand {
         let mut command = RawCommand::new("listallinfo");
 
         if !self.directory.is_empty() {
-            command.add_argument(&self.directory).unwrap();
+            command.add_argument(self.directory).unwrap();
         }
 
         command
@@ -1096,14 +1094,14 @@ impl Command for SetBinaryLimit {
 
 /// `albumart` command.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct AlbumArt {
-    uri: String,
+pub struct AlbumArt<'a> {
+    uri: &'a str,
     offset: usize,
 }
 
-impl AlbumArt {
+impl<'a> AlbumArt<'a> {
     /// Get the separate file album art for the given URI.
-    pub fn new(uri: String) -> Self {
+    pub fn new(uri: &'a str) -> Self {
         Self { uri, offset: 0 }
     }
 
@@ -1113,12 +1111,12 @@ impl AlbumArt {
     }
 }
 
-impl Command for AlbumArt {
+impl<'a> Command for AlbumArt<'a> {
     type Response = Option<res::AlbumArt>;
 
     fn command(&self) -> RawCommand {
         RawCommand::new("albumart")
-            .argument(&self.uri)
+            .argument(self.uri)
             .argument(self.offset.to_string())
     }
 
@@ -1129,14 +1127,14 @@ impl Command for AlbumArt {
 
 /// `readpicture` command.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct AlbumArtEmbedded {
-    uri: String,
+pub struct AlbumArtEmbedded<'a> {
+    uri: &'a str,
     offset: usize,
 }
 
-impl AlbumArtEmbedded {
+impl<'a> AlbumArtEmbedded<'a> {
     /// Get the separate file album art for the given URI.
-    pub fn new(uri: String) -> Self {
+    pub fn new(uri: &'a str) -> Self {
         Self { uri, offset: 0 }
     }
 
@@ -1146,12 +1144,12 @@ impl AlbumArtEmbedded {
     }
 }
 
-impl Command for AlbumArtEmbedded {
+impl<'a> Command for AlbumArtEmbedded<'a> {
     type Response = Option<res::AlbumArt>;
 
     fn command(&self) -> RawCommand {
         RawCommand::new("readpicture")
-            .argument(&self.uri)
+            .argument(self.uri)
             .argument(self.offset.to_string())
     }
 
@@ -1162,16 +1160,16 @@ impl Command for AlbumArtEmbedded {
 
 /// Manage enabled tag types.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct TagTypes(TagTypesAction);
+pub struct TagTypes<'a>(TagTypesAction<'a>);
 
-impl TagTypes {
+impl<'a> TagTypes<'a> {
     /// Enable all tags.
-    pub fn enable_all() -> TagTypes {
+    pub fn enable_all() -> TagTypes<'static> {
         TagTypes(TagTypesAction::EnableAll)
     }
 
     /// Disable all tags.
-    pub fn disable_all() -> TagTypes {
+    pub fn disable_all() -> TagTypes<'static> {
         TagTypes(TagTypesAction::Clear)
     }
 
@@ -1180,7 +1178,7 @@ impl TagTypes {
     /// # Panics
     ///
     /// Panics if called with an empty list of tags.
-    pub fn disable(tags: Vec<Tag>) -> TagTypes {
+    pub fn disable(tags: &'a [Tag]) -> TagTypes<'a> {
         assert_ne!(tags.len(), 0, "The list of tags must not be empty");
         TagTypes(TagTypesAction::Disable(tags))
     }
@@ -1190,13 +1188,13 @@ impl TagTypes {
     /// # Panics
     ///
     /// Panics if called with an empty list of tags.
-    pub fn enable(tags: Vec<Tag>) -> TagTypes {
+    pub fn enable(tags: &'a [Tag]) -> TagTypes<'a> {
         assert_ne!(tags.len(), 0, "The list of tags must not be empty");
         TagTypes(TagTypesAction::Enable(tags))
     }
 }
 
-impl Command for TagTypes {
+impl<'a> Command for TagTypes<'a> {
     type Response = ();
 
     fn command(&self) -> RawCommand {
@@ -1208,14 +1206,14 @@ impl Command for TagTypes {
             TagTypesAction::Disable(tags) => {
                 cmd.add_argument("disable").unwrap();
 
-                for tag in tags {
+                for tag in tags.iter() {
                     cmd.add_argument(tag).unwrap();
                 }
             }
             TagTypesAction::Enable(tags) => {
                 cmd.add_argument("enable").unwrap();
 
-                for tag in tags {
+                for tag in tags.iter() {
                     cmd.add_argument(tag).unwrap();
                 }
             }
@@ -1230,36 +1228,36 @@ impl Command for TagTypes {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-enum TagTypesAction {
+enum TagTypesAction<'a> {
     EnableAll,
     Clear,
-    Disable(Vec<Tag>),
-    Enable(Vec<Tag>),
+    Disable(&'a [Tag]),
+    Enable(&'a [Tag]),
 }
 
 /// `sticker get` command
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct StickerGet {
-    uri: String,
-    name: String,
+pub struct StickerGet<'a> {
+    uri: &'a str,
+    name: &'a str,
 }
 
-impl StickerGet {
+impl<'a> StickerGet<'a> {
     /// Get the sticker `name` for the song at `uri`
-    pub fn new(uri: String, name: String) -> Self {
+    pub fn new(uri: &'a str, name: &'a str) -> Self {
         Self { uri, name }
     }
 }
 
-impl Command for StickerGet {
+impl<'a> Command for StickerGet<'a> {
     type Response = res::StickerGet;
 
     fn command(&self) -> RawCommand {
         RawCommand::new("sticker")
             .argument("get")
             .argument("song")
-            .argument(&self.uri)
-            .argument(&self.name)
+            .argument(self.uri)
+            .argument(self.name)
     }
 
     fn response(self, frame: Frame) -> Result<Self::Response, TypedResponseError> {
@@ -1269,29 +1267,29 @@ impl Command for StickerGet {
 
 /// `sticker set` command
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct StickerSet {
-    uri: String,
-    name: String,
-    value: String,
+pub struct StickerSet<'a> {
+    uri: &'a str,
+    name: &'a str,
+    value: &'a str,
 }
 
-impl StickerSet {
+impl<'a> StickerSet<'a> {
     /// Set the sticker `name` to `value` for the song at `uri`
-    pub fn new(uri: String, name: String, value: String) -> Self {
+    pub fn new(uri: &'a str, name: &'a str, value: &'a str) -> Self {
         Self { uri, name, value }
     }
 }
 
-impl Command for StickerSet {
+impl<'a> Command for StickerSet<'a> {
     type Response = ();
 
     fn command(&self) -> RawCommand {
         RawCommand::new("sticker")
             .argument("set")
             .argument("song")
-            .argument(&self.uri)
-            .argument(&self.name)
-            .argument(&self.value)
+            .argument(self.uri)
+            .argument(self.name)
+            .argument(self.value)
     }
 
     fn response(self, _: Frame) -> Result<Self::Response, TypedResponseError> {
@@ -1301,27 +1299,27 @@ impl Command for StickerSet {
 
 /// `sticker delete` command
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct StickerDelete {
-    uri: String,
-    name: String,
+pub struct StickerDelete<'a> {
+    uri: &'a str,
+    name: &'a str,
 }
 
-impl StickerDelete {
+impl<'a> StickerDelete<'a> {
     /// Delete the sticker `name` for the song at `uri`
-    pub fn new(uri: String, name: String) -> Self {
+    pub fn new(uri: &'a str, name: &'a str) -> Self {
         Self { uri, name }
     }
 }
 
-impl Command for StickerDelete {
+impl<'a> Command for StickerDelete<'a> {
     type Response = ();
 
     fn command(&self) -> RawCommand {
         RawCommand::new("sticker")
             .argument("delete")
             .argument("song")
-            .argument(&self.uri)
-            .argument(&self.name)
+            .argument(self.uri)
+            .argument(self.name)
     }
 
     fn response(self, _: Frame) -> Result<Self::Response, TypedResponseError> {
@@ -1331,25 +1329,25 @@ impl Command for StickerDelete {
 
 /// `sticker list` command
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct StickerList {
-    uri: String,
+pub struct StickerList<'a> {
+    uri: &'a str,
 }
 
-impl StickerList {
+impl<'a> StickerList<'a> {
     /// Lists all stickers on the song at `uri`
-    pub fn new(uri: String) -> Self {
+    pub fn new(uri: &'a str) -> Self {
         Self { uri }
     }
 }
 
-impl Command for StickerList {
+impl<'a> Command for StickerList<'a> {
     type Response = res::StickerList;
 
     fn command(&self) -> RawCommand {
         RawCommand::new("sticker")
             .argument("list")
             .argument("song")
-            .argument(&self.uri)
+            .argument(self.uri)
     }
 
     fn response(self, frame: Frame) -> Result<Self::Response, TypedResponseError> {
@@ -1371,15 +1369,15 @@ enum StickerFindOperator {
 
 /// `sticker find` command
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct StickerFind {
-    uri: String,
-    name: String,
-    filter: Option<(StickerFindOperator, String)>,
+pub struct StickerFind<'a> {
+    uri: &'a str,
+    name: &'a str,
+    filter: Option<(StickerFindOperator, &'a str)>,
 }
 
-impl StickerFind {
+impl<'a> StickerFind<'a> {
     /// Lists all stickers on the song at `uri`
-    pub fn new(uri: String, name: String) -> Self {
+    pub fn new(uri: &'a str, name: &'a str) -> Self {
         Self {
             uri,
             name,
@@ -1388,21 +1386,21 @@ impl StickerFind {
     }
 
     /// Find stickers where their value is equal to `value`
-    pub fn where_eq(self, value: String) -> Self {
+    pub fn where_eq(self, value: &'a str) -> Self {
         self.add_filter(StickerFindOperator::Equals, value)
     }
 
     /// Find stickers where their value is greater than `value`
-    pub fn where_gt(self, value: String) -> Self {
+    pub fn where_gt(self, value: &'a str) -> Self {
         self.add_filter(StickerFindOperator::GreaterThan, value)
     }
 
     /// Find stickers where their value is less than `value`
-    pub fn where_lt(self, value: String) -> Self {
+    pub fn where_lt(self, value: &'a str) -> Self {
         self.add_filter(StickerFindOperator::LessThan, value)
     }
 
-    fn add_filter(self, operator: StickerFindOperator, value: String) -> Self {
+    fn add_filter(self, operator: StickerFindOperator, value: &'a str) -> Self {
         Self {
             name: self.name,
             uri: self.uri,
@@ -1411,7 +1409,7 @@ impl StickerFind {
     }
 }
 
-impl Command for StickerFind {
+impl<'a> Command for StickerFind<'a> {
     type Response = res::StickerFind;
 
     fn command(&self) -> RawCommand {
@@ -1481,7 +1479,7 @@ mod tests {
     #[test]
     fn command_getplaylist() {
         assert_eq!(
-            GetPlaylist(String::from("foo")).command(),
+            GetPlaylist("foo").command(),
             RawCommand::new("listplaylistinfo").argument("foo")
         );
     }
@@ -1546,24 +1544,22 @@ mod tests {
 
     #[test]
     fn command_add() {
-        let uri = String::from("foo/bar.mp3");
+        let uri = "foo/bar.mp3";
 
         assert_eq!(
-            Add::uri(uri.clone()).command(),
-            RawCommand::new("addid").argument(uri.clone())
+            Add::uri(uri).command(),
+            RawCommand::new("addid").argument(uri)
         );
         assert_eq!(
-            Add::uri(uri.clone()).at(5).command(),
-            RawCommand::new("addid").argument(uri.clone()).argument("5")
+            Add::uri(uri).at(5).command(),
+            RawCommand::new("addid").argument(uri).argument("5")
         );
         assert_eq!(
-            Add::uri(uri.clone()).before_current(5).command(),
-            RawCommand::new("addid")
-                .argument(uri.clone())
-                .argument("-5")
+            Add::uri(uri).before_current(5).command(),
+            RawCommand::new("addid").argument(uri).argument("-5")
         );
         assert_eq!(
-            Add::uri(uri.clone()).after_current(5).command(),
+            Add::uri(uri).after_current(5).command(),
             RawCommand::new("addid").argument(uri).argument("+5")
         );
     }
@@ -1687,7 +1683,7 @@ mod tests {
         assert_eq!(ListAllIn::root().command(), RawCommand::new("listallinfo"));
 
         assert_eq!(
-            ListAllIn::directory(String::from("foo")).command(),
+            ListAllIn::directory("foo").command(),
             RawCommand::new("listallinfo").argument("foo")
         );
     }
@@ -1695,15 +1691,14 @@ mod tests {
     #[test]
     fn command_playlistdelete() {
         assert_eq!(
-            RemoveFromPlaylist::position(String::from("foo"), 5).command(),
+            RemoveFromPlaylist::position("foo", 5).command(),
             RawCommand::new("playlistdelete")
                 .argument("foo")
                 .argument("5"),
         );
 
         assert_eq!(
-            RemoveFromPlaylist::range(String::from("foo"), SongPosition(3)..SongPosition(6))
-                .command(),
+            RemoveFromPlaylist::range("foo", SongPosition(3)..SongPosition(6)).command(),
             RawCommand::new("playlistdelete")
                 .argument("foo")
                 .argument("3:6"),
@@ -1723,7 +1718,7 @@ mod tests {
         );
 
         assert_eq!(
-            TagTypes::disable(vec![Tag::Album, Tag::Title]).command(),
+            TagTypes::disable(&[Tag::Album, Tag::Title]).command(),
             RawCommand::new("tagtypes")
                 .argument("disable")
                 .argument("Album")
@@ -1731,7 +1726,7 @@ mod tests {
         );
 
         assert_eq!(
-            TagTypes::enable(vec![Tag::Album, Tag::Title]).command(),
+            TagTypes::enable(&[Tag::Album, Tag::Title]).command(),
             RawCommand::new("tagtypes")
                 .argument("enable")
                 .argument("Album")
@@ -1747,7 +1742,7 @@ mod tests {
     #[test]
     fn command_sticker_get() {
         assert_eq!(
-            StickerGet::new("foo".to_string(), "bar".to_string()).command(),
+            StickerGet::new("foo", "bar").command(),
             RawCommand::new("sticker")
                 .argument("get")
                 .argument("song")
@@ -1759,7 +1754,7 @@ mod tests {
     #[test]
     fn command_sticker_set() {
         assert_eq!(
-            StickerSet::new("foo".to_string(), "bar".to_string(), "baz".to_string()).command(),
+            StickerSet::new("foo", "bar", "baz").command(),
             RawCommand::new("sticker")
                 .argument("set")
                 .argument("song")
@@ -1772,7 +1767,7 @@ mod tests {
     #[test]
     fn command_sticker_delete() {
         assert_eq!(
-            StickerDelete::new("foo".to_string(), "bar".to_string()).command(),
+            StickerDelete::new("foo", "bar").command(),
             RawCommand::new("sticker")
                 .argument("delete")
                 .argument("song")
@@ -1784,7 +1779,7 @@ mod tests {
     #[test]
     fn command_sticker_list() {
         assert_eq!(
-            StickerList::new("foo".to_string()).command(),
+            StickerList::new("foo").command(),
             RawCommand::new("sticker")
                 .argument("list")
                 .argument("song")
@@ -1795,7 +1790,7 @@ mod tests {
     #[test]
     fn command_sticker_find() {
         assert_eq!(
-            StickerFind::new("foo".to_string(), "bar".to_string()).command(),
+            StickerFind::new("foo", "bar").command(),
             RawCommand::new("sticker")
                 .argument("find")
                 .argument("song")
@@ -1804,9 +1799,7 @@ mod tests {
         );
 
         assert_eq!(
-            StickerFind::new("foo".to_string(), "bar".to_string())
-                .where_eq("baz".to_string())
-                .command(),
+            StickerFind::new("foo", "bar").where_eq("baz").command(),
             RawCommand::new("sticker")
                 .argument("find")
                 .argument("song")
