@@ -223,7 +223,7 @@ fn is_command_list_command(command: &str) -> bool {
 }
 
 /// Error returned when attempting to construct an invalid command.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Debug)]
 pub enum CommandError {
     /// The command was empty (either an empty command or an empty list commands).
     Empty,
