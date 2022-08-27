@@ -230,7 +230,7 @@ impl Command for SetVolume {
 
     fn command(&self) -> RawCommand {
         let volume = min(self.0, 100);
-        RawCommand::new("setvol").argument(volume.to_string())
+        RawCommand::new("setvol").argument(volume)
     }
 
     fn response(self, _: Frame) -> Result<Self::Response, TypedResponseError> {
@@ -271,7 +271,7 @@ impl Command for Crossfade {
 
     fn command(&self) -> RawCommand {
         let seconds = self.0.as_secs();
-        RawCommand::new("crossfade").argument(seconds.to_string())
+        RawCommand::new("crossfade").argument(seconds)
     }
 
     fn response(self, _: Frame) -> Result<Self::Response, TypedResponseError> {
@@ -997,7 +997,7 @@ impl<'a> Command for RemoveFromPlaylist<'a> {
         let command = RawCommand::new("playlistdelete").argument(self.playlist);
 
         match self.target {
-            PositionOrRange::Position(p) => command.argument(p.to_string()),
+            PositionOrRange::Position(p) => command.argument(p),
             PositionOrRange::Range(r) => command.argument(r),
         }
     }
@@ -1028,8 +1028,8 @@ impl<'a> Command for MoveInPlaylist<'a> {
     fn command(&self) -> RawCommand {
         RawCommand::new("playlistmove")
             .argument(self.playlist)
-            .argument(self.from.to_string())
-            .argument(self.to.to_string())
+            .argument(self.from)
+            .argument(self.to)
     }
 
     fn response(self, _: Frame) -> Result<Self::Response, TypedResponseError> {
@@ -1084,7 +1084,7 @@ impl Command for SetBinaryLimit {
     type Response = ();
 
     fn command(&self) -> RawCommand {
-        RawCommand::new("binarylimit").argument(self.0.to_string())
+        RawCommand::new("binarylimit").argument(self.0)
     }
 
     fn response(self, _: Frame) -> Result<Self::Response, TypedResponseError> {
@@ -1117,7 +1117,7 @@ impl<'a> Command for AlbumArt<'a> {
     fn command(&self) -> RawCommand {
         RawCommand::new("albumart")
             .argument(self.uri)
-            .argument(self.offset.to_string())
+            .argument(self.offset)
     }
 
     fn response(self, frame: Frame) -> Result<Self::Response, TypedResponseError> {
@@ -1150,7 +1150,7 @@ impl<'a> Command for AlbumArtEmbedded<'a> {
     fn command(&self) -> RawCommand {
         RawCommand::new("readpicture")
             .argument(self.uri)
-            .argument(self.offset.to_string())
+            .argument(self.offset)
     }
 
     fn response(self, frame: Frame) -> Result<Self::Response, TypedResponseError> {

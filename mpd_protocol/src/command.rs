@@ -330,6 +330,21 @@ impl Argument for Duration {
     }
 }
 
+macro_rules! implement_integer_arg {
+    ($($type:ty),+) => {
+        $(
+            impl $crate::command::Argument for $type {
+                fn render(&self, buf: &mut ::bytes::BytesMut) {
+                    use ::std::fmt::Write;
+                    ::std::write!(buf, "{}", self).unwrap();
+                }
+            }
+        )+
+    }
+}
+
+implement_integer_arg!(u8, u16, u32, u64, usize);
+
 #[cfg(test)]
 mod test {
     use super::*;
