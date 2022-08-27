@@ -1,3 +1,28 @@
+# 1.0.0 (2022-08-27)
+
+ - Redesign the `Command` and `CommandList` traits
+   - Remove trait seal, you can add your own impls now
+   - Remove the `Response` trait, response creation is now handled by a method on the respective trait
+   - Add public functions for constructing `TypedResponseError`s
+ - Reorganize crate modules
+   - Commands now live in their own top-level module
+   - Error types now live in the modules where they are used
+ - Make `chrono` dependency optional
+ - Rename `StateChanges` to `ConnectionEvents` and return an enum of possible events.
+ - Redesign commands to take references to their arguments where necessary instead of taking ownership.
+ - Add commands for managing song stickers ([#14](https://github.com/elomatreb/mpd_client/pull/14), thanks to JakeStanger).
+ - Add `Count` command (proposed by pborzenkov in [#15](https://github.com/elomatreb/mpd_client/pull/15)).
+ - Reimplement `List` command to support type-safe grouping.
+ - Bug fixes:
+   - Missing `CommandList` impl for tuples of size 4
+   - Missing argument rendering on `GetPlaylist` commnad
+ - Other API changes:
+   - Clean up crate reexports. Now simply reexports the entire `mpd_protocol` crate as `protocol`.
+   - Add `Client::is_connection_closed`
+   - `Status` response: Don't suppress the `default` partition name
+   - `AlbumArt` response: Expose returned raw data as `BytesMut`
+   - `Client::album_art`: Return loaded data as `BytesMut`
+
 # 0.7.5
 
  - Add `Ping` command.

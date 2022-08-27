@@ -1,3 +1,12 @@
+# 1.0.0 (2022-08-27)
+
+ - Redesign and simplify the `Argument` trait
+ - Make `CommandError` type opaque
+ - API changes:
+   - Rename `Frame::get_binary` to `Frame::take_binary`
+   - Rename `Response::single_frame` to `Response::into_single_frame`
+   - Remove `Response` root reexport
+
 # 0.13.0 (2021-12-09)
 
  - Redesign connection interface.
