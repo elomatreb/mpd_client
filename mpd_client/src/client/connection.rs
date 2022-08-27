@@ -257,23 +257,3 @@ where
 
     Ok(())
 }
-
-/*
-fn response_to_subsystem(res: Response) -> Result<Option<Subsystem>, ConnectionError> {
-    let mut frame = match res.into_single_frame() {
-        Ok(f) => f,
-        Err(_) => return Err(ConnectionError::InvalidResponse),
-    };
-
-    Ok(match frame.get("changed") {
-        Some(raw) => Some(Subsystem::from_raw_string(raw)),
-        None => {
-            if frame.fields_len() != 0 {
-                warn!("state change response was not empty but did not contain `changed` key");
-            }
-
-            None
-        }
-    })
-}
-*/
