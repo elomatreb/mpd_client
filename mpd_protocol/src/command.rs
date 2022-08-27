@@ -14,7 +14,7 @@ use std::{
     time::Duration,
 };
 
-use bytes::{BufMut, BytesMut};
+use bytes::{BufMut, Bytes, BytesMut};
 
 /// Start a command list, separated with list terminators. Our parser can't separate messages when
 /// the form of command list without terminators is used.
@@ -31,26 +31,38 @@ impl Command {
     /// Start a new command.
     ///
     /// Same as [`Command::build`], but panics on error instead of returning a result.
-    pub fn new(command: &str) -> Self {
-        Self::build(command).expect("Invalid command")
+    #[track_caller]
+    pub fn new(command: &str) -> Command {
+        match Command::build(command) {
+            Ok(c) => c,
+            Err(e) => panic!("invalid command: {}", e),
+        }
     }
 
     /// Start a new command.
     ///
     /// # Errors
     ///
-    /// Errors are returned when the command base is invalid (e.g. empty string or containing
-    /// whitespace).
-    pub fn build(command: &str) -> Result<Self, CommandError> {
-        validate_command_part(command)?;
-        Ok(Command(BytesMut::from(command)))
+    /// An error is returned when the command base is invalid.
+    pub fn build(command: &str) -> Result<Command, CommandError> {
+        match validate_command_part(command) {
+            Ok(()) => Ok(Command(BytesMut::from(command))),
+            Err(kind) => Err(CommandError {
+                data: Bytes::copy_from_slice(command.as_bytes()),
+                kind,
+            }),
+        }
     }
 
     /// Add an argument to the command.
     ///
-    /// Same as [`Command::add_argument`], but returns `Self` and panics on error.
-    pub fn argument<A: Argument>(mut self, argument: A) -> Self {
-        self.add_argument(argument).expect("Invalid argument");
+    /// Same as [`Command::add_argument`], but panics on error and allows chaining.
+    #[track_caller]
+    pub fn argument<A: Argument>(mut self, argument: A) -> Command {
+        if let Err(e) = self.add_argument(argument) {
+            panic!("invalid argument: {}", e);
+        }
+
         self
     }
 
@@ -58,7 +70,7 @@ impl Command {
     ///
     /// # Errors
     ///
-    /// Errors are returned when the argument is invalid (e.g. empty string or containing invalid
+    /// An error is returned when the argument is invalid (e.g. empty string or containing invalid
     /// characters such as newlines).
     pub fn add_argument<A: Argument>(&mut self, argument: A) -> Result<(), CommandError> {
         let len_without_arg = self.0.len();
@@ -66,13 +78,15 @@ impl Command {
         self.0.put_u8(b' ');
         argument.render(&mut self.0);
 
-        if let Err(e) = validate_argument(&self.0[len_without_arg + 1..]) {
+        if let Err(kind) = validate_argument(&self.0[len_without_arg + 1..]) {
             // Remove added invalid part again
+            let data = self.0.split_off(len_without_arg + 1).freeze();
             self.0.truncate(len_without_arg);
-            return Err(e);
-        }
 
-        Ok(())
+            Err(CommandError { data, kind })
+        } else {
+            Ok(())
+        }
     }
 }
 
@@ -187,28 +201,28 @@ fn should_escape(c: char) -> bool {
     c == '\\' || c == '"' || c == '\''
 }
 
-fn validate_command_part(command: &str) -> Result<(), CommandError> {
+fn validate_command_part(command: &str) -> Result<(), CommandErrorKind> {
     if command.is_empty() {
-        return Err(CommandError::Empty);
+        return Err(CommandErrorKind::Empty);
     }
 
     if let Some((i, c)) = command
         .char_indices()
         .find(|(_, c)| !is_valid_command_char(*c))
     {
-        Err(CommandError::InvalidCharacter(i, c))
+        Err(CommandErrorKind::InvalidCharacter(i, c))
     } else if is_command_list_command(command) {
-        Err(CommandError::CommandList)
+        Err(CommandErrorKind::CommandList)
     } else {
         Ok(())
     }
 }
 
 /// Validate an argument.
-fn validate_argument(argument: &[u8]) -> Result<(), CommandError> {
+fn validate_argument(argument: &[u8]) -> Result<(), CommandErrorKind> {
     match argument.iter().position(|&c| c == b'\n') {
         None => Ok(()),
-        Some(i) => Err(CommandError::InvalidCharacter(i, '\n')),
+        Some(i) => Err(CommandErrorKind::InvalidCharacter(i, '\n')),
     }
 }
 
@@ -222,9 +236,16 @@ fn is_command_list_command(command: &str) -> bool {
     command.starts_with("command_list")
 }
 
+/// Error returned when attempting to create invalid commands or arguments.
+#[derive(Debug)]
+pub struct CommandError {
+    data: Bytes,
+    kind: CommandErrorKind,
+}
+
 /// Error returned when attempting to construct an invalid command.
 #[derive(Debug)]
-pub enum CommandError {
+enum CommandErrorKind {
     /// The command was empty (either an empty command or an empty list commands).
     Empty,
     /// The command string contained an invalid character at the contained position. This is
@@ -238,12 +259,20 @@ impl Error for CommandError {}
 
 impl fmt::Display for CommandError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            CommandError::Empty => write!(f, "empty command"),
-            CommandError::InvalidCharacter(i, c) => {
-                write!(f, "invalid character {:?} at position {}", c, i)
+        match &self.kind {
+            CommandErrorKind::Empty => write!(f, "empty command"),
+            CommandErrorKind::InvalidCharacter(i, c) => {
+                write!(
+                    f,
+                    "invalid character {:?} at position {} in {:?}",
+                    c, i, self.data
+                )
             }
-            CommandError::CommandList => write!(f, "attempted to open or close a command list"),
+            CommandErrorKind::CommandList => write!(
+                f,
+                "attempted to open or close a command list: {:?}",
+                self.data
+            ),
         }
     }
 }
@@ -311,6 +340,10 @@ mod test {
         assert_eq!(command.0, "foo");
 
         command.add_argument("bar").unwrap();
+        assert_eq!(command.0, "foo bar");
+
+        // Invalid argument does not change the command
+        let _e = command.add_argument("foo\nbar").unwrap_err();
         assert_eq!(command.0, "foo bar");
     }
 
