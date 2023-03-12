@@ -1435,6 +1435,73 @@ impl<'a> Command for StickerFind<'a> {
     }
 }
 
+/// `update` command
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Update<'a>(Option<&'a str>);
+
+impl<'a> Update<'a> {
+    /// Update the music database
+    pub fn new() -> Self {
+        Update(None)
+    }
+
+    /// Update the music database at `uri`
+    pub fn uri(self, uri: &'a str) -> Self {
+        Self(Some(uri))
+    }
+}
+
+impl<'a> Command for Update<'a> {
+    type Response = u64;
+
+    fn command(&self) -> RawCommand {
+        let mut command = RawCommand::new("update");
+
+        if let Some(uri) = self.0 {
+            command.add_argument(uri).unwrap();
+        }
+
+        command
+    }
+
+    fn response(self, mut frame: Frame) -> Result<Self::Response, TypedResponseError> {
+        value(&mut frame, "updating_db")
+    }
+}
+
+/// `rescan` command
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Rescan<'a>(Option<&'a str>);
+
+impl<'a> Rescan<'a> {
+    /// Rescan the music database
+    pub fn new() -> Self {
+        Rescan(None)
+    }
+
+    /// Rescan the music database at `uri`
+    pub fn uri(self, uri: &'a str) -> Self {
+        Self(Some(uri))
+    }
+}
+
+impl<'a> Command for Rescan<'a> {
+    type Response = u64;
+
+    fn command(&self) -> RawCommand {
+        let mut command = RawCommand::new("rescan");
+
+        if let Some(uri) = self.0 {
+            command.add_argument(uri).unwrap();
+        }
+
+        command
+    }
+
+    fn response(self, mut frame: Frame) -> Result<Self::Response, TypedResponseError> {
+        value(&mut frame, "updating_db")
+    }
+}
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1808,5 +1875,25 @@ mod tests {
                 .argument("=")
                 .argument("baz")
         );
+    }
+
+    #[test]
+    fn command_update() {
+        assert_eq!(Update::new().command(), RawCommand::new("update"));
+
+        assert_eq!(
+            Update::new().uri("folder").command(),
+            RawCommand::new("update").argument("folder")
+        )
+    }
+
+    #[test]
+    fn command_rescan() {
+        assert_eq!(Rescan::new().command(), RawCommand::new("rescan"));
+
+        assert_eq!(
+            Rescan::new().uri("folder").command(),
+            RawCommand::new("rescan").argument("folder")
+        )
     }
 }
