@@ -1,3 +1,7 @@
+# 1.1.0 (2023-03-13)
+
+ - Add the `Update` and `Rescan` commands for managing updates to the MPD library (#8, thanks to pborzenkov).
+
 # 1.0.0 (2022-08-27)
 
  - Redesign the `Command` and `CommandList` traits
