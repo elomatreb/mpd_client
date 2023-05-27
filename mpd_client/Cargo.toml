@@ -20,7 +20,7 @@ tracing = "0.1.37"
 [dev-dependencies]
 assert_matches = "1.5.0"
 tokio-test = "0.4.2"
-tracing-subscriber = { version = "0.3.17", features = ["env-filter"] }
+tracing-subscriber = "0.3.17"
 
 [package.metadata.docs.rs]
 all-features = true

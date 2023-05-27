@@ -5,13 +5,10 @@ use mpd_client::{
     commands, Client,
 };
 use tokio::net::TcpStream;
-use tracing_subscriber::{EnvFilter, FmtSubscriber};
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), Box<dyn Error>> {
-    FmtSubscriber::builder()
-        .with_env_filter(EnvFilter::from_default_env())
-        .init();
+    tracing_subscriber::fmt().init();
 
     // Connect via TCP
     let connection = TcpStream::connect("localhost:6600").await?;
