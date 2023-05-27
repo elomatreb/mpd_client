@@ -11,16 +11,16 @@ license = "MIT OR Apache-2.0"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+bytes = "1.4.0"
+chrono = { version = "0.4.24", default-features = false, features = ["std"], optional = true }
 mpd_protocol = { version = "1.0.0", features = ["async"], path = "../mpd_protocol" }
-tokio = { version = "1.16.1", features = ["rt", "net", "time", "sync", "macros"] }
-tracing = "0.1.35"
-chrono = { version = "0.4.11", default-features = false, features = ["std"], optional = true }
-bytes = "1.0.1"
+tokio = { version = "1.28.1", features = ["rt", "net", "time", "sync", "macros"] }
+tracing = "0.1.37"
 
 [dev-dependencies]
-tracing-subscriber = { version = "0.3.2", features = ["env-filter"] }
-tokio-test = "0.4.0"
 assert_matches = "1.5.0"
+tokio-test = "0.4.2"
+tracing-subscriber = { version = "0.3.17", features = ["env-filter"] }
 
 [package.metadata.docs.rs]
 all-features = true
