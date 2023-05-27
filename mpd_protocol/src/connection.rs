@@ -30,14 +30,11 @@ impl<IO> Connection<IO> {
     #[allow(dead_code)]
     #[doc(hidden)]
     pub fn new_internal(io: IO) -> Connection<IO> {
-        let mut recv_buf = BytesMut::new();
-        recv_buf.resize(DEFAULT_BUFFER_CAPACITY, 0);
-
         Connection {
             io,
             protocol_version: Box::from(""),
             field_cache: ResponseFieldCache::new(),
-            recv_buf,
+            recv_buf: BytesMut::zeroed(DEFAULT_BUFFER_CAPACITY),
             total_received: 0,
         }
     }
@@ -48,8 +45,7 @@ impl<IO> Connection<IO> {
     where
         IO: Read,
     {
-        let mut recv_buf = BytesMut::with_capacity(DEFAULT_BUFFER_CAPACITY);
-        recv_buf.resize(recv_buf.capacity(), 0);
+        let mut recv_buf = BytesMut::zeroed(DEFAULT_BUFFER_CAPACITY);
         let mut total_read = 0;
 
         let protocol_version = loop {
@@ -496,14 +492,11 @@ mod tests_sync {
     use super::*;
 
     fn new_conn<IO>(io: IO) -> Connection<IO> {
-        let mut recv_buf = BytesMut::new();
-        recv_buf.resize(DEFAULT_BUFFER_CAPACITY, 0);
-
         Connection {
             io,
             field_cache: ResponseFieldCache::new(),
             protocol_version: Box::from(""),
-            recv_buf,
+            recv_buf: BytesMut::zeroed(DEFAULT_BUFFER_CAPACITY),
             total_received: 0,
         }
     }
