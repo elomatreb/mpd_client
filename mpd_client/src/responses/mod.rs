@@ -395,6 +395,35 @@ impl AlbumArt {
     }
 }
 
+/// Parse response for the [`crate::commands::ReadChannelMessages`] command.
+pub(crate) fn parse_channel_messages<F>(
+    fields: F,
+) -> Result<Vec<(String, String)>, TypedResponseError>
+where
+    F: IntoIterator<Item = KeyValuePair>,
+{
+    let mut response = Vec::new();
+    let mut fields = fields.into_iter();
+
+    while let Some(channel) = fields.next() {
+        if &*channel.0 != "channel" {
+            return Err(TypedResponseError::unexpected_field("channel", &*channel.0));
+        }
+
+        let Some(message) = fields.next() else {
+            return Err(TypedResponseError::missing("message"))
+        };
+
+        if &*message.0 != "message" {
+            return Err(TypedResponseError::unexpected_field("message", &*message.0));
+        }
+
+        response.push((channel.1, message.1));
+    }
+
+    Ok(response)
+}
+
 #[cfg(test)]
 mod tests {
     use assert_matches::assert_matches;
@@ -414,5 +443,24 @@ mod tests {
         assert_matches!(parse_duration("duration", "-1"), Err(_));
         assert_matches!(parse_duration("duration", "NaN"), Err(_));
         assert_matches!(parse_duration("duration", "-1"), Err(_));
+    }
+
+    #[test]
+    fn channel_message_parsing() {
+        assert_eq!(parse_channel_messages(Vec::new()).unwrap(), Vec::new());
+
+        let fields = vec![
+            (Arc::from("channel"), String::from("foo")),
+            (Arc::from("message"), String::from("message 1")),
+            (Arc::from("channel"), String::from("bar")),
+            (Arc::from("message"), String::from("message 2")),
+        ];
+        assert_eq!(
+            parse_channel_messages(fields).unwrap(),
+            vec![
+                (String::from("foo"), String::from("message 1")),
+                (String::from("bar"), String::from("message 2")),
+            ]
+        );
     }
 }

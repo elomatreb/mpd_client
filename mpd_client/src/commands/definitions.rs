@@ -91,6 +91,8 @@ single_arg_command!(SetConsume, bool, "consume");
 single_arg_command!(SetPause, bool, "pause");
 single_arg_command!(SetRandom, bool, "random");
 single_arg_command!(SetRepeat, bool, "repeat");
+single_arg_command!(SubscribeToChannel<'a>, &'a str, "subscribe");
+single_arg_command!(UnsubscribeFromChannel<'a>, &'a str, "unsubscribe");
 
 /// `status` command.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1518,6 +1520,75 @@ impl<'a> Default for Rescan<'a> {
     }
 }
 
+/// `readmessage` command.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct ReadChannelMessages;
+
+impl Command for ReadChannelMessages {
+    type Response = Vec<(String, String)>;
+
+    fn command(&self) -> RawCommand {
+        RawCommand::new("readmessages")
+    }
+
+    fn response(self, frame: Frame) -> Result<Self::Response, TypedResponseError> {
+        res::parse_channel_messages(frame)
+    }
+}
+
+/// `channels` command.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct ListChannels;
+
+impl Command for ListChannels {
+    type Response = Vec<String>;
+
+    fn command(&self) -> RawCommand {
+        RawCommand::new("channels")
+    }
+
+    fn response(self, frame: Frame) -> Result<Self::Response, TypedResponseError> {
+        let mut response = Vec::with_capacity(frame.fields_len());
+        for (key, value) in frame {
+            if &*key != "channel" {
+                return Err(TypedResponseError::unexpected_field("channel", &*key));
+            }
+
+            response.push(value);
+        }
+
+        Ok(response)
+    }
+}
+
+/// `sendmessage` command.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SendChannelMessage<'a> {
+    channel: &'a str,
+    message: &'a str,
+}
+
+impl<'a> SendChannelMessage<'a> {
+    /// Send the given message to the given channel.
+    pub fn new(channel: &'a str, message: &'a str) -> SendChannelMessage<'a> {
+        SendChannelMessage { channel, message }
+    }
+}
+
+impl<'a> Command for SendChannelMessage<'a> {
+    type Response = ();
+
+    fn command(&self) -> RawCommand {
+        RawCommand::new("sendmessage")
+            .argument(self.channel)
+            .argument(self.message)
+    }
+
+    fn response(self, _frame: Frame) -> Result<Self::Response, TypedResponseError> {
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1911,5 +1982,44 @@ mod tests {
             Rescan::new().uri("folder").command(),
             RawCommand::new("rescan").argument("folder")
         )
+    }
+
+    #[test]
+    fn command_subscribe() {
+        assert_eq!(
+            SubscribeToChannel("hello").command(),
+            RawCommand::new("subscribe").argument("hello")
+        );
+    }
+
+    #[test]
+    fn command_unsubscribe() {
+        assert_eq!(
+            UnsubscribeFromChannel("hello").command(),
+            RawCommand::new("unsubscribe").argument("hello")
+        );
+    }
+
+    #[test]
+    fn command_read_messages() {
+        assert_eq!(
+            ReadChannelMessages.command(),
+            RawCommand::new("readmessages")
+        );
+    }
+
+    #[test]
+    fn command_list_channels() {
+        assert_eq!(ListChannels.command(), RawCommand::new("channels"));
+    }
+
+    #[test]
+    fn command_send_message() {
+        assert_eq!(
+            SendChannelMessage::new("foo", "bar").command(),
+            RawCommand::new("sendmessage")
+                .argument("foo")
+                .argument("bar")
+        );
     }
 }
