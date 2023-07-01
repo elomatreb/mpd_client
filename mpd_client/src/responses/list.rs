@@ -2,7 +2,7 @@ use std::{slice::Iter, vec::IntoIter};
 
 use mpd_protocol::response::Frame;
 
-use crate::{responses::TypedResponseError, tag::Tag};
+use crate::tag::Tag;
 
 /// Response to the [`list`] command.
 ///
@@ -22,22 +22,18 @@ impl List<0> {
 }
 
 impl<const N: usize> List<N> {
-    pub(crate) fn from_frame(
-        primary_tag: Tag,
-        groupings: [Tag; N],
-        frame: Frame,
-    ) -> Result<List<N>, TypedResponseError> {
+    pub(crate) fn from_frame(primary_tag: Tag, groupings: [Tag; N], frame: Frame) -> List<N> {
         let fields = frame
             .into_iter()
             // Unwrapping here is fine because the parser already validated the fields
             .map(|(tag, value)| (Tag::try_from(tag.as_ref()).unwrap(), value))
             .collect();
 
-        Ok(List {
+        List {
             primary_tag,
             groupings,
             fields,
-        })
+        }
     }
 
     /// Returns an iterator over the grouped combinations returned by the command.

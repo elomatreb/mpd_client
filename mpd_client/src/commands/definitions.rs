@@ -25,7 +25,7 @@ macro_rules! argless_command {
     (#[doc = $doc:expr],
      $item:item) => {
         #[doc = $doc]
-        #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+        #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
         $item
     };
     ($name:ident, $command:literal) => {
@@ -370,8 +370,8 @@ impl Argument for PositionOrRelative {
     fn render(&self, buf: &mut BytesMut) {
         match self {
             PositionOrRelative::Absolute(pos) => pos.render(buf),
-            PositionOrRelative::AfterCurrent(x) => write!(buf, "+{}", x).unwrap(),
-            PositionOrRelative::BeforeCurrent(x) => write!(buf, "-{}", x).unwrap(),
+            PositionOrRelative::AfterCurrent(x) => write!(buf, "+{x}").unwrap(),
+            PositionOrRelative::BeforeCurrent(x) => write!(buf, "-{x}").unwrap(),
         }
     }
 }
@@ -758,7 +758,7 @@ impl<const N: usize> Command for List<N> {
     }
 
     fn response(self, frame: Frame) -> Result<Self::Response, TypedResponseError> {
-        res::List::from_frame(self.tag, self.group_by, frame)
+        Ok(res::List::from_frame(self.tag, self.group_by, frame))
     }
 }
 
@@ -1416,8 +1416,8 @@ impl<'a> Command for StickerFind<'a> {
         let base = RawCommand::new("sticker")
             .argument("find")
             .argument("song")
-            .argument(&self.uri)
-            .argument(&self.name);
+            .argument(self.uri)
+            .argument(self.name);
 
         if let Some((operator, value)) = self.filter.as_ref() {
             match operator {
@@ -1435,17 +1435,17 @@ impl<'a> Command for StickerFind<'a> {
     }
 }
 
-/// `update` command
+/// `update` command.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Update<'a>(Option<&'a str>);
 
 impl<'a> Update<'a> {
-    /// Update the music database
+    /// Update the entire music database.
     pub fn new() -> Self {
         Update(None)
     }
 
-    /// Update the music database at `uri`
+    /// Restrict the update to the files below the given path.
     pub fn uri(self, uri: &'a str) -> Self {
         Self(Some(uri))
     }
@@ -1469,17 +1469,26 @@ impl<'a> Command for Update<'a> {
     }
 }
 
-/// `rescan` command
+impl<'a> Default for Update<'a> {
+    fn default() -> Self {
+        Update::new()
+    }
+}
+
+/// `rescan` command.
+///
+/// Unlike the [`Update`] command, this will also scan files that don't appear to have changed
+/// based on their modification time.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Rescan<'a>(Option<&'a str>);
 
 impl<'a> Rescan<'a> {
-    /// Rescan the music database
+    /// Rescan the entire music database.
     pub fn new() -> Self {
         Rescan(None)
     }
 
-    /// Rescan the music database at `uri`
+    /// Restrict the rescan to the files below the given path.
     pub fn uri(self, uri: &'a str) -> Self {
         Self(Some(uri))
     }
@@ -1502,6 +1511,13 @@ impl<'a> Command for Rescan<'a> {
         value(&mut frame, "updating_db")
     }
 }
+
+impl<'a> Default for Rescan<'a> {
+    fn default() -> Self {
+        Rescan::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

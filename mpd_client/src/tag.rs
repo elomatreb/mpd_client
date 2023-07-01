@@ -236,7 +236,7 @@ impl fmt::Display for TagError {
         match self {
             Self::Empty => write!(f, "empty tag"),
             Self::InvalidCharacter { chr, pos } => {
-                write!(f, "invalid character {:?} at index {}", chr, pos)
+                write!(f, "invalid character {chr:?} at index {pos}")
             }
         }
     }

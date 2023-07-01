@@ -106,12 +106,12 @@ enum ErrorKind {
 impl fmt::Display for TypedResponseError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.kind {
-            ErrorKind::Missing { field } => write!(f, "field {:?} is required but missing", field),
+            ErrorKind::Missing { field } => write!(f, "field {field:?} is required but missing"),
             ErrorKind::UnexpectedField { expected, found } => {
-                write!(f, "expected field {:?} but found {:?}", expected, found)
+                write!(f, "expected field {expected:?} but found {found:?}")
             }
             ErrorKind::InvalidValue { field, value } => {
-                write!(f, "invalid value {:?} for field {:?}", value, field)
+                write!(f, "invalid value {value:?} for field {field:?}")
             }
             ErrorKind::Other => write!(f, "invalid response"),
         }
@@ -383,9 +383,8 @@ pub struct AlbumArt {
 
 impl AlbumArt {
     pub(crate) fn from_frame(mut frame: Frame) -> Result<Option<Self>, TypedResponseError> {
-        let data = match frame.take_binary() {
-            Some(d) => d,
-            None => return Ok(None),
+        let Some(data) = frame.take_binary() else {
+            return Ok(None);
         };
 
         Ok(Some(AlbumArt {

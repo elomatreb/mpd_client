@@ -31,11 +31,15 @@ impl Command {
     /// Start a new command.
     ///
     /// Same as [`Command::build`], but panics on error instead of returning a result.
+    ///
+    /// # Panics
+    ///
+    /// Panics where [`Command::build`] would return an error.
     #[track_caller]
     pub fn new(command: &str) -> Command {
         match Command::build(command) {
             Ok(c) => c,
-            Err(e) => panic!("invalid command: {}", e),
+            Err(e) => panic!("invalid command: {e}"),
         }
     }
 
@@ -57,10 +61,14 @@ impl Command {
     /// Add an argument to the command.
     ///
     /// Same as [`Command::add_argument`], but panics on error and allows chaining.
+    ///
+    /// # Panics
+    ///
+    /// Panics where [`Command::add_argument`] would return an error.
     #[track_caller]
     pub fn argument<A: Argument>(mut self, argument: A) -> Command {
         if let Err(e) = self.add_argument(argument) {
-            panic!("invalid argument: {}", e);
+            panic!("invalid argument: {e}");
         }
 
         self

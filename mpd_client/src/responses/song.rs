@@ -166,9 +166,8 @@ pub struct SongRange {
 impl FromFieldValue for SongRange {
     fn from_value(v: String, field: &str) -> Result<Self, TypedResponseError> {
         // The range follows the form "<start>-<end?>"
-        let (from, to) = match v.split_once('-') {
-            Some((from, to)) => (from, to),
-            None => return Err(TypedResponseError::invalid_value(field, v)),
+        let Some((from, to)) = v.split_once('-') else {
+            return Err(TypedResponseError::invalid_value(field, v));
         };
 
         let from = parse_duration(field, from)?;

@@ -16,9 +16,8 @@ pub struct StickerGet {
 
 impl StickerGet {
     pub(crate) fn from_frame(frame: Frame) -> Result<Self, TypedResponseError> {
-        let (key, field_value) = match frame.into_iter().next() {
-            Some(v) => v,
-            None => return Err(TypedResponseError::missing("sticker")),
+        let Some((key, field_value)) = frame.into_iter().next() else {
+            return Err(TypedResponseError::missing("sticker"));
         };
 
         if &*key != "sticker" {
