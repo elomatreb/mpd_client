@@ -1,3 +1,7 @@
+# 1.0.1 (2023-07-01)
+
+ - Internal improvements, dependency updates
+
 # 1.0.0 (2022-08-27)
 
  - Redesign and simplify the `Argument` trait

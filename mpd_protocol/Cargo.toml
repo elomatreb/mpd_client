@@ -1,6 +1,6 @@
 [package]
 name = "mpd_protocol"
-version = "1.0.0"
+version = "1.0.1"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 description = "Implementation of MPD client protocol"
@@ -24,7 +24,13 @@ tracing = "0.1.37"
 [dev-dependencies]
 assert_matches = "1.5.0"
 criterion = "0.5.1"
-tokio = { version = "1.29.1", features = ["io-util", "rt", "rt-multi-thread", "macros", "net"] }
+tokio = { version = "1.29.1", features = [
+    "io-util",
+    "rt",
+    "rt-multi-thread",
+    "macros",
+    "net",
+] }
 tokio-test = "0.4.2"
 
 [package.metadata.docs.rs]

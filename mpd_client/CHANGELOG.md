@@ -1,3 +1,8 @@
+# 1.2.0 (2023-07-01)
+
+ - Add commands for interacting with [client-to-client channels](https://mpd.readthedocs.io/en/latest/protocol.html#client-to-client) (`SubscribeToChannel`, `UnsubscribeFromChannel`, `ListChannels`, `ReadChannelMessages`, `SendChannelMessage`).
+ - Internal improvements and dependency updates.
+
 # 1.1.0 (2023-03-13)
 
  - Add the `Update` and `Rescan` commands for managing updates to the MPD library (#8, thanks to pborzenkov).
