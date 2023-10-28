@@ -195,7 +195,7 @@ impl<'a> PartialEq<&'a str> for Tag {
 
 impl PartialOrd for Tag {
     fn partial_cmp(&self, other: &Tag) -> Option<std::cmp::Ordering> {
-        self.as_str().partial_cmp(&other.as_str())
+        Some(self.cmp(other))
     }
 }
 
