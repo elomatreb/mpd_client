@@ -411,7 +411,7 @@ where
         }
 
         let Some(message) = fields.next() else {
-            return Err(TypedResponseError::missing("message"))
+            return Err(TypedResponseError::missing("message"));
         };
 
         if &*message.0 != "message" {
