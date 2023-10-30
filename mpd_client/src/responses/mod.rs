@@ -20,7 +20,7 @@ pub use self::{
     sticker::{StickerFind, StickerGet, StickerList},
     timestamp::Timestamp,
 };
-use crate::commands::{SingleMode, SongId, SongPosition};
+use crate::commands::{ReplayGainMode, SingleMode, SongId, SongPosition};
 
 type KeyValuePair = (Arc<str>, String);
 
@@ -157,6 +157,18 @@ impl FromFieldValue for PlayState {
     }
 }
 
+impl FromFieldValue for ReplayGainMode {
+    fn from_value(v: String, field: &str) -> Result<Self, TypedResponseError> {
+        match &*v {
+            "off" => Ok(ReplayGainMode::Off),
+            "track" => Ok(ReplayGainMode::Track),
+            "album" => Ok(ReplayGainMode::Album),
+            "auto" => Ok(ReplayGainMode::Auto),
+            _ => Err(TypedResponseError::invalid_value(field, v)),
+        }
+    }
+}
+
 fn parse_integer<I: FromStr<Err = ParseIntError>>(
     v: String,
     field: &str,
@@ -255,6 +267,28 @@ pub enum PlayState {
     Stopped,
     Playing,
     Paused,
+}
+
+/// Response to the [`replay_gain_status`] command.
+///
+/// See the [MPD documentation][replay-gain-status-command] for the specific meanings of the fields.
+///
+/// [`replay_gain_status`]: crate::commands::definitions::ReplayGainStatus
+/// [replay-gain-status-command]: https://www.musicpd.org/doc/html/protocol.html#command-replay-gain-status
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[allow(missing_docs)]
+#[non_exhaustive]
+pub struct ReplayGainStatus {
+    pub mode: ReplayGainMode,
+}
+
+impl ReplayGainStatus {
+    pub(crate) fn from_frame(mut raw: Frame) -> Result<Self, TypedResponseError> {
+        let f = &mut raw;
+        Ok(Self {
+            mode: value(f, "replay_gain_mode")?,
+        })
+    }
 }
 
 /// Response to the [`status`] command.

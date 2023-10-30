@@ -77,6 +77,20 @@ pub enum SingleMode {
     Oneshot,
 }
 
+/// Possible `replay_gain_mode` modes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[allow(missing_docs)]
+pub enum ReplayGainMode {
+    /// Replay Gain off
+    Off,
+    /// Replay Gain Track mode
+    Track,
+    /// Replay Gain Album mode
+    Album,
+    /// Replay Gain Track if shuffle is on, Album otherwise
+    Auto,
+}
+
 /// Modes to target a song with a command.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Song {

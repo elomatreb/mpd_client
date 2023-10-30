@@ -14,7 +14,7 @@ use mpd_protocol::{
 };
 
 use crate::{
-    commands::{Command, SeekMode, SingleMode, Song, SongId, SongPosition},
+    commands::{Command, ReplayGainMode, SeekMode, SingleMode, Song, SongId, SongPosition},
     filter::Filter,
     responses::{self as res, value, TypedResponseError},
     tag::Tag,
@@ -93,6 +93,22 @@ single_arg_command!(SetRandom, bool, "random");
 single_arg_command!(SetRepeat, bool, "repeat");
 single_arg_command!(SubscribeToChannel<'a>, &'a str, "subscribe");
 single_arg_command!(UnsubscribeFromChannel<'a>, &'a str, "unsubscribe");
+
+/// `replay_gain_status` command.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ReplayGainStatus;
+
+impl Command for ReplayGainStatus {
+    type Response = res::ReplayGainStatus;
+
+    fn command(&self) -> RawCommand {
+        RawCommand::new("replay_gain_status")
+    }
+
+    fn response(self, frame: Frame) -> Result<Self::Response, TypedResponseError> {
+        res::ReplayGainStatus::from_frame(frame)
+    }
+}
 
 /// `status` command.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -255,6 +271,29 @@ impl Command for SetSingle {
         };
 
         RawCommand::new("single").argument(single)
+    }
+
+    fn response(self, _: Frame) -> Result<Self::Response, TypedResponseError> {
+        Ok(())
+    }
+}
+
+/// 'replay_gain_mode' command
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SetReplayGainMode(pub ReplayGainMode);
+
+impl Command for SetReplayGainMode {
+    type Response = ();
+
+    fn command(&self) -> RawCommand {
+        let rgm = match self.0 {
+            ReplayGainMode::Off => "off",
+            ReplayGainMode::Track => "track",
+            ReplayGainMode::Album => "album",
+            ReplayGainMode::Auto => "auto",
+        };
+
+        RawCommand::new("replay_gain_mode").argument(rgm)
     }
 
     fn response(self, _: Frame) -> Result<Self::Response, TypedResponseError> {
