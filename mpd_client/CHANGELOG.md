@@ -1,3 +1,8 @@
+# 1.3.0 (2023-10-30)
+
+ - Add commands for interacting with the ReplayGain options (`ReplayGainStatus`, `SetReplayGainMode`) ([#19](https://github.com/elomatreb/mpd_client/issues/19), [#20](https://github.com/elomatreb/mpd_client/20), thanks to kholthaus).
+ - Internal improvements and dependency updates.
+
 # 1.2.0 (2023-07-01)
 
  - Add commands for interacting with [client-to-client channels](https://mpd.readthedocs.io/en/latest/protocol.html#client-to-client) (`SubscribeToChannel`, `UnsubscribeFromChannel`, `ListChannels`, `ReadChannelMessages`, `SendChannelMessage`).

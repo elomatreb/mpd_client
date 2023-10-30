@@ -1,3 +1,7 @@
+# 1.0.2 (2023-10-30)
+
+ - Dependency updates
+
 # 1.0.1 (2023-07-01)
 
  - Internal improvements, dependency updates
