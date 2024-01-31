@@ -158,6 +158,126 @@ impl Command for Queue {
     }
 }
 
+impl Queue {
+    /// Info for the given song
+    pub fn song<S>(song: S) -> QueueRange
+    where
+        S: Into<Song>
+    {
+        QueueRange(SongOrSongRange::Single(song.into()))
+    }
+
+    /// playlist info for song range
+    ///
+    /// The range must have at least a lower bound.
+    pub fn range<R>(range: R) -> QueueRange
+    where
+        R: RangeBounds<SongPosition>,
+    {
+        QueueRange(SongOrSongRange::Range(SongRange::new(range)))
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct SongRange {
+    from: usize,
+    to: Option<usize>,
+}
+
+impl SongRange {
+    fn new_usize<R: RangeBounds<usize>>(range: R) -> Self {
+        let from = match range.start_bound() {
+            Bound::Excluded(pos) => pos + 1,
+            Bound::Included(pos) => *pos,
+            Bound::Unbounded => 0,
+        };
+
+        let to = match range.end_bound() {
+            Bound::Excluded(pos) => Some(*pos),
+            Bound::Included(pos) => Some(pos + 1),
+            Bound::Unbounded => None,
+        };
+
+        Self { from, to }
+    }
+
+    fn new<R: RangeBounds<SongPosition>>(range: R) -> Self {
+        let from = match range.start_bound() {
+            Bound::Excluded(pos) => Bound::Excluded(pos.0),
+            Bound::Included(pos) => Bound::Included(pos.0),
+            Bound::Unbounded => Bound::Unbounded,
+        };
+
+        let to = match range.end_bound() {
+            Bound::Excluded(pos) => Bound::Excluded(pos.0),
+            Bound::Included(pos) => Bound::Included(pos.0),
+            Bound::Unbounded => Bound::Unbounded,
+        };
+
+        Self::new_usize((from, to))
+    }
+}
+
+impl Argument for SongRange {
+    fn render(&self, buf: &mut BytesMut) {
+        if let Some(to) = self.to {
+            write!(buf, "{}:{}", self.from, to).unwrap();
+        } else {
+            write!(buf, "{}:", self.from).unwrap();
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum SongOrSongRange {
+    /// Single Song
+    Single(Song),
+
+    /// Song Range
+    Range(SongRange)
+}
+
+/// `playlistinfo` / 'playlistid' commands for single songs / song ranges
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct QueueRange(SongOrSongRange);
+
+impl QueueRange {
+    /// Info for the given song
+    pub fn song<S>(song: S) -> Self
+    where
+        S: Into<Song>
+    {
+        Self(SongOrSongRange::Single(song.into()))
+    }
+
+    /// playlist info for song range
+    ///
+    /// The range must have at least a lower bound.
+    pub fn range<R>(range: R) -> Self
+    where
+        R: RangeBounds<SongPosition>,
+    {
+        Self(SongOrSongRange::Range(SongRange::new(range)))
+    }
+}
+
+impl Command for QueueRange {
+    type Response = Vec<res::SongInQueue>;
+
+    fn command(&self) -> RawCommand {
+        match self.0 {
+            SongOrSongRange::Single(Song::Id(id)) => RawCommand::new("playlistid").argument(id),
+            SongOrSongRange::Single(Song::Position(pos)) => RawCommand::new("playlistinfo").argument(pos),
+            SongOrSongRange::Range(range) => RawCommand::new("playlistinfo").argument(range)
+        }
+        
+    }
+
+    fn response(self, frame: Frame) -> Result<Self::Response, TypedResponseError> {
+        res::SongInQueue::from_frame_multi(frame)
+    }
+}
+
 /// `currentsong` command.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct CurrentSong;
@@ -365,6 +485,42 @@ impl Command for Seek {
     }
 }
 
+/// `shuffle` command
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Shuffle(Option<SongRange>);
+
+impl Shuffle {
+    /// Shuffle entire queue
+    pub fn all() -> Self {
+        Self(None)
+    }
+
+    /// Shuffle a range of songs
+    ///
+    /// The range must have at least a lower bound.
+    pub fn range<R>(range: R) -> Self
+    where
+        R: RangeBounds<SongPosition>,
+    {
+        Self(Some(SongRange::new(range)))
+    }
+}
+
+impl Command for Shuffle {
+    type Response = ();
+
+    fn command(&self) -> RawCommand {
+        match self.0 {
+            None => RawCommand::new("shuffle"),
+            Some(range) => RawCommand::new("shuffle").argument(range)
+        }
+    }
+
+    fn response(self, _: Frame) -> Result<Self::Response, TypedResponseError> {
+        Ok(())
+    }
+}
+
 /// `play` and `playid` commands.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Play(Option<Song>);
@@ -493,12 +649,6 @@ enum Target {
     Range(SongRange),
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct SongRange {
-    from: usize,
-    to: Option<usize>,
-}
-
 impl Delete {
     /// Remove the given ID from the queue.
     pub fn id(id: SongId) -> Self {
@@ -519,50 +669,6 @@ impl Delete {
         R: RangeBounds<SongPosition>,
     {
         Self(Target::Range(SongRange::new(range)))
-    }
-}
-
-impl SongRange {
-    fn new_usize<R: RangeBounds<usize>>(range: R) -> Self {
-        let from = match range.start_bound() {
-            Bound::Excluded(pos) => pos + 1,
-            Bound::Included(pos) => *pos,
-            Bound::Unbounded => 0,
-        };
-
-        let to = match range.end_bound() {
-            Bound::Excluded(pos) => Some(*pos),
-            Bound::Included(pos) => Some(pos + 1),
-            Bound::Unbounded => None,
-        };
-
-        Self { from, to }
-    }
-
-    fn new<R: RangeBounds<SongPosition>>(range: R) -> Self {
-        let from = match range.start_bound() {
-            Bound::Excluded(pos) => Bound::Excluded(pos.0),
-            Bound::Included(pos) => Bound::Included(pos.0),
-            Bound::Unbounded => Bound::Unbounded,
-        };
-
-        let to = match range.end_bound() {
-            Bound::Excluded(pos) => Bound::Excluded(pos.0),
-            Bound::Included(pos) => Bound::Included(pos.0),
-            Bound::Unbounded => Bound::Unbounded,
-        };
-
-        Self::new_usize((from, to))
-    }
-}
-
-impl Argument for SongRange {
-    fn render(&self, buf: &mut BytesMut) {
-        if let Some(to) = self.to {
-            write!(buf, "{}:{}", self.from, to).unwrap();
-        } else {
-            write!(buf, "{}:", self.from).unwrap();
-        }
     }
 }
 
@@ -1662,6 +1768,14 @@ mod tests {
     }
 
     #[test]
+    fn command_queue() {
+        assert_eq!(Queue.command(), RawCommand::new("playlistinfo"));
+        assert_eq!(Queue::song(Song::Position(SongPosition(1))).command(), RawCommand::new("playlistinfo").argument("1"));
+        assert_eq!(Queue::song(Song::Id(SongId(7))).command(), RawCommand::new("playlistid").argument("7"));
+        assert_eq!(Queue::range(SongPosition(3)..SongPosition(18)).command(), RawCommand::new("playlistinfo").argument("3:18"));
+    }
+
+    #[test]
     fn command_crossfade() {
         assert_eq!(
             Crossfade(Duration::from_secs_f64(2.345)).command(),
@@ -1720,6 +1834,12 @@ mod tests {
             Seek(SeekMode::Backward(duration)).command(),
             RawCommand::new("seekcur").argument("-1.000")
         );
+    }
+
+    #[test]
+    fn command_shuffle() {
+        assert_eq!(Shuffle::all().command(), RawCommand::new("shuffle"));
+        assert_eq!(Shuffle::range(SongPosition(0)..SongPosition(2)).command(), RawCommand::new("shuffle").argument("0:2"));
     }
 
     #[test]
