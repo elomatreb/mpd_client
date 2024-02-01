@@ -159,7 +159,12 @@ impl Command for Queue {
 }
 
 impl Queue {
-    /// Info for the given song
+    /// Get the metadata about the entire queue.
+    pub fn all() -> Queue {
+        Queue
+    }
+
+    /// Get the metadata for a specific song in the queue.
     pub fn song<S>(song: S) -> QueueRange
     where
         S: Into<Song>,
@@ -167,9 +172,7 @@ impl Queue {
         QueueRange(SongOrSongRange::Single(song.into()))
     }
 
-    /// playlist info for song range
-    ///
-    /// The range must have at least a lower bound.
+    /// Get the metadata for a range of songs in the queue.
     pub fn range<R>(range: R) -> QueueRange
     where
         R: RangeBounds<SongPosition>,
@@ -237,12 +240,14 @@ enum SongOrSongRange {
     Range(SongRange),
 }
 
-/// `playlistinfo` / 'playlistid' commands for single songs / song ranges
+/// `playlistinfo` / `playlistid` commands.
+///
+/// These return the metadata of specific individual songs or subranges of the queue.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct QueueRange(SongOrSongRange);
 
 impl QueueRange {
-    /// Info for the given song
+    /// Get the metadata for a specific song in the queue.
     pub fn song<S>(song: S) -> Self
     where
         S: Into<Song>,
@@ -250,9 +255,7 @@ impl QueueRange {
         Self(SongOrSongRange::Single(song.into()))
     }
 
-    /// playlist info for song range
-    ///
-    /// The range must have at least a lower bound.
+    /// Get the metadata for a range of songs in the queue.
     pub fn range<R>(range: R) -> Self
     where
         R: RangeBounds<SongPosition>,
