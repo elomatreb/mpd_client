@@ -162,7 +162,7 @@ impl Queue {
     /// Info for the given song
     pub fn song<S>(song: S) -> QueueRange
     where
-        S: Into<Song>
+        S: Into<Song>,
     {
         QueueRange(SongOrSongRange::Single(song.into()))
     }
@@ -234,7 +234,7 @@ enum SongOrSongRange {
     Single(Song),
 
     /// Song Range
-    Range(SongRange)
+    Range(SongRange),
 }
 
 /// `playlistinfo` / 'playlistid' commands for single songs / song ranges
@@ -245,7 +245,7 @@ impl QueueRange {
     /// Info for the given song
     pub fn song<S>(song: S) -> Self
     where
-        S: Into<Song>
+        S: Into<Song>,
     {
         Self(SongOrSongRange::Single(song.into()))
     }
@@ -267,10 +267,11 @@ impl Command for QueueRange {
     fn command(&self) -> RawCommand {
         match self.0 {
             SongOrSongRange::Single(Song::Id(id)) => RawCommand::new("playlistid").argument(id),
-            SongOrSongRange::Single(Song::Position(pos)) => RawCommand::new("playlistinfo").argument(pos),
-            SongOrSongRange::Range(range) => RawCommand::new("playlistinfo").argument(range)
+            SongOrSongRange::Single(Song::Position(pos)) => {
+                RawCommand::new("playlistinfo").argument(pos)
+            }
+            SongOrSongRange::Range(range) => RawCommand::new("playlistinfo").argument(range),
         }
-        
     }
 
     fn response(self, frame: Frame) -> Result<Self::Response, TypedResponseError> {
@@ -512,7 +513,7 @@ impl Command for Shuffle {
     fn command(&self) -> RawCommand {
         match self.0 {
             None => RawCommand::new("shuffle"),
-            Some(range) => RawCommand::new("shuffle").argument(range)
+            Some(range) => RawCommand::new("shuffle").argument(range),
         }
     }
 
@@ -1770,9 +1771,18 @@ mod tests {
     #[test]
     fn command_queue() {
         assert_eq!(Queue.command(), RawCommand::new("playlistinfo"));
-        assert_eq!(Queue::song(Song::Position(SongPosition(1))).command(), RawCommand::new("playlistinfo").argument("1"));
-        assert_eq!(Queue::song(Song::Id(SongId(7))).command(), RawCommand::new("playlistid").argument("7"));
-        assert_eq!(Queue::range(SongPosition(3)..SongPosition(18)).command(), RawCommand::new("playlistinfo").argument("3:18"));
+        assert_eq!(
+            Queue::song(Song::Position(SongPosition(1))).command(),
+            RawCommand::new("playlistinfo").argument("1")
+        );
+        assert_eq!(
+            Queue::song(Song::Id(SongId(7))).command(),
+            RawCommand::new("playlistid").argument("7")
+        );
+        assert_eq!(
+            Queue::range(SongPosition(3)..SongPosition(18)).command(),
+            RawCommand::new("playlistinfo").argument("3:18")
+        );
     }
 
     #[test]
@@ -1839,7 +1849,10 @@ mod tests {
     #[test]
     fn command_shuffle() {
         assert_eq!(Shuffle::all().command(), RawCommand::new("shuffle"));
-        assert_eq!(Shuffle::range(SongPosition(0)..SongPosition(2)).command(), RawCommand::new("shuffle").argument("0:2"));
+        assert_eq!(
+            Shuffle::range(SongPosition(0)..SongPosition(2)).command(),
+            RawCommand::new("shuffle").argument("0:2")
+        );
     }
 
     #[test]
