@@ -1,3 +1,9 @@
+# 1.4.0 (2024-02-01)
+
+ - Add commands for getting metadata about individual songs or subranges of the play queue ([#22](https://github.com/elomatreb/mpd_client/pull/22), thanks to kholthaus).
+ - Fix a potential panic or overflow on commands that take ranges of song positions.
+ - Dependency updates.
+
 # 1.3.0 (2023-10-30)
 
  - Add commands for interacting with the ReplayGain options (`ReplayGainStatus`, `SetReplayGainMode`) ([#19](https://github.com/elomatreb/mpd_client/issues/19), [#20](https://github.com/elomatreb/mpd_client/20), thanks to kholthaus).
