@@ -190,14 +190,14 @@ struct SongRange {
 impl SongRange {
     fn new_usize<R: RangeBounds<usize>>(range: R) -> Self {
         let from = match range.start_bound() {
-            Bound::Excluded(pos) => pos + 1,
+            Bound::Excluded(pos) => pos.saturating_add(1),
             Bound::Included(pos) => *pos,
             Bound::Unbounded => 0,
         };
 
         let to = match range.end_bound() {
             Bound::Excluded(pos) => Some(*pos),
-            Bound::Included(pos) => Some(pos + 1),
+            Bound::Included(pos) => Some(pos.saturating_add(1)),
             Bound::Unbounded => None,
         };
 
@@ -1768,6 +1768,14 @@ mod tests {
 
         SongRange::new_usize(1..=1).render(&mut buf);
         assert_eq!(buf, "1:2");
+        buf.clear();
+
+        SongRange::new_usize(..usize::MAX).render(&mut buf);
+        assert_eq!(buf, format!("0:{}", usize::MAX));
+        buf.clear();
+
+        SongRange::new_usize(..=usize::MAX).render(&mut buf);
+        assert_eq!(buf, format!("0:{}", usize::MAX));
         buf.clear();
     }
 
