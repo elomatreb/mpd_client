@@ -1,3 +1,7 @@
+# 1.4.1 (2024-02-28)
+
+ - Dependency updates.
+
 # 1.4.0 (2024-02-01)
 
  - Add commands for getting metadata about individual songs or subranges of the play queue ([#22](https://github.com/elomatreb/mpd_client/pull/22), thanks to kholthaus).
