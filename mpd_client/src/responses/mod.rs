@@ -402,6 +402,28 @@ impl Stats {
     }
 }
 
+/// Response to the [`listparitions`] command, containing list of all partitions.
+///
+/// [`partition`]: crate::commands::definitions::Partition
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[allow(missing_docs)]
+#[non_exhaustive]
+pub struct Partition {
+    pub name: String
+}
+
+impl Partition {
+    pub(crate) fn from_frame_multi(mut f: Frame) -> Result<Vec<Partition>, TypedResponseError> {
+        let mut out = Vec::new();
+
+        f.fields().for_each(|(key, value)| {
+            out.push(Partition{ name: value.to_string() });
+        });
+
+        Ok(out)
+    }
+}
+
 /// Response to the [`albumart`][crate::commands::AlbumArt] and
 /// [`readpicture`][crate::commands::AlbumArtEmbedded] commands.
 #[derive(Clone, Debug, PartialEq, Eq)]

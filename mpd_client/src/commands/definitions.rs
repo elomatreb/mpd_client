@@ -84,6 +84,11 @@ argless_command!(Ping, "ping");
 argless_command!(Previous, "previous");
 argless_command!(Stop, "stop");
 
+single_arg_command!(EnableOutput<'a>, &'a str, "enableoutput");
+single_arg_command!(MoveOutput<'a>, &'a str, "moveoutput");
+single_arg_command!(NewPartition<'a>, &'a str, "newpartition");
+single_arg_command!(Partition<'a>, &'a str, "partition");
+
 single_arg_command!(ClearPlaylist<'a>, &'a str, "playlistclear");
 single_arg_command!(DeletePlaylist<'a>, &'a str, "rm");
 single_arg_command!(SaveQueueAsPlaylist<'a>, &'a str, "save");
@@ -107,6 +112,22 @@ impl Command for ReplayGainStatus {
 
     fn response(self, frame: Frame) -> Result<Self::Response, TypedResponseError> {
         res::ReplayGainStatus::from_frame(frame)
+    }
+}
+
+/// `status` command.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ListPartitions;
+
+impl Command for crate::commands::ListPartitions {
+    type Response = Vec<res::Partition>;
+
+    fn command(&self) -> RawCommand {
+        RawCommand::new("listpartitions")
+    }
+
+    fn response(self, frame: Frame) -> Result<Self::Response, TypedResponseError> {
+        res::Partition::from_frame_multi(frame)
     }
 }
 
