@@ -87,7 +87,8 @@ argless_command!(Stop, "stop");
 single_arg_command!(EnableOutput<'a>, &'a str, "enableoutput");
 single_arg_command!(MoveOutput<'a>, &'a str, "moveoutput");
 single_arg_command!(NewPartition<'a>, &'a str, "newpartition");
-single_arg_command!(Partition<'a>, &'a str, "partition");
+single_arg_command!(SwitchPartition<'a>, &'a str, "partition");
+single_arg_command!(SetVol<'a>, &'a str, "setvol");
 
 single_arg_command!(ClearPlaylist<'a>, &'a str, "playlistclear");
 single_arg_command!(DeletePlaylist<'a>, &'a str, "rm");
@@ -119,7 +120,7 @@ impl Command for ReplayGainStatus {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ListPartitions;
 
-impl Command for crate::commands::ListPartitions {
+impl Command for ListPartitions {
     type Response = Vec<res::Partition>;
 
     fn command(&self) -> RawCommand {
@@ -398,6 +399,36 @@ impl Command for SetVolume {
 
     fn response(self, _: Frame) -> Result<Self::Response, TypedResponseError> {
         Ok(())
+    }
+}
+
+/// `getvol` command.
+/// Read the volume. If there is no mixer, MPD will emit an empty response.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct GetVolume {
+}
+
+impl GetVolume {
+    /// read the volume
+    pub fn new() -> Self {
+        Self {}
+    }
+}
+
+impl Command for GetVolume {
+    type Response = Option<String>;
+
+    fn command(&self) -> RawCommand {
+        RawCommand::new("getvol")
+    }
+
+    fn response(self, mut frame: Frame) -> Result<Self::Response, TypedResponseError> {
+        match frame.get("volume") {
+            None => {Ok(None)}
+            Some(volume) => {
+                Ok(Some(volume))
+            }
+        }
     }
 }
 
@@ -1731,6 +1762,87 @@ impl Command for ListChannels {
     }
 }
 
+/// `add` command.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AddToQueue<'a> {
+    song_url: &'a str,
+    position: Option<SongPosition>,
+}
+
+impl<'a>AddToQueue<'a> {
+    /// Add `song_url` to `playlist`.
+    pub fn new( song_url: &'a str) -> Self {
+        Self {
+            song_url,
+            position: None,
+        }
+    }
+
+    /// Add the URI at the given position in the queue.
+    ///
+    /// **NOTE**: Supported on protocol versions later than 0.23.3.
+    pub fn at<P: Into<SongPosition>>(mut self, position: P) -> Self {
+        self.position = Some(position.into());
+        self
+    }
+}
+
+impl<'a> Command for AddToQueue<'a> {
+    type Response = ();
+
+    fn command(&self) -> RawCommand {
+        let mut command = RawCommand::new("add")
+            .argument(self.song_url);
+
+        if let Some(pos) = self.position {
+            command.add_argument(pos).unwrap();
+        }
+
+        command
+    }
+
+    fn response(self, _: Frame) -> Result<Self::Response, TypedResponseError> {
+        Ok(())
+    }
+}
+
+/// `lsinfo` command.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct GetLsInfo<'a> {
+    pub directory_url: &'a str,
+}
+
+impl<'a> GetLsInfo<'a> {
+    /// Add `song_url` to `playlist`.
+    pub fn new(directory_url: &'a str) -> Self {
+        Self {
+            directory_url,
+        }
+    }
+
+    /// List all storage items in the library.
+    pub fn root() -> GetLsInfo<'static> {
+        GetLsInfo { directory_url: "" }
+    }
+
+    /// List all storage items beneath the given directory.
+    pub fn directory(directory_url: &'a str) -> Self {
+        Self { directory_url }
+    }
+}
+
+impl<'a> Command for GetLsInfo<'a> {
+    type Response = Vec<res::StorageItem>;
+
+    fn command(&self) -> RawCommand {
+        RawCommand::new("lsinfo").argument(self.directory_url)
+    }
+
+    fn response(self, frame: Frame) -> Result<Self::Response, TypedResponseError> {
+        res::StorageItem::from_frame_multi(frame)
+    }
+}
+
 /// `sendmessage` command.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SendChannelMessage<'a> {
@@ -2224,6 +2336,30 @@ mod tests {
             RawCommand::new("sendmessage")
                 .argument("foo")
                 .argument("bar")
+        );
+    }
+
+    #[test]
+    fn command_add_to_queue() {
+        assert_eq!(
+            AddToQueue::new("foo").command(),
+            RawCommand::new("add")
+                .argument("foo")
+        );
+
+        assert_eq!(
+            AddToQueue::new("foo").at(SongPosition(0)).command(),
+            RawCommand::new("add")
+                .argument("foo")
+                .argument("0")
+        );
+    }
+
+    #[test]
+    fn command_list_partitions() {
+        assert_eq!(
+            ListPartitions.command(),
+            RawCommand::new("listpartitions")
         );
     }
 }

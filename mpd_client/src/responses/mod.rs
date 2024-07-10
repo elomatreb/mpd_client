@@ -6,6 +6,7 @@ mod playlist;
 mod song;
 mod sticker;
 mod timestamp;
+mod storage_item;
 
 use std::{error::Error, fmt, num::ParseIntError, str::FromStr, sync::Arc, time::Duration};
 
@@ -17,6 +18,7 @@ pub use self::{
     list::{GroupedListValuesIter, List, ListValuesIntoIter, ListValuesIter},
     playlist::Playlist,
     song::{Song, SongInQueue, SongRange},
+    storage_item:: StorageItem,
     sticker::{StickerFind, StickerGet, StickerList},
     timestamp::Timestamp,
 };
@@ -404,7 +406,7 @@ impl Stats {
 
 /// Response to the [`listparitions`] command, containing list of all partitions.
 ///
-/// [`partition`]: crate::commands::definitions::Partition
+/// [`partition`]: crate::commands::definitions::SwitchPartition
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[allow(missing_docs)]
 #[non_exhaustive]
@@ -413,10 +415,10 @@ pub struct Partition {
 }
 
 impl Partition {
-    pub(crate) fn from_frame_multi(mut f: Frame) -> Result<Vec<Partition>, TypedResponseError> {
+    pub(crate) fn from_frame_multi(f: Frame) -> Result<Vec<Partition>, TypedResponseError> {
         let mut out = Vec::new();
 
-        f.fields().for_each(|(key, value)| {
+        f.fields().for_each(|(_, value)| {
             out.push(Partition{ name: value.to_string() });
         });
 
