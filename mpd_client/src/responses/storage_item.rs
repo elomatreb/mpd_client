@@ -5,13 +5,13 @@ use mpd_protocol::response::Frame;
 use crate::responses::{FromFieldValue, Timestamp, TypedResponseError};
 use crate::tag::Tag;
 
-/// A single storage item, as returned by the [lsinfo] command.
+/// A single storage item, as returned by the commands listall, listallinfo, listfiles, lsinfo.
 ///
-/// [lsingo]: crate::commands::definitions::GetLsInfo
+///[getItems]: crate::commands::definitions::GetItems
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct StorageItem {
-    pub storage_item_type: String,
+    pub item_type: String,
     pub name: String,
     /// Tags in this response.
     pub tags: HashMap<Tag, Vec<String>>,
@@ -46,7 +46,7 @@ impl StorageItem {
 
 #[derive(Debug, Default)]
 struct StorageItemBuilder {
-    storage_item_type: String,
+    item_type: String,
     name: String,
     tags: HashMap<Tag, Vec<String>>,
     duration: Option<Duration>,
@@ -63,7 +63,7 @@ impl StorageItemBuilder {
         key: &str,
         value: String,
     ) -> Result<Option<StorageItem>, TypedResponseError> {
-        if self.storage_item_type.is_empty() {
+        if self.item_type.is_empty() {
             // No storage item is currently in progress
             self.handle_start_field(key, value)?;
             Ok(None)
@@ -79,7 +79,7 @@ impl StorageItemBuilder {
             // A 'file' | 'directory' | 'playlist' field starts a new storage item
             "file" | "directory" | "playlist"  => {
                 self.name = value;
-                self.storage_item_type = key.to_string()
+                self.item_type = key.to_string()
             },
             // Any other fields are invalid
             other => return Err(TypedResponseError::unexpected_field("file | directory | playlist", other)),
@@ -135,7 +135,7 @@ impl StorageItemBuilder {
 
     /// Finish the building process. This returns the final storage item, if there is one.
     fn finish(self) -> Option<StorageItem> {
-        if self.storage_item_type.is_empty() {
+        if self.item_type.is_empty() {
             None
         } else {
             Some(self.into_storage_item())
@@ -143,9 +143,9 @@ impl StorageItemBuilder {
     }
 
     fn into_storage_item(self) -> StorageItem{
-        assert!(!self.storage_item_type.is_empty());
+        assert!(!self.item_type.is_empty());
         StorageItem {
-            storage_item_type: self.storage_item_type,
+            item_type: self.item_type,
             name: self.name,
             tags: self.tags,
             duration: self.duration,

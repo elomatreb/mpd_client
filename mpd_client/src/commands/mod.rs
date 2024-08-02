@@ -57,6 +57,19 @@ impl Argument for SongPosition {
     }
 }
 
+/// Possible ways to list files, directories and playlists
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ListItemsMode<'a> {
+    /// Lists all songs and directories in URI.
+    ListAll(&'a str),
+    /// Same as listall, except it also returns metadata info in the same format as lsinfo
+    ListAllInfo(&'a str),
+    /// Lists the contents of the directory URI, including files are not recognized by MPD
+    ListFiles(&'a str),
+    /// Lists the contents of the directory URI.
+    LsInfo(&'a str),
+}
+
 /// Possible ways to seek in the current song.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SeekMode {

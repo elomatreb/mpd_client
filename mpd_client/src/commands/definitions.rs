@@ -19,6 +19,7 @@ use crate::{
     responses::{self as res, value, TypedResponseError},
     tag::Tag,
 };
+use crate::commands::ListItemsMode;
 
 macro_rules! argless_command {
     // Utility branch to generate struct with doc expression
@@ -1806,36 +1807,20 @@ impl<'a> Command for AddToQueue<'a> {
     }
 }
 
-/// `lsinfo` command.
+/// list files, directories and playlists based on mode for given directory URI
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct GetLsInfo<'a> {
-    pub directory_url: &'a str,
-}
+pub struct GetItems<'a>(pub ListItemsMode<'a>);
 
-impl<'a> GetLsInfo<'a> {
-    /// Add `song_url` to `playlist`.
-    pub fn new(directory_url: &'a str) -> Self {
-        Self {
-            directory_url,
-        }
-    }
-
-    /// List all storage items in the library.
-    pub fn root() -> GetLsInfo<'static> {
-        GetLsInfo { directory_url: "" }
-    }
-
-    /// List all storage items beneath the given directory.
-    pub fn directory(directory_url: &'a str) -> Self {
-        Self { directory_url }
-    }
-}
-
-impl<'a> Command for GetLsInfo<'a> {
+impl<'a> Command for GetItems<'a> {
     type Response = Vec<res::StorageItem>;
 
     fn command(&self) -> RawCommand {
-        RawCommand::new("lsinfo").argument(self.directory_url)
+        match self.0 {
+            ListItemsMode::ListAll(uri) => {RawCommand::new("listall").argument(uri)}
+            ListItemsMode::ListAllInfo(uri) => {RawCommand::new("listallinfo").argument(uri)}
+            ListItemsMode::LsInfo(uri) => {RawCommand::new("lsinfo").argument(uri)}
+            ListItemsMode::ListFiles(uri) => {RawCommand::new("listfiles").argument(uri)}
+        }
     }
 
     fn response(self, frame: Frame) -> Result<Self::Response, TypedResponseError> {
