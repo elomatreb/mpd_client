@@ -4,7 +4,7 @@ use mpd_protocol::response::Frame;
 
 use crate::{
     commands::{SongId, SongPosition},
-    responses::{parse_duration, FromFieldValue, Timestamp, TypedResponseError},
+    responses::{FromFieldValue, Timestamp, TypedResponseError, parse_duration},
     tag::Tag,
 };
 

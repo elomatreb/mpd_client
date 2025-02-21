@@ -8,7 +8,7 @@ use bytes::{Buf, BytesMut};
 use tracing::trace;
 
 pub use self::frame::Frame;
-use crate::{parser::ParsedComponent, MpdProtocolError};
+use crate::{MpdProtocolError, parser::ParsedComponent};
 
 /// Response to a command, consisting of an arbitrary amount of [frames][Frame], which are
 /// responses to individual commands, and optionally a single [error][Error].

@@ -16,7 +16,7 @@ use mpd_protocol::{
 use crate::{
     commands::{Command, ReplayGainMode, SeekMode, SingleMode, Song, SongId, SongPosition},
     filter::Filter,
-    responses::{self as res, value, TypedResponseError},
+    responses::{self as res, TypedResponseError, value},
     tag::Tag,
 };
 

@@ -11,18 +11,18 @@ use std::{
 
 use bytes::BytesMut;
 use mpd_protocol::{
+    AsyncConnection, MpdProtocolError,
     command::{Command as RawCommand, CommandList as RawCommandList},
     response::{Error, Frame, Response as RawResponse},
-    AsyncConnection, MpdProtocolError,
 };
 use tokio::{
     io::{AsyncRead, AsyncWrite},
     sync::{
-        mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
+        mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel},
         oneshot,
     },
 };
-use tracing::{debug, error, span, trace, warn, Instrument, Level};
+use tracing::{Instrument, Level, debug, error, span, trace, warn};
 
 use crate::{
     commands::{self as cmds, Command, CommandList},

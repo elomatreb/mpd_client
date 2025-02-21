@@ -1,16 +1,16 @@
 use std::{fmt, time::Duration};
 
 use mpd_protocol::{
+    AsyncConnection, MpdProtocolError,
     command::{Command as RawCommand, CommandList as RawCommandList},
     response::Response,
-    AsyncConnection, MpdProtocolError,
 };
 use tokio::{
     io::{AsyncRead, AsyncWrite},
     sync::mpsc::{UnboundedReceiver, UnboundedSender},
     time::timeout,
 };
-use tracing::{debug, error, span, trace, Instrument, Level};
+use tracing::{Instrument, Level, debug, error, span, trace};
 
 use crate::client::{CommandResponder, ConnectionError, ConnectionEvent, Subsystem};
 

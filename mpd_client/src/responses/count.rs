@@ -3,7 +3,7 @@ use std::time::Duration;
 use mpd_protocol::response::Frame;
 
 use crate::{
-    responses::{value, FromFieldValue, TypedResponseError},
+    responses::{FromFieldValue, TypedResponseError, value},
     tag::Tag,
 };
 

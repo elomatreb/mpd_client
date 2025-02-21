@@ -1,4 +1,4 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, black_box, criterion_group, criterion_main};
 use mpd_protocol::Connection;
 
 // NOTE: Benchmark requires `--cfg criterion` to be set to build correctly.

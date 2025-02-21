@@ -1,11 +1,12 @@
 //! Parser for MPD responses.
 
 use std::{
-    str::{self, from_utf8, FromStr},
+    str::{self, FromStr, from_utf8},
     sync::Arc,
 };
 
 use nom::{
+    IResult,
     branch::alt,
     bytes::streaming::{tag, take, take_until, take_while, take_while1},
     character::{
@@ -14,7 +15,6 @@ use nom::{
     },
     combinator::{cut, map, map_res, opt},
     sequence::{delimited, separated_pair, terminated, tuple},
-    IResult,
 };
 
 use crate::response::{Error, ResponseFieldCache};
@@ -165,9 +165,11 @@ mod test {
     #[test]
     fn greeting() {
         assert_eq!(super::greeting(b"OK MPD 0.21.11\n"), Ok((EMPTY, "0.21.11")));
-        assert!(super::greeting(b"OK MPD 0.21.11")
-            .unwrap_err()
-            .is_incomplete());
+        assert!(
+            super::greeting(b"OK MPD 0.21.11")
+                .unwrap_err()
+                .is_incomplete()
+        );
     }
 
     #[test]
@@ -254,9 +256,11 @@ mod test {
             ))
         );
 
-        assert!(ParsedComponent::parse(b"asdf: fooo", keys)
-            .unwrap_err()
-            .is_incomplete());
+        assert!(
+            ParsedComponent::parse(b"asdf: fooo", keys)
+                .unwrap_err()
+                .is_incomplete()
+        );
     }
 
     #[test]

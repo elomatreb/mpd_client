@@ -1,8 +1,9 @@
 use std::error::Error;
 
 use mpd_client::{
+    Client,
     client::{ConnectionEvent, Subsystem},
-    commands, Client,
+    commands,
 };
 use tokio::net::TcpStream;
 
