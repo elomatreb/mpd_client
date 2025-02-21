@@ -40,3 +40,6 @@ rustdoc-args = ["--cfg", "docsrs"]
 [[bench]]
 name = "parse_response"
 harness = false
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(fuzzing)', 'cfg(criterion)'] }

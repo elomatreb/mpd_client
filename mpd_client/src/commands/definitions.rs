@@ -349,7 +349,7 @@ impl Command for GetEnabledTagTypes {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GetPlaylist<'a>(pub &'a str);
 
-impl<'a> Command for GetPlaylist<'a> {
+impl Command for GetPlaylist<'_> {
     type Response = Vec<res::Song>;
 
     fn command(&self) -> RawCommand {
@@ -625,7 +625,7 @@ impl<'a> Add<'a> {
     }
 }
 
-impl<'a> Command for Add<'a> {
+impl Command for Add<'_> {
     type Response = SongId;
 
     fn command(&self) -> RawCommand {
@@ -1003,7 +1003,7 @@ impl<'a> RenamePlaylist<'a> {
     }
 }
 
-impl<'a> Command for RenamePlaylist<'a> {
+impl Command for RenamePlaylist<'_> {
     type Response = ();
 
     fn command(&self) -> RawCommand {
@@ -1040,7 +1040,7 @@ impl<'a> LoadPlaylist<'a> {
     }
 }
 
-impl<'a> Command for LoadPlaylist<'a> {
+impl Command for LoadPlaylist<'_> {
     type Response = ();
 
     fn command(&self) -> RawCommand {
@@ -1087,7 +1087,7 @@ impl<'a> AddToPlaylist<'a> {
     }
 }
 
-impl<'a> Command for AddToPlaylist<'a> {
+impl Command for AddToPlaylist<'_> {
     type Response = ();
 
     fn command(&self) -> RawCommand {
@@ -1141,7 +1141,7 @@ impl<'a> RemoveFromPlaylist<'a> {
     }
 }
 
-impl<'a> Command for RemoveFromPlaylist<'a> {
+impl Command for RemoveFromPlaylist<'_> {
     type Response = ();
 
     fn command(&self) -> RawCommand {
@@ -1173,7 +1173,7 @@ impl<'a> MoveInPlaylist<'a> {
     }
 }
 
-impl<'a> Command for MoveInPlaylist<'a> {
+impl Command for MoveInPlaylist<'_> {
     type Response = ();
 
     fn command(&self) -> RawCommand {
@@ -1206,7 +1206,7 @@ impl<'a> ListAllIn<'a> {
     }
 }
 
-impl<'a> Command for ListAllIn<'a> {
+impl Command for ListAllIn<'_> {
     type Response = Vec<res::Song>;
 
     fn command(&self) -> RawCommand {
@@ -1262,7 +1262,7 @@ impl<'a> AlbumArt<'a> {
     }
 }
 
-impl<'a> Command for AlbumArt<'a> {
+impl Command for AlbumArt<'_> {
     type Response = Option<res::AlbumArt>;
 
     fn command(&self) -> RawCommand {
@@ -1295,7 +1295,7 @@ impl<'a> AlbumArtEmbedded<'a> {
     }
 }
 
-impl<'a> Command for AlbumArtEmbedded<'a> {
+impl Command for AlbumArtEmbedded<'_> {
     type Response = Option<res::AlbumArt>;
 
     fn command(&self) -> RawCommand {
@@ -1345,7 +1345,7 @@ impl<'a> TagTypes<'a> {
     }
 }
 
-impl<'a> Command for TagTypes<'a> {
+impl Command for TagTypes<'_> {
     type Response = ();
 
     fn command(&self) -> RawCommand {
@@ -1400,7 +1400,7 @@ impl<'a> StickerGet<'a> {
     }
 }
 
-impl<'a> Command for StickerGet<'a> {
+impl Command for StickerGet<'_> {
     type Response = res::StickerGet;
 
     fn command(&self) -> RawCommand {
@@ -1431,7 +1431,7 @@ impl<'a> StickerSet<'a> {
     }
 }
 
-impl<'a> Command for StickerSet<'a> {
+impl Command for StickerSet<'_> {
     type Response = ();
 
     fn command(&self) -> RawCommand {
@@ -1462,7 +1462,7 @@ impl<'a> StickerDelete<'a> {
     }
 }
 
-impl<'a> Command for StickerDelete<'a> {
+impl Command for StickerDelete<'_> {
     type Response = ();
 
     fn command(&self) -> RawCommand {
@@ -1491,7 +1491,7 @@ impl<'a> StickerList<'a> {
     }
 }
 
-impl<'a> Command for StickerList<'a> {
+impl Command for StickerList<'_> {
     type Response = res::StickerList;
 
     fn command(&self) -> RawCommand {
@@ -1560,7 +1560,7 @@ impl<'a> StickerFind<'a> {
     }
 }
 
-impl<'a> Command for StickerFind<'a> {
+impl Command for StickerFind<'_> {
     type Response = res::StickerFind;
 
     fn command(&self) -> RawCommand {
@@ -1602,7 +1602,7 @@ impl<'a> Update<'a> {
     }
 }
 
-impl<'a> Command for Update<'a> {
+impl Command for Update<'_> {
     type Response = u64;
 
     fn command(&self) -> RawCommand {
@@ -1620,7 +1620,7 @@ impl<'a> Command for Update<'a> {
     }
 }
 
-impl<'a> Default for Update<'a> {
+impl Default for Update<'_> {
     fn default() -> Self {
         Update::new()
     }
@@ -1645,7 +1645,7 @@ impl<'a> Rescan<'a> {
     }
 }
 
-impl<'a> Command for Rescan<'a> {
+impl Command for Rescan<'_> {
     type Response = u64;
 
     fn command(&self) -> RawCommand {
@@ -1663,7 +1663,7 @@ impl<'a> Command for Rescan<'a> {
     }
 }
 
-impl<'a> Default for Rescan<'a> {
+impl Default for Rescan<'_> {
     fn default() -> Self {
         Rescan::new()
     }
@@ -1724,7 +1724,7 @@ impl<'a> SendChannelMessage<'a> {
     }
 }
 
-impl<'a> Command for SendChannelMessage<'a> {
+impl Command for SendChannelMessage<'_> {
     type Response = ();
 
     fn command(&self) -> RawCommand {

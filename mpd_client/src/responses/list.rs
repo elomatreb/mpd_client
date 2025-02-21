@@ -140,7 +140,7 @@ impl<'a> Iterator for ListValuesIter<'a> {
     }
 }
 
-impl<'a> DoubleEndedIterator for ListValuesIter<'a> {
+impl DoubleEndedIterator for ListValuesIter<'_> {
     fn next_back(&mut self) -> Option<Self::Item> {
         self.0.next_back().map(|(_, v)| &**v)
     }
@@ -150,7 +150,7 @@ impl<'a> DoubleEndedIterator for ListValuesIter<'a> {
     }
 }
 
-impl<'a> ExactSizeIterator for ListValuesIter<'a> {}
+impl ExactSizeIterator for ListValuesIter<'_> {}
 
 /// Iterator over ungrouped [`List`] values.
 #[derive(Debug)]

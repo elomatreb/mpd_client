@@ -281,7 +281,7 @@ impl<'a> Iterator for FramesRef<'a> {
     }
 }
 
-impl<'a> DoubleEndedIterator for FramesRef<'a> {
+impl DoubleEndedIterator for FramesRef<'_> {
     fn next_back(&mut self) -> Option<Self::Item> {
         if let Some(e) = self.error.take() {
             Some(Err(e))
@@ -291,8 +291,8 @@ impl<'a> DoubleEndedIterator for FramesRef<'a> {
     }
 }
 
-impl<'a> FusedIterator for FramesRef<'a> {}
-impl<'a> ExactSizeIterator for FramesRef<'a> {}
+impl FusedIterator for FramesRef<'_> {}
+impl ExactSizeIterator for FramesRef<'_> {}
 
 impl<'a> IntoIterator for &'a Response {
     type Item = Result<&'a Frame, &'a Error>;
