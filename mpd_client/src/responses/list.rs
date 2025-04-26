@@ -175,11 +175,11 @@ impl Iterator for ListValuesIntoIter {
         self.0.nth(n).map(|(_, v)| v)
     }
 
-    fn last(self) -> Option<Self::Item>
+    fn last(mut self) -> Option<Self::Item>
     where
         Self: Sized,
     {
-        self.0.last().map(|(_, v)| v)
+        self.0.next_back().map(|(_, v)| v)
     }
 }
 
