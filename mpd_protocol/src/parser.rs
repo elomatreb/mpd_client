@@ -6,15 +6,12 @@ use std::{
 };
 
 use nom::{
-    IResult,
+    IResult, Parser,
     branch::alt,
     bytes::streaming::{tag, take, take_until, take_while, take_while1},
-    character::{
-        is_alphabetic,
-        streaming::{char, digit1, newline},
-    },
+    character::streaming::{char, digit1, newline},
     combinator::{cut, map, map_res, opt},
-    sequence::{delimited, separated_pair, terminated, tuple},
+    sequence::{delimited, separated_pair, terminated},
 };
 
 use crate::response::{Error, ResponseFieldCache};
@@ -52,7 +49,8 @@ impl ParsedComponent {
                 key: field_cache.insert(k),
                 value: String::from(v),
             }),
-        ))(i)
+        ))
+        .parse(i)
     }
 }
 
@@ -73,25 +71,27 @@ pub(crate) fn greeting(i: &[u8]) -> IResult<&[u8], &str> {
         tag("OK MPD "),
         map_res(take_while1(|c| c != b'\n'), from_utf8),
         newline,
-    )(i)
+    )
+    .parse(i)
 }
 
 /// Recognize and parse an unsigned ASCII-encoded number
 fn number<O: FromStr>(i: &[u8]) -> IResult<&[u8], O> {
-    map_res(map_res(digit1, from_utf8), str::parse)(i)
+    map_res(map_res(digit1, from_utf8), str::parse).parse(i)
 }
 
 /// Parse an error response.
 fn error(i: &[u8]) -> IResult<&[u8], RawError<'_>> {
     let (remaining, ((code, index), command, message)) = delimited(
         tag("ACK "),
-        tuple((
+        (
             terminated(error_code_and_index, char(' ')),
             terminated(error_current_command, char(' ')),
             map_res(take_while(|b| b != b'\n'), from_utf8),
-        )),
+        ),
         newline,
-    )(i)?;
+    )
+    .parse(i)?;
 
     Ok((
         remaining,
@@ -110,7 +110,8 @@ fn error_code_and_index(i: &[u8]) -> IResult<&[u8], (u64, u64)> {
         char('['),
         separated_pair(number, char('@'), number),
         char(']'),
-    )(i)
+    )
+    .parse(i)
 }
 
 /// Recognize the current command in an error, `None` if empty.
@@ -118,23 +119,25 @@ fn error_current_command(i: &[u8]) -> IResult<&[u8], Option<&str>> {
     delimited(
         char('{'),
         opt(map_res(
-            take_while1(|b| is_alphabetic(b) || b == b'_'),
+            take_while1(|b: u8| b.is_ascii_alphabetic() || b == b'_'),
             from_utf8,
         )),
         char('}'),
-    )(i)
+    )
+    .parse(i)
 }
 
 /// Recognize a single key-value pair
 fn key_value_field(i: &[u8]) -> IResult<&[u8], (&str, &str)> {
     separated_pair(
         map_res(
-            take_while1(|b| is_alphabetic(b) || b == b'_' || b == b'-'),
+            take_while1(|b: u8| b.is_ascii_alphabetic() || b == b'_' || b == b'-'),
             from_utf8,
         ),
         tag(": "),
         map_res(field_value, from_utf8),
-    )(i)
+    )
+    .parse(i)
 }
 
 fn field_value(i: &[u8]) -> IResult<&[u8], &[u8]> {
@@ -144,14 +147,14 @@ fn field_value(i: &[u8]) -> IResult<&[u8], &[u8]> {
 
 /// Recognize the header of a binary section
 fn binary_prefix(i: &[u8]) -> IResult<&[u8], usize> {
-    delimited(tag("binary: "), number, newline)(i)
+    delimited(tag("binary: "), number, newline).parse(i)
 }
 
 /// Recognize a binary field
 fn binary_field(i: &[u8]) -> IResult<&[u8], &[u8]> {
     let (i, length) = binary_prefix(i)?;
 
-    cut(terminated(take(length), newline))(i)
+    cut(terminated(take(length), newline)).parse(i)
 }
 
 #[cfg(test)]
