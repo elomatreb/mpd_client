@@ -1,7 +1,7 @@
+use std::hint::black_box;
+
 use criterion::{Criterion, criterion_group, criterion_main};
 use mpd_protocol::Connection;
-
-use std::hint::black_box;
 
 // NOTE: Benchmark requires `--cfg criterion` to be set to build correctly.
 
