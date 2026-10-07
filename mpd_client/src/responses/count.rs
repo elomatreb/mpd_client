@@ -49,7 +49,8 @@ where
         let mut songs: Option<u64> = None;
         let mut playtime: Option<Duration> = None;
 
-        if key.as_ref() != grouping_tag.as_str() {
+        // MPD returns the canonical casing of the tag name, which may differ from the one requested
+        if !key.as_ref().eq_ignore_ascii_case(&grouping_tag.as_str()) {
             return Err(TypedResponseError::unexpected_field(
                 grouping_tag.as_str(),
                 key.as_ref(),
@@ -158,6 +159,33 @@ mod tests {
             ],
         );
 
+        assert_matches!(res, Err(_));
+        out.clear();
+
+        // The tag name is matched ignoring case
+        build_grouped_values(
+            &mut out,
+            &Tag::try_from("mood").unwrap(),
+            vec![
+                ("Mood", String::from("happy")),
+                ("songs", String::from("2")),
+                ("playtime", String::from("3")),
+            ],
+        )
+        .unwrap();
+        assert_eq!(out.len(), 1);
+        out.clear();
+
+        // ... but other tags are still rejected
+        let res = build_grouped_values(
+            &mut out,
+            &Tag::Album,
+            vec![
+                ("Artist", String::from("hello")),
+                ("songs", String::from("1")),
+                ("playtime", String::from("1")),
+            ],
+        );
         assert_matches!(res, Err(_));
     }
 }

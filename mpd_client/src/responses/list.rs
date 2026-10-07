@@ -99,12 +99,17 @@ impl<'a, const N: usize> Iterator for GroupedListValuesIter<'a, N> {
         loop {
             let (tag, value) = self.fields.next()?;
 
-            if tag == self.primary_tag {
+            // MPD returns the canonical casing of tag names, which may differ from the requested one
+            let same = |t: &Tag| t.as_str().eq_ignore_ascii_case(&tag.as_str());
+
+            if same(self.primary_tag) {
                 break Some((value, self.grouping_values));
             }
 
-            let idx = self.grouping_tags.iter().position(|t| t == tag).unwrap();
-            self.grouping_values[idx] = value;
+            // Ignore fields that are neither the primary nor a grouping tag instead of panicking
+            if let Some(idx) = self.grouping_tags.iter().position(same) {
+                self.grouping_values[idx] = value;
+            }
         }
     }
 }
@@ -224,6 +229,52 @@ mod tests {
         assert_eq!(iter.next(), Some(("Title 2", ["Bar", "Foo"])));
         assert_eq!(iter.next(), Some(("Title 3", ["Quz", "Foo"])));
         assert_eq!(iter.next(), Some(("Title 4", ["Qwert", "Asdf"])));
+        assert_eq!(iter.next(), None);
+    }
+
+    #[test]
+    fn grouped_iterator_tag_case() {
+        // Tags created from user input, MPD answers with the canonical casing
+        let primary = Tag::try_from("mood").unwrap();
+        let groupings = [Tag::try_from("albumartist").unwrap()];
+
+        let fields = [
+            (Tag::AlbumArtist, String::from("Foo")),
+            (Tag::try_from("Mood").unwrap(), String::from("Happy")),
+            (Tag::try_from("Mood").unwrap(), String::from("Sad")),
+            (Tag::AlbumArtist, String::from("Bar")),
+            (Tag::try_from("Mood").unwrap(), String::from("Calm")),
+        ];
+
+        let mut iter = GroupedListValuesIter {
+            primary_tag: &primary,
+            grouping_tags: &groupings,
+            grouping_values: [""; 1],
+            fields: fields.iter(),
+        };
+
+        assert_eq!(iter.next(), Some(("Happy", ["Foo"])));
+        assert_eq!(iter.next(), Some(("Sad", ["Foo"])));
+        assert_eq!(iter.next(), Some(("Calm", ["Bar"])));
+        assert_eq!(iter.next(), None);
+    }
+
+    #[test]
+    fn grouped_iterator_unexpected_tag() {
+        let fields = [
+            (Tag::Genre, String::from("Unexpected")),
+            (Tag::Album, String::from("Bar")),
+            (Tag::Title, String::from("Title 1")),
+        ];
+
+        let mut iter = GroupedListValuesIter {
+            primary_tag: &Tag::Title,
+            grouping_tags: &[Tag::Album],
+            grouping_values: [""; 1],
+            fields: fields.iter(),
+        };
+
+        assert_eq!(iter.next(), Some(("Title 1", ["Bar"])));
         assert_eq!(iter.next(), None);
     }
 }
