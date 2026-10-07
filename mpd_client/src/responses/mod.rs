@@ -332,15 +332,33 @@ impl Status {
             },
         };
 
+        // MPD 0.24 reports `oneshot` here too. The field type is `bool`, so this is mapped to
+        // `true`.
+        let consume = match raw.get("consume") {
+            None => return Err(TypedResponseError::missing("consume")),
+            Some(val) => match val.as_str() {
+                "0" => false,
+                "1" | "oneshot" => true,
+                _ => return Err(TypedResponseError::invalid_value("consume", val)),
+            },
+        };
+
+        // The volume is omitted if it is unknown (or reported as `-1` by older versions).
+        let volume = match raw.get("volume") {
+            None => 0,
+            Some(val) if val == "-1" => 0,
+            Some(val) => u8::from_value(val, "volume")?,
+        };
+
         let duration = if let Some(val) = raw.get("duration") {
             Some(Duration::from_value(val, "duration")?)
-        } else if let Some(time) = raw.get("Time") {
+        } else if let Some(time) = raw.get("time") {
             // Backwards compatibility with protocol versions <0.20
             if let Some((_, duration)) = time.split_once(':') {
-                Some(Duration::from_value(duration.to_owned(), "Time")?)
+                Some(Duration::from_value(duration.to_owned(), "time")?)
             } else {
                 // No separator
-                return Err(TypedResponseError::invalid_value("Time", time));
+                return Err(TypedResponseError::invalid_value("time", time));
             }
         } else {
             None
@@ -349,11 +367,11 @@ impl Status {
         let f = &mut raw;
 
         Ok(Self {
-            volume: optional_value(f, "volume")?.unwrap_or(0),
+            volume,
             state: value(f, "state")?,
             repeat: value(f, "repeat")?,
             random: value(f, "random")?,
-            consume: value(f, "consume")?,
+            consume,
             single,
             playlist_length: optional_value(f, "playlistlength")?.unwrap_or(0),
             playlist_version: optional_value(f, "playlist")?.unwrap_or(0),
@@ -363,7 +381,7 @@ impl Status {
             duration,
             bitrate: optional_value(f, "bitrate")?,
             crossfade: optional_value(f, "xfade")?.unwrap_or(Duration::ZERO),
-            update_job: optional_value(f, "update_job")?,
+            update_job: optional_value(f, "updating_db")?,
             error: f.get("error"),
             partition: f.get("partition"),
         })
@@ -460,9 +478,135 @@ where
 
 #[cfg(test)]
 mod tests {
+    use std::{
+        collections::VecDeque,
+        io::{self, Read, Write},
+    };
+
     use assert_matches::assert_matches;
+    use mpd_protocol::Connection;
 
     use super::*;
+
+    /// Build a [`Frame`] by running the given fields through the actual response parser.
+    fn frame(fields: &[(&str, &str)]) -> Frame {
+        // Hands out the greeting and the response in separate reads, like a real server would
+        struct Io(VecDeque<Vec<u8>>);
+
+        impl Read for Io {
+            fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+                match self.0.pop_front() {
+                    Some(chunk) => {
+                        buf[..chunk.len()].copy_from_slice(&chunk);
+                        Ok(chunk.len())
+                    }
+                    None => Ok(0),
+                }
+            }
+        }
+
+        impl Write for Io {
+            fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+                Ok(buf.len())
+            }
+
+            fn flush(&mut self) -> io::Result<()> {
+                Ok(())
+            }
+        }
+
+        let mut data = String::new();
+        for (k, v) in fields {
+            data.push_str(&format!("{k}: {v}\n"));
+        }
+        data.push_str("OK\n");
+
+        let chunks = VecDeque::from([b"OK MPD 0.24.0\n".to_vec(), data.into_bytes()]);
+
+        Connection::connect(Io(chunks))
+            .unwrap()
+            .receive()
+            .unwrap()
+            .unwrap()
+            .into_single_frame()
+            .unwrap()
+    }
+
+    const BASE_STATUS: [(&str, &str); 4] = [
+        ("repeat", "0"),
+        ("random", "0"),
+        ("consume", "0"),
+        ("state", "stop"),
+    ];
+
+    fn status(extra: &[(&str, &str)]) -> Result<Status, TypedResponseError> {
+        let mut fields = BASE_STATUS.to_vec();
+        fields.extend_from_slice(extra);
+        Status::from_frame(frame(&fields))
+    }
+
+    #[test]
+    fn status_consume_modes() {
+        let s = status(&[]).unwrap();
+        assert!(!s.consume);
+
+        let s = Status::from_frame(frame(&[
+            ("repeat", "0"),
+            ("random", "0"),
+            ("consume", "1"),
+            ("state", "stop"),
+        ]))
+        .unwrap();
+        assert!(s.consume);
+
+        // MPD 0.24
+        let s = Status::from_frame(frame(&[
+            ("repeat", "0"),
+            ("random", "0"),
+            ("consume", "oneshot"),
+            ("single", "oneshot"),
+            ("state", "stop"),
+        ]))
+        .unwrap();
+        assert!(s.consume);
+        assert_eq!(s.single, SingleMode::Oneshot);
+
+        assert_matches!(
+            Status::from_frame(frame(&[
+                ("repeat", "0"),
+                ("random", "0"),
+                ("consume", "foo"),
+                ("state", "stop"),
+            ])),
+            Err(_)
+        );
+    }
+
+    #[test]
+    fn status_volume() {
+        assert_eq!(status(&[("volume", "42")]).unwrap().volume, 42);
+        assert_eq!(status(&[("volume", "-1")]).unwrap().volume, 0);
+        assert_eq!(status(&[]).unwrap().volume, 0);
+        assert_matches!(status(&[("volume", "foo")]), Err(_));
+    }
+
+    #[test]
+    fn status_updating_db() {
+        assert_eq!(status(&[]).unwrap().update_job, None);
+        assert_eq!(status(&[("updating_db", "3")]).unwrap().update_job, Some(3));
+    }
+
+    #[test]
+    fn status_legacy_time() {
+        let s = status(&[("time", "12:187")]).unwrap();
+        assert_eq!(s.duration, Some(Duration::from_secs(187)));
+
+        // `duration` takes precedence
+        let s = status(&[("time", "12:187"), ("duration", "187.500")]).unwrap();
+        assert_eq!(s.duration, Some(Duration::from_secs_f64(187.5)));
+
+        assert_matches!(status(&[("time", "12")]), Err(_));
+    }
 
     #[test]
     fn duration_parsing() {
