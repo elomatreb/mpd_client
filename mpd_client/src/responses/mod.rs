@@ -372,6 +372,9 @@ impl Status {
 
 /// Response to the [`stats`] command, containing general server statistics.
 ///
+/// If the server has no database, or the database has never been updated, the corresponding fields
+/// are omitted by MPD and are reported as `0`.
+///
 /// [`stats`]: crate::commands::definitions::Stats
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[allow(missing_docs)]
@@ -384,6 +387,8 @@ pub struct Stats {
     pub playtime: Duration,
     pub db_playtime: Duration,
     /// Raw server UNIX timestamp of last database update.
+    ///
+    /// This is `0` if the server did not report one.
     pub db_last_update: u64,
 }
 
@@ -391,13 +396,13 @@ impl Stats {
     pub(crate) fn from_frame(mut f: Frame) -> Result<Self, TypedResponseError> {
         let f = &mut f;
         Ok(Self {
-            artists: value(f, "artists")?,
-            albums: value(f, "albums")?,
-            songs: value(f, "songs")?,
+            artists: optional_value(f, "artists")?.unwrap_or(0),
+            albums: optional_value(f, "albums")?.unwrap_or(0),
+            songs: optional_value(f, "songs")?.unwrap_or(0),
             uptime: value(f, "uptime")?,
             playtime: value(f, "playtime")?,
-            db_playtime: value(f, "db_playtime")?,
-            db_last_update: value(f, "db_update")?,
+            db_playtime: optional_value(f, "db_playtime")?.unwrap_or(Duration::ZERO),
+            db_last_update: optional_value(f, "db_update")?.unwrap_or(0),
         })
     }
 }
@@ -460,9 +465,59 @@ where
 
 #[cfg(test)]
 mod tests {
+    use std::{
+        collections::VecDeque,
+        io::{self, Read, Write},
+    };
+
     use assert_matches::assert_matches;
+    use mpd_protocol::Connection;
 
     use super::*;
+
+    /// Build a [`Frame`] by running the given fields through the actual response parser.
+    fn frame(fields: &[(&str, &str)]) -> Frame {
+        // Hands out the greeting and the response in separate reads, like a real server would
+        struct Io(VecDeque<Vec<u8>>);
+
+        impl Read for Io {
+            fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+                match self.0.pop_front() {
+                    Some(chunk) => {
+                        buf[..chunk.len()].copy_from_slice(&chunk);
+                        Ok(chunk.len())
+                    }
+                    None => Ok(0),
+                }
+            }
+        }
+
+        impl Write for Io {
+            fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+                Ok(buf.len())
+            }
+
+            fn flush(&mut self) -> io::Result<()> {
+                Ok(())
+            }
+        }
+
+        let mut data = String::new();
+        for (k, v) in fields {
+            data.push_str(&format!("{k}: {v}\n"));
+        }
+        data.push_str("OK\n");
+
+        let chunks = VecDeque::from([b"OK MPD 0.24.0\n".to_vec(), data.into_bytes()]);
+
+        Connection::connect(Io(chunks))
+            .unwrap()
+            .receive()
+            .unwrap()
+            .unwrap()
+            .into_single_frame()
+            .unwrap()
+    }
 
     #[test]
     fn duration_parsing() {
@@ -496,5 +551,66 @@ mod tests {
                 (String::from("bar"), String::from("message 2")),
             ]
         );
+    }
+
+    #[test]
+    fn stats() {
+        let stats = Stats::from_frame(frame(&[
+            ("uptime", "12"),
+            ("playtime", "3"),
+            ("artists", "4"),
+            ("albums", "2"),
+            ("songs", "8"),
+            ("db_playtime", "100"),
+            ("db_update", "1700000000"),
+        ]))
+        .unwrap();
+
+        assert_eq!(
+            stats,
+            Stats {
+                artists: 4,
+                albums: 2,
+                songs: 8,
+                uptime: Duration::from_secs(12),
+                playtime: Duration::from_secs(3),
+                db_playtime: Duration::from_secs(100),
+                db_last_update: 1_700_000_000,
+            }
+        );
+    }
+
+    #[test]
+    fn stats_without_database() {
+        // MPD omits the database statistics if it runs without a database
+        let stats = Stats::from_frame(frame(&[("uptime", "2"), ("playtime", "0")])).unwrap();
+
+        assert_eq!(
+            stats,
+            Stats {
+                artists: 0,
+                albums: 0,
+                songs: 0,
+                uptime: Duration::from_secs(2),
+                playtime: Duration::ZERO,
+                db_playtime: Duration::ZERO,
+                db_last_update: 0,
+            }
+        );
+
+        // `db_update` is also omitted if the database was never updated
+        let stats = Stats::from_frame(frame(&[
+            ("uptime", "2"),
+            ("playtime", "0"),
+            ("artists", "1"),
+            ("albums", "1"),
+            ("songs", "1"),
+            ("db_playtime", "5"),
+        ]))
+        .unwrap();
+        assert_eq!(stats.songs, 1);
+        assert_eq!(stats.db_last_update, 0);
+
+        assert_matches!(Stats::from_frame(frame(&[("uptime", "2")])), Err(_));
     }
 }
