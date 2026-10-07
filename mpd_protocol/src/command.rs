@@ -162,51 +162,53 @@ impl Extend<Command> for CommandList {
     }
 }
 
-/// Escape a single argument, prefixing necessary characters (quotes and backslashes) with
-/// backslashes.
+/// Escape a single argument for sending to MPD.
 ///
-/// Returns a borrowed [`Cow`] if the argument did not require escaping.
+/// MPD only processes backslash escapes inside double quotes, so an argument is wrapped in
+/// quotes (with `"` and `\` prefixed by backslashes) unless it is non-empty and consists solely
+/// of characters that are valid in an unquoted word: anything above `0x20` (space) except `"`,
+/// `'` and `\`. Empty arguments are sent as `""`.
+///
+/// Returns a borrowed [`Cow`] if the argument did not require quoting.
 ///
 /// ```
 /// # use mpd_protocol::command::escape_argument;
-/// assert_eq!(escape_argument("foo'bar\""), "foo\\'bar\\\"");
+/// assert_eq!(escape_argument("foo"), "foo");
+/// assert_eq!(escape_argument(""), "\"\"");
+/// assert_eq!(escape_argument("foo'bar\""), "\"foo'bar\\\"\"");
 /// ```
 pub fn escape_argument(argument: &str) -> Cow<'_, str> {
-    let needs_quotes = argument.contains(&[' ', '\t'][..]);
+    let is_plain = !argument.is_empty()
+        && argument
+            .bytes()
+            .all(|b| b > b' ' && b != b'"' && b != b'\'' && b != b'\\');
+
+    if is_plain {
+        // The argument does not need to be quoted, return back an unmodified reference
+        return Cow::Borrowed(argument);
+    }
+
     let escape_count = argument.chars().filter(|c| should_escape(*c)).count();
 
-    if escape_count == 0 && !needs_quotes {
-        // The argument does not need to be quoted or escaped, return back an unmodified reference
-        Cow::Borrowed(argument)
-    } else {
-        // The base length of the argument + a backslash for each escaped character + two quotes if
-        // necessary
-        let len = argument.len() + escape_count + if needs_quotes { 2 } else { 0 };
-        let mut out = String::with_capacity(len);
+    // The base length of the argument + a backslash for each escaped character + two quotes
+    let mut out = String::with_capacity(argument.len() + escape_count + 2);
+    out.push('"');
 
-        if needs_quotes {
-            out.push('"');
+    for c in argument.chars() {
+        if should_escape(c) {
+            out.push('\\');
         }
 
-        for c in argument.chars() {
-            if should_escape(c) {
-                out.push('\\');
-            }
-
-            out.push(c);
-        }
-
-        if needs_quotes {
-            out.push('"');
-        }
-
-        Cow::Owned(out)
+        out.push(c);
     }
+
+    out.push('"');
+    Cow::Owned(out)
 }
 
-/// If the given character needs to be escaped
+/// If the given character needs to be escaped inside a quoted argument
 fn should_escape(c: char) -> bool {
-    c == '\\' || c == '"' || c == '\''
+    c == '\\' || c == '"'
 }
 
 fn validate_command_part(command: &str) -> Result<(), CommandErrorKind> {
@@ -373,9 +375,13 @@ mod test {
     #[test]
     fn argument_escaping() {
         assert_eq!(escape_argument("status"), "status");
-        assert_eq!(escape_argument("Joe's"), "Joe\\'s");
-        assert_eq!(escape_argument("hello\\world"), "hello\\\\world");
+        assert_eq!(escape_argument(""), r#""""#);
+        assert_eq!(escape_argument("Joe's"), r#""Joe's""#);
+        assert_eq!(escape_argument("hello\\world"), r#""hello\\world""#);
         assert_eq!(escape_argument("foo bar"), r#""foo bar""#);
+        assert_eq!(escape_argument("a\tb"), "\"a\tb\"");
+        assert_eq!(escape_argument("a\rb"), "\"a\rb\"");
+        assert_eq!(escape_argument(r#"say "hi""#), r#""say \"hi\"""#);
     }
 
     #[test]
@@ -383,7 +389,7 @@ mod test {
         let mut buf = BytesMut::new();
 
         "foo\"bar".render(&mut buf);
-        assert_eq!(buf, "foo\\\"bar");
+        assert_eq!(buf, "\"foo\\\"bar\"");
         buf.clear();
 
         true.render(&mut buf);
