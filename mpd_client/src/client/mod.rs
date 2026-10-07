@@ -322,7 +322,13 @@ impl Client {
         }
 
         if !embedded {
-            if let Some(resp) = self.command(cmds::AlbumArt::new(uri)).await? {
+            let resp = match self.command(cmds::AlbumArt::new(uri)).await {
+                Ok(resp) => resp,
+                Err(e) if is_no_exist(&e) => None,
+                Err(e) => return Err(e),
+            };
+
+            if let Some(resp) = resp {
                 out = resp.data;
                 expected_size = resp.size;
                 out.reserve(expected_size);
@@ -336,13 +342,24 @@ impl Client {
         while out.len() < expected_size {
             let resp = if embedded {
                 self.command(cmds::AlbumArtEmbedded::new(uri).offset(out.len()))
-                    .await?
+                    .await
             } else {
                 self.command(cmds::AlbumArt::new(uri).offset(out.len()))
-                    .await?
+                    .await
+            };
+
+            let resp = match resp {
+                Ok(resp) => resp,
+                Err(e) if !embedded && is_no_exist(&e) => None,
+                Err(e) => return Err(e),
             };
 
             if let Some(resp) = resp {
+                if resp.data.is_empty() {
+                    warn!(progress = out.len(), "empty cover art chunk");
+                    return Ok(None);
+                }
+
                 trace!(received = resp.data.len(), progress = out.len());
                 out.extend_from_slice(&resp.data);
             } else {
@@ -706,6 +723,11 @@ impl From<MpdProtocolError> for ConnectionError {
     }
 }
 
+/// Whether the error is the `ACK_ERROR_NO_EXIST` (50) error response.
+fn is_no_exist(e: &CommandError) -> bool {
+    matches!(e, CommandError::ErrorResponse { error, .. } if error.code == 50)
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::hash_map::DefaultHasher;
@@ -941,5 +963,79 @@ mod tests {
         Subsystem::Other("player".into()).hash(&mut b);
 
         assert_eq!(a.finish(), b.finish());
+    }
+
+    async fn album_art_with(
+        script: impl FnOnce(&mut MockBuilder) -> &mut MockBuilder,
+    ) -> Result<Option<(BytesMut, Option<String>)>, CommandError> {
+        let mut b = MockBuilder::new();
+        b.read(GREETING)
+            .write(b"idle\n")
+            .write(b"noidle\n")
+            .read(b"OK\n");
+        script(&mut b);
+        let io = b.build();
+        let (client, _events) = Client::connect(io).await.expect("connect failed");
+        client.album_art("a.flac").await
+    }
+
+    #[tokio::test]
+    async fn album_art_missing() {
+        let res = album_art_with(|b| {
+            b.write(b"readpicture a.flac 0\n")
+                .read(b"OK\n")
+                .write(b"albumart a.flac 0\n")
+                .read(b"ACK [50@0] {albumart} No file exists\n")
+                .write(b"idle\n")
+        })
+        .await;
+
+        assert_matches!(res, Ok(None));
+    }
+
+    #[tokio::test]
+    async fn album_art_readpicture_no_such_song() {
+        let res = album_art_with(|b| {
+            b.write(b"readpicture a.flac 0\n")
+                .read(b"ACK [50@0] {readpicture} No such song\n")
+                .write(b"idle\n")
+        })
+        .await;
+
+        assert_matches!(res, Err(CommandError::ErrorResponse { error, .. }) if error.code == 50);
+    }
+
+    #[tokio::test]
+    async fn album_art_empty_chunk() {
+        let res = album_art_with(|b| {
+            b.write(b"readpicture a.flac 0\n")
+                .read(b"OK\n")
+                .write(b"albumart a.flac 0\n")
+                .read(b"size: 4\nbinary: 2\nab\nOK\n")
+                .write(b"albumart a.flac 2\n")
+                .read(b"size: 4\nbinary: 0\n\nOK\n")
+                .write(b"idle\n")
+        })
+        .await;
+
+        assert_matches!(res, Ok(None));
+    }
+
+    #[tokio::test]
+    async fn album_art_chunked() {
+        let res = album_art_with(|b| {
+            b.write(b"readpicture a.flac 0\n")
+                .read(b"OK\n")
+                .write(b"albumart a.flac 0\n")
+                .read(b"size: 4\nbinary: 2\nab\nOK\n")
+                .write(b"albumart a.flac 2\n")
+                .read(b"size: 4\nbinary: 2\ncd\nOK\n")
+                .write(b"idle\n")
+        })
+        .await;
+
+        let (data, mime) = res.unwrap().unwrap();
+        assert_eq!(&data[..], b"abcd");
+        assert_eq!(mime, None);
     }
 }
