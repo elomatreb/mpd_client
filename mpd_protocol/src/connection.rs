@@ -95,6 +95,7 @@ impl<IO> Connection<IO> {
     {
         command.0.put_u8(b'\n');
         self.io.write_all(&command.0)?;
+        self.io.flush()?;
         debug!(length = command.0.len(), "sent command");
         Ok(())
     }
@@ -111,6 +112,7 @@ impl<IO> Connection<IO> {
     {
         let buf = command_list.render();
         self.io.write_all(&buf)?;
+        self.io.flush()?;
         debug!(length = buf.len(), "sent command list");
 
         Ok(())
@@ -341,6 +343,7 @@ impl<IO> AsyncConnection<IO> {
     {
         command.0.put_u8(b'\n');
         self.0.io.write_all(&command.0).await?;
+        self.0.io.flush().await?;
         debug!(length = command.0.len(), "sent command");
         Ok(())
     }
@@ -358,6 +361,7 @@ impl<IO> AsyncConnection<IO> {
     {
         let buf = command_list.render();
         self.0.io.write_all(&buf).await?;
+        self.0.io.flush().await?;
         debug!(length = buf.len(), "sent command");
         Ok(())
     }
@@ -553,6 +557,33 @@ mod tests_sync {
     }
 
     #[test]
+    fn send_flushes() {
+        let mut connection = new_conn(io::BufWriter::new(Vec::new()));
+
+        connection
+            .send(Command::new("foo").argument("bar"))
+            .unwrap();
+
+        assert_eq!(connection.io.get_ref(), b"foo bar\n");
+    }
+
+    #[test]
+    fn send_list_flushes() {
+        let mut connection = new_conn(io::BufWriter::new(Vec::new()));
+
+        let list = CommandList::new(Command::new("foo")).command(Command::new("bar"));
+        connection.send_list(list).unwrap();
+
+        assert_eq!(
+            connection.io.get_ref(),
+            b"command_list_ok_begin\n\
+              foo\n\
+              bar\n\
+              command_list_end\n"
+        );
+    }
+
+    #[test]
     fn receive() {
         let io: &[u8] = b"foo: bar\nOK\n";
         let mut connection = new_conn(io);
@@ -653,6 +684,31 @@ mod tests_async {
         let mut connection = new_conn(io);
 
         connection.send_list(list).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn send_flushes() {
+        let mut connection = new_conn(tokio::io::BufWriter::new(Vec::new()));
+
+        connection.send(Command::new("status")).await.unwrap();
+
+        assert_eq!(connection.0.io.get_ref(), b"status\n");
+    }
+
+    #[tokio::test]
+    async fn send_list_flushes() {
+        let mut connection = new_conn(tokio::io::BufWriter::new(Vec::new()));
+
+        let list = CommandList::new(Command::new("foo")).command(Command::new("bar"));
+        connection.send_list(list).await.unwrap();
+
+        assert_eq!(
+            connection.0.io.get_ref(),
+            b"command_list_ok_begin\n\
+              foo\n\
+              bar\n\
+              command_list_end\n"
+        );
     }
 
     #[tokio::test]
