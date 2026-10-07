@@ -220,9 +220,24 @@ impl Operator {
     }
 }
 
+/// Escape a value for use inside the quoted string of a filter expression.
+///
+/// The expression is itself sent as a quoted argument, so the value needs to be escaped twice:
+/// once for the string inside the expression, and once more for the argument. Each `"` and `\`
+/// thus becomes `\\\"` and `\\\\` respectively.
 fn escape_filter_value(value: &str) -> Cow<'_, str> {
-    if value.contains('"') {
-        Cow::Owned(value.replace('"', r#"\\""#))
+    if value.contains(['"', '\\']) {
+        let mut out = String::with_capacity(value.len() + 8);
+
+        for c in value.chars() {
+            match c {
+                '"' => out.push_str(r#"\\\""#),
+                '\\' => out.push_str(r"\\\\"),
+                c => out.push(c),
+            }
+        }
+
+        Cow::Owned(out)
     } else {
         Cow::Borrowed(value)
     }
@@ -241,7 +256,11 @@ mod tests {
         buf.clear();
 
         Filter::tag(Tag::Artist, "foo\'s bar\"").render(&mut buf);
-        assert_eq!(buf, r#""(Artist == \"foo's bar\\"\")""#);
+        assert_eq!(buf, r#""(Artist == \"foo's bar\\\"\")""#);
+        buf.clear();
+
+        Filter::tag(Tag::Artist, r"a\b").render(&mut buf);
+        assert_eq!(buf, r#""(Artist == \"a\\\\b\")""#);
         buf.clear();
     }
 
