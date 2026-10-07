@@ -167,7 +167,7 @@ where
         Ok(None) => return Err(()),
         Ok(Some(res)) => match res.into_single_frame() {
             Ok(f) => {
-                if let Some(subsystem) = Subsystem::from_frame(f) {
+                for subsystem in Subsystem::from_frame(f) {
                     debug!(?subsystem, "state change");
                     let _ = state
                         .events
@@ -221,7 +221,7 @@ where
         Ok(Some(res)) => {
             match res.into_single_frame() {
                 Ok(f) => {
-                    if let Some(subsystem) = Subsystem::from_frame(f) {
+                    for subsystem in Subsystem::from_frame(f) {
                         debug!(?subsystem, "state change");
                         let _ = state
                             .events

@@ -617,24 +617,28 @@ pub enum Subsystem {
 }
 
 impl Subsystem {
-    fn from_frame(mut r: Frame) -> Option<Subsystem> {
-        r.get("changed").map(|raw| match &*raw {
-            "database" => Subsystem::Database,
-            "message" => Subsystem::Message,
-            "mixer" => Subsystem::Mixer,
-            "options" => Subsystem::Options,
-            "output" => Subsystem::Output,
-            "partition" => Subsystem::Partition,
-            "player" => Subsystem::Player,
-            "playlist" => Subsystem::Queue,
-            "sticker" => Subsystem::Sticker,
-            "stored_playlist" => Subsystem::StoredPlaylist,
-            "subscription" => Subsystem::Subscription,
-            "update" => Subsystem::Update,
-            "neighbor" => Subsystem::Neighbor,
-            "mount" => Subsystem::Mount,
-            _ => Subsystem::Other(raw.into()),
-        })
+    /// Returns one subsystem for every `changed` field in the frame.
+    fn from_frame(frame: Frame) -> impl Iterator<Item = Subsystem> {
+        frame
+            .into_iter()
+            .filter(|(key, _)| &**key == "changed")
+            .map(|(_, raw)| match &*raw {
+                "database" => Subsystem::Database,
+                "message" => Subsystem::Message,
+                "mixer" => Subsystem::Mixer,
+                "options" => Subsystem::Options,
+                "output" => Subsystem::Output,
+                "partition" => Subsystem::Partition,
+                "player" => Subsystem::Player,
+                "playlist" => Subsystem::Queue,
+                "sticker" => Subsystem::Sticker,
+                "stored_playlist" => Subsystem::StoredPlaylist,
+                "subscription" => Subsystem::Subscription,
+                "update" => Subsystem::Update,
+                "neighbor" => Subsystem::Neighbor,
+                "mount" => Subsystem::Mount,
+                _ => Subsystem::Other(raw.into()),
+            })
     }
 
     /// Returns the raw protocol name used for this subsystem.
@@ -732,6 +736,57 @@ mod tests {
             state_changes.next().await,
             Some(ConnectionEvent::SubsystemChange(Subsystem::Player))
         );
+    }
+
+    #[tokio::test]
+    async fn multiple_state_changes() {
+        let io = MockBuilder::new()
+            .read(GREETING)
+            .write(b"idle\n")
+            .read(b"changed: playlist\nchanged: options\nOK\n")
+            .write(b"idle\n")
+            .build();
+
+        let (_client, mut state_changes) = Client::connect(io).await.expect("connect failed");
+
+        assert_matches!(
+            state_changes.next().await,
+            Some(ConnectionEvent::SubsystemChange(Subsystem::Queue))
+        );
+        assert_matches!(
+            state_changes.next().await,
+            Some(ConnectionEvent::SubsystemChange(Subsystem::Options))
+        );
+    }
+
+    #[tokio::test]
+    async fn multiple_state_changes_on_noidle() {
+        let io = MockBuilder::new()
+            .read(GREETING)
+            .write(b"idle\n")
+            .write(b"noidle\n")
+            .read(b"changed: playlist\nchanged: options\nOK\n")
+            .write(b"hello\n")
+            .read(b"foo: bar\nOK\n")
+            .write(b"idle\n")
+            .build();
+
+        let (client, mut state_changes) = Client::connect(io).await.expect("connect failed");
+
+        client
+            .raw_command(RawCommand::new("hello"))
+            .await
+            .expect("command failed");
+
+        assert_matches!(
+            state_changes.next().await,
+            Some(ConnectionEvent::SubsystemChange(Subsystem::Queue))
+        );
+        assert_matches!(
+            state_changes.next().await,
+            Some(ConnectionEvent::SubsystemChange(Subsystem::Options))
+        );
+        assert!(state_changes.next().await.is_none());
     }
 
     #[tokio::test]
